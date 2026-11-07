@@ -7,6 +7,7 @@ import { Segmented } from '@/components/ui/segmented'
 import { Avatar } from '@/components/ui/avatar'
 import { ProgressBar } from '@/components/ui/progress'
 import { EmptyState } from '@/components/common/EmptyState'
+import { RequestsPanel } from '@/components/requests/RequestsPanel'
 import { LevelBadge, MembershipBadge } from '@/components/common/badges'
 import { useDatabase } from '@/hooks/useDatabase'
 import { useCurrentTeacher } from '@/hooks/useDemo'
@@ -33,6 +34,10 @@ export function TeacherStudents() {
           <Input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cerca per nome" className="pl-11" aria-label="Cerca allieva" />
         </div>
         <Segmented value={classId} onChange={setClassId} size="sm" options={[{ value: 'tutte', label: 'Tutte' }, ...myClasses.map((c) => ({ value: c.id, label: c.name }))]} />
+      </div>
+
+      <div className="mb-6">
+        <RequestsPanel teacherId={teacher.id} decidedBy={teacher.id} title="In attesa di iscrizione" hideWhenEmpty only="enrollments" />
       </div>
 
       {students.length === 0 ? (

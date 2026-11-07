@@ -16,6 +16,7 @@ import { useDatabase, useRepository } from '@/hooks/useDatabase'
 import { useToast } from '@/hooks/useToast'
 import { findClass } from '@/services/selectors'
 import { MEMBERSHIP_LABEL } from '@/lib/labels'
+import { addDays, todayISO } from '@/lib/dates'
 import { cn, fullName, normalize } from '@/lib/utils'
 
 type RoleFilter = 'tutti' | 'allieva' | 'insegnante'
@@ -59,8 +60,14 @@ export function AdminUsers() {
       classes: db.classes.filter((c) => c.teacherId === t.id).map((c) => c.name).join(', ') || '—',
       status: 'staff',
     }))
-    return [...teachers, ...students]
+    // Le persone appena aggiunte (ultimi 14 giorni o invito in attesa) in cima all'elenco
+    const recent = addDays(todayISO(), -14)
+    const isNew = (r: Row) => !!r.person.invitePending || (r.kind === 'allieva' && (r.person as Student).joinedAt >= recent)
+    const all = [...teachers, ...students]
+    return [...all.filter(isNew), ...all.filter((r) => !isNew(r))]
   }, [db])
+  const recentDate = addDays(todayISO(), -14)
+  const isNewRow = (r: Row) => !!r.person.invitePending || (r.kind === 'allieva' && (r.person as Student).joinedAt >= recentDate)
 
   const filtered = rows
     .filter((r) => role === 'tutti' || r.kind === role)
@@ -163,6 +170,7 @@ export function AdminUsers() {
                       <div className="flex flex-wrap gap-1">
                         {r.status === 'staff' ? <Badge tone="neutral">Staff</Badge> : <MembershipBadge status={r.status} />}
                         {r.person.invitePending && <Badge tone="warn">Invito inviato</Badge>}
+                        {isNewRow(r) && !r.person.invitePending && <Badge tone="rosa">Nuova</Badge>}
                       </div>
                     </td>
                     <td className="px-5 py-3 text-right">
@@ -196,6 +204,7 @@ export function AdminUsers() {
                       <Badge tone={r.kind === 'insegnante' ? 'tessuti' : 'rosa'}>{r.kind === 'insegnante' ? 'Insegnante' : 'Allieva'}</Badge>
                       {r.status !== 'staff' && <MembershipBadge status={r.status} />}
                       {r.person.invitePending && <Badge tone="warn">Invito inviato</Badge>}
+                      {isNewRow(r) && !r.person.invitePending && <Badge tone="rosa">Nuova</Badge>}
                     </span>
                   </span>
                 </button>

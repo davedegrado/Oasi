@@ -13,11 +13,14 @@ import { fullName } from '@/lib/utils'
  * Richieste da approvare: iscrizioni alle classi e recuperi.
  * teacherId = solo le classi dell'insegnante; null = tutte (amministrazione).
  */
-export function RequestsPanel({ teacherId, decidedBy, title = 'Richieste da approvare', hideWhenEmpty }: { teacherId: string | null; decidedBy: string; title?: string; hideWhenEmpty?: boolean }) {
+export function RequestsPanel({ teacherId, decidedBy, title = 'Richieste da approvare', hideWhenEmpty, only }: { teacherId: string | null; decidedBy: string; title?: string; hideWhenEmpty?: boolean; only?: 'enrollments' | 'makeups' }) {
   const db = useDatabase()
   const repo = useRepository()
   const { toast } = useToast()
-  const { enrollments, makeups, total } = pendingRequests(db, teacherId)
+  const pending = pendingRequests(db, teacherId)
+  const enrollments = only === 'makeups' ? [] : pending.enrollments
+  const makeups = only === 'enrollments' ? [] : pending.makeups
+  const total = enrollments.length + makeups.length
   if (total === 0 && hideWhenEmpty) return null
 
   const decide = async (fn: () => Promise<void>, ok: string) => {

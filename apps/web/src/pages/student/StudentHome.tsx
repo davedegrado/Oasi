@@ -1,8 +1,7 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight, BellRing, CalendarClock, ChevronRight, Clock, MapPin, Megaphone, RefreshCcw, Sparkles } from 'lucide-react'
+import { ArrowRight, BellRing, CalendarClock, ChevronRight, Clock, Megaphone, RefreshCcw, Sparkles } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
-import { Avatar } from '@/components/ui/avatar'
-import { HoopArc, SilkLines } from '@/components/common/Decor'
+import { HoopArc } from '@/components/common/Decor'
 import { SectionTitle } from '@/components/common/PageHeader'
 import { Ring } from '@/components/common/Charts'
 import { DisciplineIcon, StatusBadge } from '@/components/common/badges'
@@ -14,7 +13,6 @@ import { useDatabase } from '@/hooks/useDatabase'
 import { useCurrentStudent } from '@/hooks/useDemo'
 import { findClass, findTeacher, lessonsForStudent, nextLesson, progressSummary, recentProgress, upcomingEvents } from '@/services/selectors'
 import { formatDate, greeting, relativeDayLabel, todayISO } from '@/lib/dates'
-import { DISCIPLINE_LABEL } from '@/lib/labels'
 import { cn, fullName } from '@/lib/utils'
 
 export function StudentHome() {
@@ -50,51 +48,36 @@ export function StudentHome() {
 
       <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-3">
-        {/* Prossima lezione */}
+        {/* Prossima lezione (compatta) */}
         {next && nextCls ? (
-          <Link
-            to="/allieva/calendario"
-            className="group relative block animate-fade-up overflow-hidden rounded-4xl bg-gradient-to-br from-rosa-intenso via-rosa-intenso to-rosa p-6 text-white shadow-float sm:p-7"
-          >
-            <HoopArc className="absolute -top-10 -right-10 size-56 text-white/30" strokeWidth={2} />
-            <SilkLines className="absolute inset-x-0 bottom-0 h-24 w-full text-white/25" />
-            <div className="relative">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold backdrop-blur">
-                <CalendarClock className="size-3.5" /> Prossima lezione · {relativeDayLabel(next.date)}
-              </span>
-              <div className="mt-5 flex items-end gap-4">
-                <p className="font-display text-5xl leading-none font-extrabold sm:text-6xl">{next.startTime}</p>
-                <p className="pb-1 text-sm text-white/85">fino alle {next.endTime}</p>
+          <div className="relative animate-fade-up overflow-hidden rounded-3xl bg-gradient-to-br from-rosa-intenso to-rosa p-4 text-white shadow-float sm:p-5">
+            <HoopArc className="absolute -top-8 -right-8 size-32 text-white/25" strokeWidth={2} />
+            <Link to="/allieva/calendario" className="relative flex items-center gap-4">
+              <div className="shrink-0 rounded-2xl bg-white/20 px-3 py-2 text-center backdrop-blur">
+                <p className="font-display text-2xl leading-none font-extrabold">{next.startTime}</p>
+                <p className="mt-1 text-[11px] text-white/85">fino {next.endTime}</p>
               </div>
-              <p className="mt-4 font-display text-2xl font-bold">{nextCls.name}</p>
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-white/90">
-                <span className="inline-flex items-center gap-1.5">
-                  <DisciplineIcon discipline={nextCls.discipline} className="size-4" /> {DISCIPLINE_LABEL[nextCls.discipline]}
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <MapPin className="size-4" /> {nextCls.room}
-                </span>
-                <span className="first-letter:uppercase">{formatDate(next.date, { weekday: true })}</span>
-              </div>
-              {nextTeacher && (
-                <div className="mt-5 flex items-center justify-between gap-3 rounded-3xl bg-white/15 p-3 backdrop-blur">
-                  <div className="flex items-center gap-3">
-                    <Avatar person={nextTeacher} size="sm" className="ring-2 ring-white/60" />
-                    <div>
-                      <p className="text-xs text-white/75">Insegnante</p>
-                      <p className="font-semibold">{fullName(nextTeacher)}</p>
-                    </div>
-                  </div>
-                  <ChevronRight className="size-5 transition group-hover:translate-x-1" />
-                </div>
-              )}
-              {next.status === 'variata' && (
-                <p className="mt-3 flex items-start gap-2 rounded-2xl bg-white/90 p-3 text-sm text-warn">
-                  <Clock className="mt-0.5 size-4 shrink-0" /> Orario variato (era {next.originalStartTime}). {next.note}
+              <div className="min-w-0 flex-1">
+                <p className="flex items-center gap-1 text-[11px] font-semibold tracking-wide text-white/85 uppercase">
+                  <CalendarClock className="size-3.5" /> {relativeDayLabel(next.date)}
                 </p>
-              )}
+                <p className="truncate font-display text-lg leading-tight font-bold">{nextCls.name}</p>
+                <p className="truncate text-xs text-white/90">
+                  <DisciplineIcon discipline={nextCls.discipline} className="inline size-3.5 align-[-2px]" /> {nextCls.room}
+                  {nextTeacher ? ` · ${fullName(nextTeacher)}` : ''}
+                </p>
+              </div>
+              <ChevronRight className="size-5 shrink-0" />
+            </Link>
+            {next.status === 'variata' && (
+              <p className="relative mt-3 flex items-start gap-2 rounded-2xl bg-white/90 p-2.5 text-xs text-warn">
+                <Clock className="mt-0.5 size-3.5 shrink-0" /> Orario variato (era {next.originalStartTime}). {next.note}
+              </p>
+            )}
+            <div className="relative mt-3 rounded-2xl bg-white p-2.5 pl-3 text-ink">
+              <DeclarationToggle lesson={next} studentId={student.id} />
             </div>
-          </Link>
+          </div>
         ) : (
           <Card className="animate-fade-up">
             <CardContent className="space-y-3">
@@ -110,13 +93,6 @@ export function StudentHome() {
             </CardContent>
           </Card>
         )}
-          {next && (
-            <Card>
-              <CardContent className="p-4">
-                <DeclarationToggle lesson={next} studentId={student.id} />
-              </CardContent>
-            </Card>
-          )}
         </div>
 
         {/* Progresso sintetico */}

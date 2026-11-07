@@ -5,8 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Oasi Metropolitana · Danza aerea</title>
     <meta name="description" content="La webapp di Oasi Metropolitana per cerchio aereo e tessuti aerei: lezioni, archivio figure e progressi." />
-    <meta name="theme-color" content="#E9A4C0" />
-    <link rel="icon" type="image/svg+xml" href="/icons/favicon.svg" />
+    <meta name="theme-color" content="#FFFFFF" />
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -30,7 +29,14 @@
     <meta property="og:image" content="/icons/icon-512.png" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Schermata di avvio mostrata finché l'app non è caricata -->
+      <div style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#fff">
+        <img src="/images/logo-oasi.webp" alt="Oasi Metropolitana" width="168" height="168" style="width:168px;height:168px;object-fit:contain" />
+        <div style="width:36px;height:36px;border:3px solid #f7dce8;border-top-color:#d66a9b;border-radius:50%;animation:oasi-spin 0.9s linear infinite"></div>
+      </div>
+      <style>@keyframes oasi-spin{to{transform:rotate(360deg)}}</style>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
