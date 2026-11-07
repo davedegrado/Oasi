@@ -1,4 +1,7 @@
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, MemoryRouter, Navigate, Route, Routes } from 'react-router-dom'
+
+// Nella versione pubblicata come pagina statica incorporata si usa un router in memoria
+const Router = import.meta.env.VITE_ROUTER === 'memory' ? MemoryRouter : BrowserRouter
 import { DemoProvider } from '@/context/DemoProvider'
 import { ToastProvider } from '@/context/ToastProvider'
 import { AppShell } from '@/components/layout/AppShell'
@@ -28,7 +31,7 @@ import { StudentJourneyPage } from '@/pages/shared/StudentJourneyPage'
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <Router>
       <DemoProvider>
         <ToastProvider>
           <UpdatePrompt />
@@ -95,6 +98,6 @@ export default function App() {
           </Routes>
         </ToastProvider>
       </DemoProvider>
-    </BrowserRouter>
+    </Router>
   )
 }

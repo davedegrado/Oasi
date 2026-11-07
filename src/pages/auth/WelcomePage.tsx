@@ -7,6 +7,7 @@ import { useDemo } from '@/hooks/useDemo'
 import { useDatabase } from '@/hooks/useDatabase'
 import { ROLE_HOME } from '@/context/demo-context'
 import { cn } from '@/lib/utils'
+import { photo } from '@/lib/assets'
 
 const ROLES: { role: Role; title: string; subtitle: string; icon: typeof UserRound; accent: string }[] = [
   {
@@ -47,7 +48,7 @@ export function WelcomePage() {
       {/* Immagine */}
       <div className="relative h-[52dvh] min-h-[340px] overflow-hidden lg:sticky lg:top-0 lg:h-dvh">
         <img
-          src="/images/photos/cerchio-12.webp"
+          src={photo('cerchio-12')}
           alt="Allieva in posizione seduta nel cerchio aereo"
           className="absolute inset-0 size-full object-cover object-[50%_30%]"
           fetchPriority="high"

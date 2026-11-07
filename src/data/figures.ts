@@ -1,6 +1,6 @@
 import type { Figure } from '@/types'
 
-const photo = (file: string) => `/images/photos/${file}.webp`
+import { photo } from '@/lib/assets'
 
 type FigureSeed = Omit<Figure, 'steps' | 'cover' | 'createdAt'> & {
   cover: string

@@ -15,6 +15,7 @@ import { getPhotoLibrary } from '@/services/media'
 import { addDays, todayISO } from '@/lib/dates'
 import { EVENT_TYPE_LABEL } from '@/lib/labels'
 import { cn, fullName, percent, uid } from '@/lib/utils'
+import { photo } from '@/lib/assets'
 
 function emptyEvent(): OasiEvent {
   return {
@@ -26,7 +27,7 @@ function emptyEvent(): OasiEvent {
     endTime: '17:00',
     location: 'Sala Luna — Viale Verdi 186, Modena',
     description: '',
-    image: '/images/photos/tessuti-05.webp',
+    image: photo('tessuti-05'),
     capacity: 15,
     participantIds: [],
   }

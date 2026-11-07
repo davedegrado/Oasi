@@ -1,3 +1,4 @@
+import { photo } from '@/lib/assets'
 import type { Announcement, AssociationInfo, OasiEvent } from '@/types'
 
 type EventSeed = Omit<OasiEvent, 'date' | 'participantIds'> & { inDays: number; participantIds: string[] }
@@ -13,7 +14,7 @@ export const demoEventSeeds: EventSeed[] = [
     location: 'Sala Luna — Viale Verdi 186, Modena',
     description:
       'Un pomeriggio dedicato alla mobilità attiva di anche e spalle, con esercizi a terra e applicazioni su cerchio e tessuti. Aperto a tutti i livelli.',
-    image: '/images/photos/tessuti-05.webp',
+    image: photo('tessuti-05'),
     capacity: 14,
     participantIds: ['stu-sofia', 'stu-martina', 'stu-camilla', 'stu-anna', 'stu-noemi'],
   },
@@ -27,7 +28,7 @@ export const demoEventSeeds: EventSeed[] = [
     location: 'Polisportiva Modena Est',
     description:
       'Il saggio-spettacolo di fine anno: coreografie di gruppo e assoli di cerchio e tessuti, aperto a famiglie e amici. Le prove generali sono il sabato precedente.',
-    image: '/images/photos/cerchio-20.webp',
+    image: photo('cerchio-20'),
     capacity: 30,
     participantIds: ['stu-giulia', 'stu-alice', 'stu-elisa', 'stu-camilla', 'stu-lucia', 'stu-martina', 'stu-sara'],
   },
@@ -41,7 +42,7 @@ export const demoEventSeeds: EventSeed[] = [
     location: 'Sala Seta — Viale Verdi 186, Modena',
     description:
       'Una giornata intensiva con un’artista di circo contemporaneo: sequenze, cadute e creazione di una breve frase coreografica. Riservato ai livelli intermedio e avanzato.',
-    image: '/images/photos/tessuti-30.webp',
+    image: photo('tessuti-30'),
     capacity: 10,
     participantIds: ['stu-alice', 'stu-ilaria'],
   },
@@ -54,7 +55,7 @@ export const demoEventSeeds: EventSeed[] = [
     endTime: '22:00',
     location: 'Giardino della sede',
     description: 'Un momento per conoscersi, presentare le insegnanti e il calendario dell’anno sportivo.',
-    image: '/images/photos/tessuti-35.webp',
+    image: photo('tessuti-35'),
     capacity: 50,
     participantIds: ['stu-giulia', 'stu-sofia', 'stu-alice', 'stu-elisa', 'stu-anna', 'stu-noemi', 'stu-lucia'],
   },

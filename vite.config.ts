@@ -5,7 +5,9 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath, URL } from 'node:url'
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  // mode 'artifact': build statica con percorsi relativi, senza service worker
+  base: mode === 'artifact' ? './' : '/',
   build: {
     chunkSizeWarningLimit: 800,
   },
@@ -16,6 +18,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
+      disable: mode === 'artifact',
       registerType: 'prompt',
       injectRegister: false,
       includeAssets: ['icons/favicon.svg', 'icons/favicon-32.png', 'icons/apple-touch-icon.png'],
@@ -47,4 +50,4 @@ export default defineConfig({
       },
     }),
   ],
-})
+}))

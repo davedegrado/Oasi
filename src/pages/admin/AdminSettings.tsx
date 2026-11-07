@@ -199,9 +199,11 @@ export function AdminSettings() {
           </h2>
           <p className="mb-4 text-sm text-ink-muted">I dati sono salvati nel browser (localStorage). Il livello dati è predisposto per un futuro collegamento a un database remoto.</p>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={exportData}>
-              <Download /> Esporta JSON
-            </Button>
+            {import.meta.env.VITE_ROUTER !== 'memory' && (
+              <Button variant="outline" onClick={exportData}>
+                <Download /> Esporta JSON
+              </Button>
+            )}
             {confirmReset ? (
               <>
                 <Button
