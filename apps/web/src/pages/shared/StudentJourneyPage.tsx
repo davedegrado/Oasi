@@ -24,8 +24,8 @@ export function StudentJourneyPage({ backTo, backLabel, figureBase, showAdmin }:
       <StudentHeader student={student} />
       <ProgressOverview studentId={student.id} />
       <div className="grid gap-5 md:grid-cols-2">
-        <FiguresByStatus studentId={student.id} status="in_apprendimento" linkBase={figureBase} />
         <FiguresByStatus studentId={student.id} status="in_progetto" linkBase={figureBase} />
+        <FiguresByStatus studentId={student.id} status="da_imparare" linkBase={figureBase} />
       </div>
       <div className="grid gap-5 lg:grid-cols-2">
         <div className="space-y-5">

@@ -4,7 +4,7 @@ import type { Role } from '@/types'
 import { Logo } from '@/components/common/Logo'
 import { HoopArc, SilkLines } from '@/components/common/Decor'
 import { useDemo } from '@/hooks/useDemo'
-import { useDatabase } from '@/hooks/useDatabase'
+import { useTenant } from '@/hooks/useTenant'
 import { ROLE_HOME } from '@/context/demo-context'
 import { cn } from '@/lib/utils'
 import { photo } from '@/lib/assets'
@@ -36,7 +36,9 @@ const ROLES: { role: Role; title: string; subtitle: string; icon: typeof UserRou
 export function WelcomePage() {
   const navigate = useNavigate()
   const { selectRole } = useDemo()
-  const db = useDatabase()
+  const { config } = useTenant()
+  const words = config.texts.welcomeTitle.split(' ')
+  const lastWord = words.pop()
 
   const enter = (role: Role) => {
     selectRole(role)
@@ -48,8 +50,8 @@ export function WelcomePage() {
       {/* Immagine */}
       <div className="relative h-[52dvh] min-h-[340px] overflow-hidden lg:sticky lg:top-0 lg:h-dvh">
         <img
-          src={photo('cerchio-12')}
-          alt="Allieva in posizione seduta nel cerchio aereo"
+          src={config.coverUrl ?? photo('cerchio-12')}
+          alt="Allieva in sospensione durante una lezione"
           className="absolute inset-0 size-full object-cover object-[50%_30%]"
           fetchPriority="high"
         />
@@ -69,13 +71,11 @@ export function WelcomePage() {
       <div className="relative -mt-16 px-4 pb-10 sm:px-8 lg:mt-0 lg:flex lg:items-center lg:px-14 xl:px-20">
         <SilkLines className="absolute -top-6 right-0 left-0 h-32 w-full text-rosa/50 lg:top-10" />
         <div className="relative mx-auto w-full max-w-md animate-fade-up rounded-[2rem] bg-white/95 p-6 shadow-float backdrop-blur sm:p-8 lg:max-w-lg lg:bg-transparent lg:p-0 lg:shadow-none">
-          <p className="text-xs font-semibold tracking-[0.2em] text-rosa-intenso uppercase">Danza aerea · Modena</p>
+          <p className="text-xs font-semibold tracking-[0.2em] text-rosa-intenso uppercase">{config.texts.welcomeEyebrow}</p>
           <h1 className="mt-2 text-[34px] leading-[1.05] font-extrabold text-ink sm:text-5xl">
-            Benvenuta nella tua <span className="text-rosa-intenso">Oasi</span>
+            {words.join(' ')} <span className="text-rosa-intenso">{lastWord}</span>
           </h1>
-          <p className="mt-4 text-[15px] leading-relaxed text-ink-soft">
-            Il tuo spazio per seguire le lezioni di cerchio e tessuti aerei, ritrovare ogni figura con la sua sequenza fotografica e vedere crescere i tuoi progressi, lezione dopo lezione.
-          </p>
+          <p className="mt-4 text-[15px] leading-relaxed text-ink-soft">{config.texts.welcomeBody}</p>
 
           <div className="mt-7 grid gap-3">
             <p className="text-sm font-semibold text-ink">Scegli come esplorare la demo</p>
@@ -100,12 +100,17 @@ export function WelcomePage() {
           </div>
 
           <div className="mt-8 flex flex-col gap-1.5 border-t border-line pt-5 text-xs text-ink-muted">
-            <p className="flex items-center gap-1.5">
-              <MapPin className="size-3.5 text-rosa-intenso" /> {db.association.address}
-            </p>
-            <p>
-              {db.association.legalForm} · {db.association.affiliation}
-            </p>
+            {config.contacts.address && (
+              <p className="flex items-center gap-1.5">
+                <MapPin className="size-3.5 text-rosa-intenso" /> {config.contacts.address}
+              </p>
+            )}
+            {config.contacts.legalForm && (
+              <p>
+                {config.contacts.legalForm}
+                {config.contacts.affiliation ? ` · ${config.contacts.affiliation}` : ''}
+              </p>
+            )}
             <p className="mt-1">Demo dimostrativa: nessun accesso reale, dati simulati e salvati solo su questo dispositivo.</p>
           </div>
         </div>

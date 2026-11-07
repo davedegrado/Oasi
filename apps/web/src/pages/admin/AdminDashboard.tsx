@@ -9,6 +9,7 @@ import { MembershipBadge } from '@/components/common/badges'
 import { STATUS_COLOR } from '@/lib/statusStyle'
 import { EventCard } from '@/components/events/EventCard'
 import { useDatabase } from '@/hooks/useDatabase'
+import { useTenant } from '@/hooks/useTenant'
 import { classOccupancy, figureStatus, recentAttendance, sortLessons, upcomingEvents } from '@/services/selectors'
 import { formatDate, formatDateShort, todayISO } from '@/lib/dates'
 import { STATUS_LABEL, STATUS_ORDER } from '@/lib/labels'
@@ -16,6 +17,7 @@ import { fullName, percent } from '@/lib/utils'
 
 export function AdminDashboard() {
   const db = useDatabase()
+  const { config } = useTenant()
   const activeStudents = db.students.filter((s) => s.membership.status !== 'sospesa')
   const recent = recentAttendance(db, sortLessons(db.lessons), 8).reverse()
   const recentPresent = recent.reduce((s, r) => s + r.present, 0)
@@ -29,7 +31,7 @@ export function AdminDashboard() {
   const avgCompletion = percent(statusTotals.find((s) => s.label === STATUS_LABEL.riuscita)?.value ?? 0, activeStudents.length * db.figures.length)
 
   const topFigures = db.figures
-    .map((f) => ({ figure: f, working: activeStudents.filter((s) => figureStatus(db, s.id, f.id) === 'in_apprendimento').length }))
+    .map((f) => ({ figure: f, working: activeStudents.filter((s) => figureStatus(db, s.id, f.id) === 'in_progetto').length }))
     .sort((a, b) => b.working - a.working)
     .slice(0, 4)
 
@@ -41,7 +43,7 @@ export function AdminDashboard() {
       <section className="animate-fade-up">
         <p className="text-sm font-medium text-ink-muted capitalize">{formatDate(todayISO(), { weekday: true })}</p>
         <h1 className="mt-1 text-[30px] leading-tight font-extrabold sm:text-4xl">
-          Panoramica <span className="text-rosa-intenso">Oasi</span>
+          Panoramica <span className="text-rosa-intenso">{config.shortName}</span>
         </h1>
         <p className="mt-1 text-ink-soft">Stagione {db.association.season} · {db.association.affiliation}</p>
       </section>

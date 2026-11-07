@@ -16,7 +16,7 @@ export function Donut({ segments, size = 168, thickness = 16, children, classNam
   return (
     <div className={cn('relative shrink-0', className)} style={{ width: size, height: size }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} stroke="#FDEEF4" strokeWidth={thickness} fill="none" />
+        <circle cx={size / 2} cy={size / 2} r={r} stroke="var(--color-cipria-100)" strokeWidth={thickness} fill="none" />
         {segments.map((s, i) => {
           const len = (s.value / total) * c
           return (
@@ -44,13 +44,13 @@ export function Donut({ segments, size = 168, thickness = 16, children, classNam
 }
 
 /** Anello di avanzamento singolo */
-export function Ring({ value, size = 64, thickness = 7, color = '#D66A9B', children }: { value: number; size?: number; thickness?: number; color?: string; children?: ReactNode }) {
+export function Ring({ value, size = 64, thickness = 7, color = 'var(--color-rosa-intenso)', children }: { value: number; size?: number; thickness?: number; color?: string; children?: ReactNode }) {
   const r = (size - thickness) / 2
   const c = 2 * Math.PI * r
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} stroke="#FDEEF4" strokeWidth={thickness} fill="none" />
+        <circle cx={size / 2} cy={size / 2} r={r} stroke="var(--color-cipria-100)" strokeWidth={thickness} fill="none" />
         <circle cx={size / 2} cy={size / 2} r={r} stroke={color} strokeWidth={thickness} fill="none" strokeLinecap="round" strokeDasharray={`${(Math.min(100, value) / 100) * c} ${c}`} className="transition-all duration-700" />
       </svg>
       <div className="absolute inset-0 grid place-items-center">{children}</div>

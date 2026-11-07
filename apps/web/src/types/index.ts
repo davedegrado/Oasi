@@ -4,7 +4,8 @@ export type Discipline = 'cerchio' | 'tessuti'
 
 export type Level = 'base' | 'intermedio' | 'avanzato'
 
-export type LearningStatus = 'da_imparare' | 'in_apprendimento' | 'riuscita' | 'in_progetto'
+/** Stati personali delle figure: "In apprendimento" è stato eliminato perché equivalente a "In progetto" */
+export type LearningStatus = 'da_imparare' | 'in_progetto' | 'riuscita'
 
 export type MembershipStatus = 'attiva' | 'in_scadenza' | 'sospesa' | 'prova'
 

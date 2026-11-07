@@ -30,7 +30,7 @@ export function StudentHome() {
   const events = upcomingEvents(db).slice(0, 3)
   const summary = progressSummary(db, student.id)
   const recent = recentProgress(db, student.id, 4)
-  const working = db.figures.filter((f) => db.progress[student.id]?.[f.id]?.status === 'in_apprendimento')
+  const working = db.figures.filter((f) => db.progress[student.id]?.[f.id]?.status === 'in_progetto')
 
   return (
     <div className="space-y-8">
@@ -107,7 +107,7 @@ export function StudentHome() {
                   {summary.counts.riuscita}
                   <span className="text-lg text-ink-muted">/{summary.total}</span>
                 </p>
-                <p className="text-sm text-ink-soft">{summary.counts.in_apprendimento} in apprendimento</p>
+                <p className="text-sm text-ink-soft">{summary.counts.in_progetto} in progetto</p>
               </div>
             </div>
             <div className="mt-5 flex-1">

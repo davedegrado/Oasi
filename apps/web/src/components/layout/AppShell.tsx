@@ -7,6 +7,7 @@ import { SilkLines } from '@/components/common/Decor'
 import { Avatar } from '@/components/ui/avatar'
 import { useDemo, useCurrentStudent, useCurrentTeacher } from '@/hooks/useDemo'
 import { ROLE_LABEL } from '@/lib/labels'
+import { useTenant } from '@/hooks/useTenant'
 import { cn, fullName } from '@/lib/utils'
 import { NAVIGATION } from './navigation'
 import { RoleSwitcher } from './RoleSwitcher'
@@ -14,9 +15,10 @@ import { RoleSwitcher } from './RoleSwitcher'
 function usePersonaCard(role: Role) {
   const student = useCurrentStudent()
   const teacher = useCurrentTeacher()
+  const { config } = useTenant()
   if (role === 'allieva') return { person: student, name: fullName(student) }
   if (role === 'insegnante') return { person: teacher, name: fullName(teacher) }
-  return { person: { id: 'admin', firstName: 'Segreteria', lastName: 'Oasi' }, name: 'Segreteria Oasi' }
+  return { person: { id: 'admin', firstName: 'Segreteria', lastName: config.shortName }, name: `Segreteria ${config.shortName}` }
 }
 
 export function AppShell({ role }: { role: Role }) {
@@ -24,7 +26,8 @@ export function AppShell({ role }: { role: Role }) {
   const { pathname } = useLocation()
   const { persona } = useDemo()
   const card = usePersonaCard(role)
-  const items = NAVIGATION[role]
+  const { hasModule } = useTenant()
+  const items = NAVIGATION[role].filter((i) => !i.module || hasModule(i.module))
 
   useEffect(() => {
     window.scrollTo({ top: 0 })

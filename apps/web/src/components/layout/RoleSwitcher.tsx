@@ -9,6 +9,9 @@ import { useDemo } from '@/hooks/useDemo'
 import { useDatabase, useRepository } from '@/hooks/useDatabase'
 import { useToast } from '@/hooks/useToast'
 import { ROLE_HOME } from '@/context/demo-context'
+import { useTenant } from '@/hooks/useTenant'
+import { DEMO_TENANTS } from '@/data/tenants'
+import { DATA_SOURCE } from '@/tenant/config'
 import { ROLE_LABEL } from '@/lib/labels'
 import { cn, fullName } from '@/lib/utils'
 
@@ -25,6 +28,7 @@ export function RoleSwitcher({ open, onOpenChange }: { open: boolean; onOpenChan
   const { toast } = useToast()
   const navigate = useNavigate()
   const [confirmReset, setConfirmReset] = useState(false)
+  const { config, previewBrand } = useTenant()
 
   const choose = (role: Role) => {
     selectRole(role)
@@ -86,6 +90,27 @@ export function RoleSwitcher({ open, onOpenChange }: { open: boolean; onOpenChan
               </option>
             ))}
           </Select>
+        </div>
+      )}
+
+      {DATA_SOURCE === 'demo' && (
+        <div className="mt-5">
+          <Label htmlFor="brand-select">Anteprima marchio (white-label)</Label>
+          <Select
+            id="brand-select"
+            value={config.slug}
+            onChange={(e) => {
+              previewBrand(e.target.value)
+              toast('Marchio applicato: stessi dati, identità diversa', 'info')
+            }}
+          >
+            {DEMO_TENANTS.map((t) => (
+              <option key={t.slug} value={t.slug}>
+                {t.appName}
+              </option>
+            ))}
+          </Select>
+          <p className="mt-1 text-xs text-ink-muted">Mostra come la stessa piattaforma appare con il marchio di un’altra palestra.</p>
         </div>
       )}
 

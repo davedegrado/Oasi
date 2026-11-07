@@ -6,10 +6,10 @@ import { Segmented } from '@/components/ui/segmented'
 import { LessonCard } from '@/components/lessons/LessonCard'
 import { useDatabase } from '@/hooks/useDatabase'
 import { findClass } from '@/services/selectors'
-import { addDays, dayNumber, formatDate, formatDateShort, formatDayShort, todayISO, weekDays } from '@/lib/dates'
+import { addDays, dayNumber, formatDate, formatDateShort, formatDayShort, monthDays, monthLabel, todayISO, weekDays } from '@/lib/dates'
 import { cn } from '@/lib/utils'
 
-type View = 'settimana' | 'giorno'
+type View = 'mese' | 'settimana' | 'giorno'
 
 interface WeekCalendarProps {
   lessons: Lesson[]
@@ -37,19 +37,27 @@ export function WeekCalendar({ lessons, onLessonClick, renderAside }: WeekCalend
   }, [lessons])
 
   const weekLabel = `${formatDateShort(days[0])} – ${formatDateShort(days[6])}`
+  const step = view === 'giorno' ? 1 : view === 'settimana' ? 7 : 0
+  const move = (dir: 1 | -1) => {
+    if (view === 'mese') {
+      const [y, m] = selected.split('-').map(Number)
+      const d = new Date(y, m - 1 + dir, 1)
+      setSelected(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`)
+    } else setSelected(addDays(selected, dir * step))
+  }
   const dayLessons = byDay.get(selected) ?? []
 
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-1.5">
-          <Button size="icon" variant="outline" aria-label="Settimana precedente" onClick={() => setSelected(addDays(selected, view === 'giorno' ? -1 : -7))}>
+          <Button size="icon" variant="outline" aria-label="Periodo precedente" onClick={() => move(-1)}>
             <ChevronLeft />
           </Button>
           <div className="min-w-32 px-1 text-center">
-            <p className="font-display font-bold text-ink capitalize">{view === 'giorno' ? formatDate(selected, { weekday: true }) : weekLabel}</p>
+            <p className="font-display font-bold text-ink capitalize">{view === 'giorno' ? formatDate(selected, { weekday: true }) : view === 'mese' ? monthLabel(selected) : weekLabel}</p>
           </div>
-          <Button size="icon" variant="outline" aria-label="Settimana successiva" onClick={() => setSelected(addDays(selected, view === 'giorno' ? 1 : 7))}>
+          <Button size="icon" variant="outline" aria-label="Periodo successivo" onClick={() => move(1)}>
             <ChevronRight />
           </Button>
           {selected !== today && (
@@ -63,13 +71,54 @@ export function WeekCalendar({ lessons, onLessonClick, renderAside }: WeekCalend
           onChange={setView}
           size="sm"
           options={[
+            { value: 'mese', label: 'Mese' },
             { value: 'settimana', label: 'Settimana' },
             { value: 'giorno', label: 'Giorno' },
           ]}
         />
       </div>
 
+      {view === 'mese' && (
+        <div className="mb-5 rounded-3xl bg-white p-2 shadow-soft sm:p-3">
+          <div className="mb-1 grid grid-cols-7 text-center text-[11px] font-semibold text-ink-muted uppercase">
+            {['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'].map((d) => (
+              <span key={d} className="py-1">{d}</span>
+            ))}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {monthDays(selected).map(({ date, inMonth }) => {
+              const items = byDay.get(date) ?? []
+              return (
+                <button
+                  key={date}
+                  type="button"
+                  onClick={() => {
+                    setSelected(date)
+                    setView('giorno')
+                  }}
+                  className={cn(
+                    'flex aspect-square flex-col items-center justify-center gap-1 rounded-2xl text-sm transition sm:aspect-[4/3]',
+                    !inMonth && 'opacity-35',
+                    date === today ? 'bg-ink font-bold text-white' : 'hover:bg-cipria-50',
+                  )}
+                  aria-label={`${formatDate(date, { weekday: true })}: ${items.length} lezioni`}
+                >
+                  <span className="font-display font-semibold">{dayNumber(date)}</span>
+                  <span className="flex h-1.5 gap-0.5">
+                    {items.slice(0, 3).map((l) => {
+                      const cls = findClass(db, l.classId)
+                      return <span key={l.id} className={cn('size-1.5 rounded-full', l.status === 'annullata' ? 'bg-ink-muted/40' : cls?.discipline === 'cerchio' ? 'bg-cerchio' : 'bg-tessuti')} />
+                    })}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Striscia giorni */}
+      {view !== 'mese' && (
       <div className="mb-5 grid grid-cols-7 gap-1.5 rounded-3xl bg-white p-1.5 shadow-soft sm:gap-2 sm:p-2">
         {days.map((d) => {
           const items = byDay.get(d) ?? []
@@ -101,8 +150,9 @@ export function WeekCalendar({ lessons, onLessonClick, renderAside }: WeekCalend
           )
         })}
       </div>
+      )}
 
-      {view === 'giorno' ? (
+      {view === 'mese' ? null : view === 'giorno' ? (
         <div className="space-y-3">
           {dayLessons.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-rosa/50 bg-white/60 p-8 text-center">

@@ -5,11 +5,25 @@ import type { OasiRepository } from './repository'
 
 const STORAGE_KEY = 'oasi-demo-db'
 
+/** v3 → v4: lo stato "in_apprendimento" confluisce in "in_progetto" mantenendo le note */
+function migrateFrom3(db: OasiDatabase): OasiDatabase {
+  const progress = Object.fromEntries(
+    Object.entries(db.progress).map(([sid, entries]) => [
+      sid,
+      Object.fromEntries(
+        Object.entries(entries).map(([fid, p]) => [fid, { ...p, status: (p.status as string) === 'in_apprendimento' ? 'in_progetto' : p.status }]),
+      ),
+    ]),
+  )
+  return { ...db, version: DATABASE_VERSION, progress }
+}
+
 function loadFromStorage(): OasiDatabase | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as OasiDatabase
+    if (parsed.version === 3) return migrateFrom3(parsed)
     if (parsed.version !== DATABASE_VERSION) return null
     return parsed
   } catch {

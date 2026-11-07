@@ -29,7 +29,7 @@ export function StudentProfile() {
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-bold">Progressi</h2>
                 <p className="text-sm text-ink-muted">
-                  {summary.counts.riuscita} riuscite · {summary.counts.in_apprendimento} in apprendimento · {summary.counts.in_progetto} in progetto
+                  {summary.counts.riuscita} riuscite · {summary.counts.in_progetto} in progetto · {summary.counts.da_imparare} da imparare
                 </p>
               </div>
               <Link to="/allieva/progressi" className="grid size-10 shrink-0 place-items-center rounded-full bg-cipria text-rosa-scuro" aria-label="Vai ai progressi">

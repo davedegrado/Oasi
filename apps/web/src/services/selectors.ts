@@ -92,7 +92,7 @@ export type StatusCounts = Record<LearningStatus, number>
 
 export function progressSummary(db: OasiDatabase, studentId: string, discipline?: Discipline) {
   const figures = db.figures.filter((f) => !discipline || f.discipline === discipline)
-  const counts: StatusCounts = { da_imparare: 0, in_apprendimento: 0, riuscita: 0, in_progetto: 0 }
+  const counts: StatusCounts = { da_imparare: 0, in_progetto: 0, riuscita: 0 }
   for (const f of figures) counts[figureStatus(db, studentId, f.id)]++
   return { counts, total: figures.length, completion: percent(counts.riuscita, figures.length) }
 }
@@ -111,12 +111,12 @@ export function studentsOfTeacher(db: OasiDatabase, teacherId: string): Student[
   return db.students.filter((s) => ids.has(s.id))
 }
 
-/** Allieve che stanno lavorando (in apprendimento) su ciascuna figura */
+/** Allieve che stanno lavorando (stato "In progetto") su ciascuna figura */
 export function studentsWorkingOnFigures(db: OasiDatabase, students: Student[]) {
   return db.figures
     .map((figure) => ({
       figure,
-      students: students.filter((s) => figureStatus(db, s.id, figure.id) === 'in_apprendimento'),
+      students: students.filter((s) => figureStatus(db, s.id, figure.id) === 'in_progetto'),
     }))
     .filter((e) => e.students.length > 0)
     .sort((a, b) => b.students.length - a.students.length)

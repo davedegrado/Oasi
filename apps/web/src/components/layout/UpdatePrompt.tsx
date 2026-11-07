@@ -1,9 +1,11 @@
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import { RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useTenant } from '@/hooks/useTenant'
 
 /** Avvisa quando è disponibile una nuova versione della webapp installata */
 export function UpdatePrompt() {
+  const { config } = useTenant()
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     updateServiceWorker,
@@ -21,7 +23,7 @@ export function UpdatePrompt() {
       <span className="grid size-9 shrink-0 place-items-center rounded-full bg-cipria text-rosa-scuro">
         <RefreshCw className="size-4" />
       </span>
-      <p className="min-w-0 flex-1 text-sm font-medium text-ink">È disponibile una nuova versione di Oasi.</p>
+      <p className="min-w-0 flex-1 text-sm font-medium text-ink">È disponibile una nuova versione di {config.shortName}.</p>
       <Button size="sm" onClick={() => updateServiceWorker(true)}>
         Aggiorna
       </Button>

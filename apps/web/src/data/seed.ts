@@ -16,7 +16,7 @@ import { demoAnnouncementSeeds, demoAssociation, demoEventSeeds } from './events
 import { demoFigureSeeds, photo } from './figures'
 import { demoStudentSeeds, demoTeachers } from './people'
 
-export const DATABASE_VERSION = 3
+export const DATABASE_VERSION = 4
 
 /** Hash deterministico: la demo genera sempre gli stessi dati per lo stesso giorno */
 function hash(text: string): number {
@@ -142,15 +142,15 @@ function pickStatus(student: Student, figure: Figure, studentDisciplines: Set<st
   if (!studentDisciplines.has(figure.discipline)) return 'da_imparare'
   const gap = LEVEL_RANK[figure.level] - LEVEL_RANK[student.level]
   const roll = hash(`${student.id}:${figure.id}`) % 100
-  if (gap < 0) return roll < 82 ? 'riuscita' : 'in_apprendimento'
+  if (gap < 0) return roll < 82 ? 'riuscita' : 'in_progetto'
   if (gap === 0) {
-    if (figure.difficulty <= 2) return roll < 75 ? 'riuscita' : 'in_apprendimento'
+    if (figure.difficulty <= 2) return roll < 75 ? 'riuscita' : 'in_progetto'
     if (roll < 30) return 'riuscita'
-    if (roll < 72) return 'in_apprendimento'
+    if (roll < 72) return 'in_progetto'
     if (roll < 88) return 'in_progetto'
     return 'da_imparare'
   }
-  if (gap === 1) return roll < 35 ? 'in_progetto' : roll < 45 ? 'in_apprendimento' : 'da_imparare'
+  if (gap === 1) return roll < 35 ? 'in_progetto' : roll < 45 ? 'in_progetto' : 'da_imparare'
   return 'da_imparare'
 }
 
@@ -178,7 +178,7 @@ function buildProgress(students: Student[], figures: Figure[], classes: ClassGro
   // Ritocchi per rendere la demo coerente con gli obiettivi di Giulia
   progress['stu-giulia'] = {
     ...progress['stu-giulia'],
-    'fig-gazelle': { status: 'in_apprendimento', note: PERSONAL_NOTES['stu-giulia']['fig-gazelle'], updatedAt: addDays(today, -2) },
+    'fig-gazelle': { status: 'in_progetto', note: PERSONAL_NOTES['stu-giulia']['fig-gazelle'], updatedAt: addDays(today, -2) },
     'fig-mermaid': { status: 'riuscita', note: PERSONAL_NOTES['stu-giulia']['fig-mermaid'], updatedAt: addDays(today, -6) },
     'fig-delilah': { status: 'in_progetto', note: PERSONAL_NOTES['stu-giulia']['fig-delilah'], updatedAt: addDays(today, -4) },
   }

@@ -41,7 +41,7 @@ export function ProgressPanel({ studentId, figureId }: { studentId: string; figu
             <h2 className="text-base font-bold text-ink">Il mio percorso</h2>
             {progress?.updatedAt && <span className="text-xs text-ink-muted">Aggiornato il {formatDate(progress.updatedAt)}</span>}
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid gap-2 sm:grid-cols-3">
             {STATUS_ORDER.map((s) => {
               const active = s === status
               const style = STATUS_STYLE[s]

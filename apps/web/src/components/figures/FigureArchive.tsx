@@ -153,7 +153,7 @@ export function FigureArchive({ basePath, studentId, studentIdsForStats, emptyAc
               </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
                 {g.figures.map((f, i) => {
-                  const working = studentIdsForStats?.filter((sid) => figureStatus(db, sid, f.id) === 'in_apprendimento').length
+                  const working = studentIdsForStats?.filter((sid) => figureStatus(db, sid, f.id) === 'in_progetto').length
                   return (
                     <div key={f.id} className="animate-fade-up" style={{ animationDelay: `${Math.min(i, 8) * 40}ms` }}>
                       <FigureCard
@@ -163,7 +163,7 @@ export function FigureArchive({ basePath, studentId, studentIdsForStats, emptyAc
                         meta={
                           studentIdsForStats ? (
                             <span className="flex items-center gap-1.5 text-xs text-ink-muted">
-                              <Users className="size-3.5 text-rosa-intenso" /> {working} in apprendimento
+                              <Users className="size-3.5 text-rosa-intenso" /> {working} in progetto
                             </span>
                           ) : undefined
                         }

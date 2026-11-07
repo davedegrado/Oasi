@@ -99,7 +99,7 @@ export function TeacherDashboard() {
           <SectionTitle title="Allieve al lavoro" />
           <Card>
             <CardContent className="space-y-1 p-3 sm:p-4">
-              {working.length === 0 && <p className="p-3 text-sm text-ink-muted">Nessuna figura in apprendimento.</p>}
+              {working.length === 0 && <p className="p-3 text-sm text-ink-muted">Nessuna figura in progetto.</p>}
               {working.map(({ figure, students: list }) => (
                 <Link key={figure.id} to={`/insegnante/figure/${figure.id}`} className="flex items-center gap-3 rounded-2xl p-2 transition hover:bg-cipria-50">
                   <img src={figure.cover} alt="" className="size-12 rounded-xl object-cover" loading="lazy" />

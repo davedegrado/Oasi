@@ -25,7 +25,7 @@ export function StudentCalendar() {
             size="sm"
             options={[
               { value: 'mie', label: 'Le mie classi' },
-              { value: 'tutte', label: 'Tutta l’Oasi' },
+              { value: 'tutte', label: 'Tutta la palestra' },
             ]}
           />
         }

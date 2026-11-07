@@ -13,7 +13,7 @@ export function StudentFigures() {
       <PageHeader
         eyebrow="Archivio figure"
         title="Il tuo catalogo"
-        description={`Ogni figura con la sua sequenza fotografica. Hai ${counts.riuscita} figure riuscite e ${counts.in_apprendimento} in apprendimento.`}
+        description={`Ogni figura con la sua sequenza fotografica. Hai ${counts.riuscita} figure riuscite e ${counts.in_progetto} in progetto.`}
       />
       <FigureArchive basePath="/allieva/figure" studentId={student.id} />
     </div>

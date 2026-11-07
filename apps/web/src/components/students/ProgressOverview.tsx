@@ -40,7 +40,7 @@ export function ProgressOverview({ studentId }: { studentId: string }) {
             const s = progressSummary(db, studentId, d)
             return (
               <div key={d} className="flex items-center gap-4">
-                <Ring value={s.completion} size={58} thickness={6} color={d === 'cerchio' ? '#D66A9B' : '#8A7BB8'}>
+                <Ring value={s.completion} size={58} thickness={6} color={d === 'cerchio' ? 'var(--color-cerchio)' : 'var(--color-tessuti)'}>
                   <DisciplineIcon discipline={d} className={d === 'cerchio' ? 'size-4 text-cerchio' : 'size-4 text-tessuti'} />
                 </Ring>
                 <div className="min-w-0 flex-1">

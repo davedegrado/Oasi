@@ -4,6 +4,7 @@ import { BrowserRouter, MemoryRouter, Navigate, Route, Routes } from 'react-rout
 const Router = import.meta.env.VITE_ROUTER === 'memory' ? MemoryRouter : BrowserRouter
 import { DemoProvider } from '@/context/DemoProvider'
 import { ToastProvider } from '@/context/ToastProvider'
+import { TenantProvider } from '@/tenant/TenantProvider'
 import { AppShell } from '@/components/layout/AppShell'
 import { RequireRole } from '@/components/layout/RequireRole'
 import { UpdatePrompt } from '@/components/layout/UpdatePrompt'
@@ -32,6 +33,7 @@ import { StudentJourneyPage } from '@/pages/shared/StudentJourneyPage'
 export default function App() {
   return (
     <Router>
+      <TenantProvider>
       <DemoProvider>
         <ToastProvider>
           <UpdatePrompt />
@@ -98,6 +100,7 @@ export default function App() {
           </Routes>
         </ToastProvider>
       </DemoProvider>
+      </TenantProvider>
     </Router>
   )
 }

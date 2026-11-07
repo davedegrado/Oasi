@@ -105,3 +105,20 @@ export function ageFrom(birthISO: string): number {
   if (now < new Date(now.getFullYear(), b.getMonth(), b.getDate())) age--
   return age
 }
+
+export function monthLabel(iso: string): string {
+  const d = parseISODate(iso)
+  return `${MONTHS_LONG[d.getMonth()]} ${d.getFullYear()}`
+}
+
+/** Griglia del mese (settimane complete da lunedì a domenica) */
+export function monthDays(iso: string): { date: string; inMonth: boolean }[] {
+  const d = parseISODate(iso)
+  const first = toISODate(new Date(d.getFullYear(), d.getMonth(), 1))
+  const last = toISODate(new Date(d.getFullYear(), d.getMonth() + 1, 0))
+  const start = startOfWeek(first)
+  const end = addDays(startOfWeek(last), 6)
+  const out: { date: string; inMonth: boolean }[] = []
+  for (let cur = start; cur <= end; cur = addDays(cur, 1)) out.push({ date: cur, inMonth: cur >= first && cur <= last })
+  return out
+}
