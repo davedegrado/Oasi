@@ -7,7 +7,7 @@ import { fileURLToPath, URL } from 'node:url'
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
   // mode 'artifact': build statica con percorsi relativi, senza service worker
-  base: mode === 'artifact' ? './' : '/',
+  base: mode === 'artifact' || mode === 'pages' ? './' : '/',
   build: {
     chunkSizeWarningLimit: 800,
   },
@@ -18,7 +18,7 @@ export default defineConfig(({ mode }) => ({
     react(),
     tailwindcss(),
     VitePWA({
-      disable: mode === 'artifact',
+      disable: mode === 'artifact' || mode === 'pages',
       registerType: 'prompt',
       injectRegister: false,
       includeAssets: ['icons/favicon.svg', 'icons/favicon-32.png', 'icons/apple-touch-icon.png'],

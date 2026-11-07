@@ -1,7 +1,7 @@
-import { BrowserRouter, MemoryRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, HashRouter, MemoryRouter, Navigate, Route, Routes } from 'react-router-dom'
 
 // Nella versione pubblicata come pagina statica incorporata si usa un router in memoria
-const Router = import.meta.env.VITE_ROUTER === 'memory' ? MemoryRouter : BrowserRouter
+const Router = import.meta.env.VITE_ROUTER === 'memory' ? MemoryRouter : import.meta.env.VITE_ROUTER === 'hash' ? HashRouter : BrowserRouter
 import { DemoProvider } from '@/context/DemoProvider'
 import { ToastProvider } from '@/context/ToastProvider'
 import { TenantProvider } from '@/tenant/TenantProvider'

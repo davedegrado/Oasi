@@ -33,3 +33,4 @@ TestResults/
 # Ambiente locale
 .env
 .env.local
+dist-pages

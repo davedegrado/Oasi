@@ -9,7 +9,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "build:artifact": "tsc -b && vite build --mode artifact --outDir dist-artifact",
-    "seed:export": "tsx --tsconfig tsconfig.app.json scripts/export-demo-seed.ts"
+    "seed:export": "tsx --tsconfig tsconfig.app.json scripts/export-demo-seed.ts",
+    "build:pages": "tsc -b && vite build --mode pages --outDir dist-pages"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.3.1",
