@@ -173,16 +173,16 @@ export function StudentHome() {
       {/* Archivio figure */}
       <section>
         <Link to="/allieva/figure" className="group relative flex items-center gap-4 overflow-hidden rounded-4xl bg-ink p-5 text-white shadow-float sm:p-6">
-          <div className="flex shrink-0 -space-x-6">
+          <div className="flex shrink-0 -space-x-10 sm:-space-x-6">
             {db.figures.slice(0, 3).map((f, i) => (
-              <img key={f.id} src={f.cover} alt="" className="size-16 rounded-2xl border-2 border-ink object-cover sm:size-20" style={{ transform: `rotate(${(i - 1) * 6}deg)` }} />
+              <img key={f.id} src={f.cover} alt="" className="size-14 rounded-2xl border-2 border-ink object-cover sm:size-20" style={{ transform: `rotate(${(i - 1) * 6}deg)` }} />
             ))}
           </div>
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-1.5 text-xs font-semibold tracking-wider text-rosa uppercase">
               <Sparkles className="size-3.5" /> Archivio figure
             </p>
-            <p className="font-display text-xl font-bold">{db.figures.length} figure con sequenza fotografica</p>
+            <p className="font-display text-xl font-bold">{db.figures.length} figure da esplorare</p>
             {working.length > 0 && <p className="mt-0.5 truncate text-sm text-white/70">Stai lavorando su: {working.map((f) => f.name).join(', ')}</p>}
           </div>
           <ArrowRight className="size-6 shrink-0 text-rosa transition group-hover:translate-x-1" />

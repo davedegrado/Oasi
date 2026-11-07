@@ -13,7 +13,7 @@ interface PageHeaderProps {
 export function PageHeader({ eyebrow, title, description, actions, className }: PageHeaderProps) {
   return (
     <header className={cn('relative mb-6 flex flex-col gap-4 sm:mb-8 sm:flex-row sm:items-end sm:justify-between', className)}>
-      <HoopArc className="absolute -top-16 -right-20 size-48 text-rosa/30 sm:-top-20 sm:right-0" />
+      <HoopArc className="absolute -top-16 -right-4 size-40 text-rosa/30 sm:-top-20 sm:right-0 sm:size-48" />
       <div className="relative min-w-0">
         {eyebrow && <p className="mb-1.5 text-xs font-semibold tracking-[0.18em] text-rosa-intenso uppercase">{eyebrow}</p>}
         <h1 className="text-[28px] leading-tight font-extrabold text-ink sm:text-4xl">{title}</h1>

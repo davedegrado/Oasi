@@ -87,6 +87,10 @@
   h4 {
     @apply font-display tracking-tight;
   }
+  /* evita che il contenuto dei figli di griglie allarghi la pagina su mobile */
+  .grid > * {
+    min-width: 0;
+  }
   ::selection {
     background: var(--color-cipria);
   }
