@@ -9,7 +9,8 @@ import { cn } from '@/lib/utils'
 export function AdminInfoCard({ student }: { student: Student }) {
   const m = student.membership
   const today = todayISO()
-  const certExpired = m.medicalCertificateExpiresAt < today
+  const certMissing = !m.medicalCertificateExpiresAt
+  const certExpired = !certMissing && m.medicalCertificateExpiresAt < today
   const certSoon = !certExpired && m.medicalCertificateExpiresAt < addDays(today, 30)
   const feeExpired = m.feePaidUntil < today
 
@@ -19,8 +20,8 @@ export function AdminInfoCard({ student }: { student: Student }) {
     {
       icon: FileHeart,
       label: 'Certificato medico',
-      value: `${certExpired ? 'scaduto il' : 'valido fino al'} ${formatDate(m.medicalCertificateExpiresAt, { year: true })}`,
-      tone: certExpired ? 'text-danger' : certSoon ? 'text-warn' : undefined,
+      value: certMissing ? 'da consegnare' : `${certExpired ? 'scaduto il' : 'valido fino al'} ${formatDate(m.medicalCertificateExpiresAt, { year: true })}`,
+      tone: certMissing || certExpired ? 'text-danger' : certSoon ? 'text-warn' : undefined,
     },
     { icon: Wallet, label: 'Quota', value: `${m.feePlan} · ${feeExpired ? 'da rinnovare' : `saldata fino al ${formatDate(m.feePaidUntil)}`}`, tone: feeExpired ? 'text-danger' : undefined },
     { icon: Mail, label: 'Email', value: student.email },

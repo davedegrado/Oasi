@@ -32,6 +32,7 @@ import { FigureEditorPage } from '@/pages/shared/FigureEditorPage'
 import { ManageFiguresPage } from '@/pages/shared/ManageFiguresPage'
 import { ManageFigureDetailPage } from '@/pages/shared/ManageFigureDetailPage'
 import { StudentJourneyPage } from '@/pages/shared/StudentJourneyPage'
+import { NotificationsPage } from '@/pages/shared/NotificationsPage'
 
 export default function App() {
   return (
@@ -60,6 +61,7 @@ export default function App() {
               <Route path="profilo" element={<StudentProfile />} />
               <Route path="classi" element={<StudentClasses />} />
               <Route path="eventi" element={<StudentEvents />} />
+              <Route path="notifiche" element={<NotificationsPage />} />
             </Route>
 
             <Route
@@ -81,6 +83,7 @@ export default function App() {
               <Route path="figure/:id/modifica" element={<FigureEditorPage basePath="/insegnante/figure" />} />
               <Route path="profilo" element={<TeacherProfile />} />
               <Route path="eventi" element={<AdminEvents />} />
+              <Route path="notifiche" element={<NotificationsPage />} />
             </Route>
 
             <Route
@@ -101,6 +104,7 @@ export default function App() {
               <Route path="figure/:id/modifica" element={<FigureEditorPage basePath="/admin/figure" />} />
               <Route path="eventi" element={<AdminEvents />} />
               <Route path="gestione" element={<AdminSettings />} />
+              <Route path="notifiche" element={<NotificationsPage />} />
             </Route>
 
             <Route path="*" element={<Navigate to="/" replace />} />

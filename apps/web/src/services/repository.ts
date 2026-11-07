@@ -1,4 +1,7 @@
 import type {
+  AppNotification,
+  Closure,
+  Teacher,
   AssociationInfo,
   AttendanceMark,
   ClassGroup,
@@ -42,6 +45,19 @@ export interface OasiRepository {
   decideEnrollment(requestId: string, approve: boolean, decidedBy: string): Promise<void>
   decideMakeup(requestId: string, approve: boolean, decidedBy: string): Promise<void>
   cancelRequest(kind: 'enrollment' | 'makeup', requestId: string): Promise<void>
+
+  // Persone (inviti simulati via email)
+  addStudent(student: Student): Promise<void>
+  addTeacher(teacher: Teacher): Promise<void>
+
+  // Chiusure: festività, scioperi, chiusure della sede
+  saveClosure(closure: Closure): Promise<void>
+  deleteClosure(closureId: string): Promise<void>
+  sendClosureReminder(closureId: string): Promise<void>
+
+  // Notifiche
+  notify(notification: Omit<AppNotification, 'id' | 'createdAt' | 'readBy'>): Promise<void>
+  markNotificationsRead(recipientKey: string, ids: string[]): Promise<void>
 
   // Figure
   saveFigure(figure: Figure): Promise<void>

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Building2, Database, Download, Mail, MapPin, Pencil, Phone, RotateCcw, Globe } from 'lucide-react'
 import type { AssociationInfo } from '@/types'
 import { PageHeader } from '@/components/common/PageHeader'
+import { ClosuresManager } from '@/components/closures/ClosuresManager'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
@@ -88,6 +89,10 @@ export function AdminSettings() {
           </p>
         </CardContent>
       </Card>
+
+      <div id="chiusure">
+        <ClosuresManager />
+      </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Card>

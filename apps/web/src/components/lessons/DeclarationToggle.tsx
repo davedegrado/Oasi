@@ -1,18 +1,19 @@
-import { Check, X } from 'lucide-react'
-import type { AttendanceMark, Lesson } from '@/types'
+import { CalendarCheck, Undo2, X } from 'lucide-react'
+import type { Lesson } from '@/types'
+import { Button } from '@/components/ui/button'
 import { useRepository } from '@/hooks/useDatabase'
 import { useToast } from '@/hooks/useToast'
 import { isLessonPast } from '@/services/selectors'
-import { cn } from '@/lib/utils'
 
 /**
- * L'allieva annuncia in anticipo se sarà presente: l'insegnante vede
- * subito chi ci sarà. È distinto dalla presenza effettiva del registro.
+ * Di default l'allieva è attesa a lezione: può solo disdire (e annullare la
+ * disdetta). L'insegnante vede subito chi non verrà. È distinto dalla presenza
+ * effettiva segnata nel registro.
  */
 export function DeclarationToggle({ lesson, studentId }: { lesson: Lesson; studentId: string }) {
   const repo = useRepository()
   const { toast } = useToast()
-  const current = lesson.declarations?.[studentId] ?? null
+  const cancelled = lesson.declarations?.[studentId] === 'assente'
   const actual = lesson.attendance[studentId]
 
   if (lesson.status === 'annullata') return null
@@ -24,39 +25,41 @@ export function DeclarationToggle({ lesson, studentId }: { lesson: Lesson; stude
     )
   }
 
-  const set = async (mark: AttendanceMark) => {
-    const next = current === mark ? null : mark
-    await repo.setDeclaration(lesson.id, studentId, next)
-    toast(next === 'presente' ? 'Perfetto, l’insegnante sa che ci sarai' : next === 'assente' ? 'Assenza comunicata all’insegnante' : 'Risposta annullata', 'info')
-  }
-
   return (
     <div className="flex flex-wrap items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
-      <span className="text-xs font-semibold text-ink-soft">{current ? 'La tua risposta' : 'Ci sarai?'}</span>
-      <div className="flex gap-1.5">
-        <button
-          type="button"
-          onClick={() => set('presente')}
-          aria-pressed={current === 'presente'}
-          className={cn(
-            'inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm font-semibold transition active:scale-95',
-            current === 'presente' ? 'border-ok bg-ok text-white' : 'border-line bg-white text-ink-soft hover:border-ok hover:text-ok',
-          )}
-        >
-          <Check className="size-4" /> Ci sarò
-        </button>
-        <button
-          type="button"
-          onClick={() => set('assente')}
-          aria-pressed={current === 'assente'}
-          className={cn(
-            'inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm font-semibold transition active:scale-95',
-            current === 'assente' ? 'border-danger bg-danger text-white' : 'border-line bg-white text-ink-soft hover:border-danger hover:text-danger',
-          )}
-        >
-          <X className="size-4" /> Non ci sarò
-        </button>
-      </div>
+      {cancelled ? (
+        <>
+          <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-danger">
+            <X className="size-4" /> Hai disdetto questa lezione
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={async () => {
+              await repo.setDeclaration(lesson.id, studentId, null)
+              toast('Disdetta annullata: ti aspettiamo a lezione')
+            }}
+          >
+            <Undo2 /> Annulla disdetta
+          </Button>
+        </>
+      ) : (
+        <>
+          <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-ok">
+            <CalendarCheck className="size-4" /> Ci sarai
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={async () => {
+              await repo.setDeclaration(lesson.id, studentId, 'assente')
+              toast('Lezione disdetta: l’insegnante è stata avvisata', 'info')
+            }}
+          >
+            <X /> Disdici
+          </Button>
+        </>
+      )}
     </div>
   )
 }

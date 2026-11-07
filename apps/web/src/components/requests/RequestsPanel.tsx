@@ -91,8 +91,9 @@ export function RequestsPanel({ teacherId, decidedBy, title = 'Richieste da appr
                         <RefreshCcw className="size-3.5" /> Recupero · {relativeDayLabel(r.createdAt)}
                       </p>
                       <p className="text-sm">
-                        <b>{fullName(s)}</b> vuole recuperare con <b>{c.name}</b>, <span className="first-letter:uppercase">{formatDate(lesson.date, { weekday: true })}</span> alle {lesson.startTime}
+                        <b>{fullName(s)}</b> vuole recuperare con <b>{c.name}</b>, {formatDate(lesson.date, { weekday: true })} alle {lesson.startTime}
                       </p>
+                      {lesson.status === 'annullata' && <p className="text-xs font-semibold text-danger">Attenzione: questa lezione è stata annullata</p>}
                       <p className="text-xs text-ink-muted">
                         {missed ? `Recupera: ${findClass(db, missed.classId)?.name} del ${formatDate(missed.date)}` : `Classi abituali: ${s.classIds.map((id) => findClass(db, id)?.name).join(', ') || '—'}`}
                         {r.note ? ` · “${r.note}”` : ''}

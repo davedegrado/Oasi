@@ -1,5 +1,7 @@
 import type {
+  AppNotification,
   AttendanceMark,
+  Closure,
   ClassGroup,
   Figure,
   FigureProgress,
@@ -16,7 +18,7 @@ import { demoAnnouncementSeeds, demoAssociation, demoEventSeeds } from './events
 import { demoFigureSeeds, photo } from './figures'
 import { demoStudentSeeds, demoTeachers } from './people'
 
-export const DATABASE_VERSION = 5
+export const DATABASE_VERSION = 6
 
 /** Hash deterministico: la demo genera sempre gli stessi dati per lo stesso giorno */
 function hash(text: string): number {
@@ -91,7 +93,7 @@ function buildLessons(classes: ClassGroup[], today: string): Lesson[] {
   const now = Date.now()
   const lessons: Lesson[] = []
   for (const cls of classes) {
-    for (let week = -5; week <= 3; week++) {
+    for (let week = -5; week <= 6; week++) {
       const date = addDays(monday, week * 7 + cls.weekday - 1)
       const override = LESSON_OVERRIDES.find((o) => o.classId === cls.id && o.weekOffset === week)
       const startTime = override?.startTime ?? cls.startTime
@@ -213,11 +215,51 @@ function buildRequests(classes: ClassGroup[], lessons: Lesson[], today: string):
   }
 }
 
+/** Prossima ricorrenza di una data fissa (mese 1-12, giorno) a partire da oggi */
+function nextOccurrence(today: string, month: number, day: number): string {
+  const y = Number(today.slice(0, 4))
+  const candidate = `${y}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  return candidate >= today ? candidate : `${y + 1}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+function buildClosures(today: string): Closure[] {
+  const immacolata = nextOccurrence(today, 12, 8)
+  return [
+    {
+      id: 'clo-immacolata',
+      kind: 'festivita',
+      title: 'Festa dell’Immacolata',
+      startDate: immacolata,
+      endDate: immacolata,
+      note: 'Sede chiusa per festività nazionale: le lezioni del giorno sono sospese.',
+    },
+  ]
+}
+
+/** Le lezioni che cadono in una chiusura risultano annullate */
+export function applyClosure(lessons: Lesson[], closure: Closure): Lesson[] {
+  return lessons.map((l) =>
+    l.date >= closure.startDate && l.date <= closure.endDate && l.status !== 'annullata'
+      ? { ...l, status: 'annullata', closureId: closure.id, note: closure.note ? `${closure.title}: ${closure.note}` : closure.title }
+      : l,
+  )
+}
+
+function buildNotifications(today: string): AppNotification[] {
+  return [
+    { id: 'ntf-var', kind: 'variazione', title: 'Variazione di orario', body: 'Tessuti Intermedio: la lezione tra due settimane è spostata alle 19:00 per le prove dello spettacolo.', to: ['students'], link: { allieva: '/allieva/calendario' }, createdAt: addDays(today, -1), readBy: [] },
+    { id: 'ntf-gara', kind: 'evento', title: 'Nuovo evento: Gara regionale UISP', body: 'Iscrizioni aperte fino a un mese prima della gara. Posti limitati.', to: ['students'], link: { allieva: '/allieva/eventi' }, createdAt: addDays(today, -2), readBy: [] },
+    { id: 'ntf-req-noemi', kind: 'iscrizione', title: 'Nuova richiesta di iscrizione', body: 'Noemi Rinaldi chiede di entrare in Cerchio Intermedio.', to: ['teacher:tch-chiara', 'admin'], link: { insegnante: '/insegnante/lezioni?tab=richieste', admin: '/admin/classi' }, createdAt: addDays(today, -1), readBy: [] },
+    { id: 'ntf-req-sofia', kind: 'recupero', title: 'Richiesta di recupero', body: 'Sofia Galli chiede di recuperare con Cerchio Intermedio.', to: ['teacher:tch-chiara', 'admin'], link: { insegnante: '/insegnante/lezioni?tab=richieste', admin: '/admin/classi' }, createdAt: addDays(today, -1), readBy: [] },
+  ]
+}
+
 export function createSeedDatabase(today: string = todayISO()): OasiDatabase {
   const students = buildStudents(today)
   const classes = buildClasses(students)
   const figures = buildFigures(today)
-  const lessons = buildLessons(classes, today)
+  const closures = buildClosures(today)
+  const lessons = closures.reduce(applyClosure, buildLessons(classes, today))
   return {
     version: DATABASE_VERSION,
     association: structuredClone(demoAssociation),
@@ -234,5 +276,7 @@ export function createSeedDatabase(today: string = todayISO()): OasiDatabase {
     })),
     announcements: demoAnnouncementSeeds.map(({ daysAgo, ...a }) => ({ ...a, date: addDays(today, -daysAgo) })),
     ...buildRequests(classes, lessons, today),
+    closures,
+    notifications: buildNotifications(today),
   }
 }

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronRight, Search } from 'lucide-react'
+import { ChevronRight, GraduationCap, Search, UserPlus } from 'lucide-react'
 import type { MembershipStatus, Student, Teacher } from '@/types'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Input, Select, Field } from '@/components/ui/input'
@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { EmptyState } from '@/components/common/EmptyState'
+import { NewPersonDialog } from '@/components/students/NewPersonDialog'
 import { DisciplineBadge, LevelBadge, MembershipBadge } from '@/components/common/badges'
 import { useDatabase, useRepository } from '@/hooks/useDatabase'
 import { useToast } from '@/hooks/useToast'
@@ -39,6 +40,7 @@ export function AdminUsers() {
   const [classId, setClassId] = useState('tutte')
   const [editing, setEditing] = useState<Student | null>(null)
   const [teacherView, setTeacherView] = useState<Teacher | null>(null)
+  const [creating, setCreating] = useState<'allieva' | 'insegnante' | null>(null)
 
   const rows: Row[] = useMemo(() => {
     const students: Row[] = db.students.map((s) => ({
@@ -70,7 +72,22 @@ export function AdminUsers() {
 
   return (
     <div className="animate-fade-up">
-      <PageHeader eyebrow="Utenti" title="Allieve e insegnanti" description={`${db.students.length} allieve · ${db.teachers.length} insegnanti`} />
+      <PageHeader
+        eyebrow="Utenti"
+        title="Allieve e insegnanti"
+        description={`${db.students.length} allieve · ${db.teachers.length} insegnanti`}
+        actions={
+          <>
+            <Button size="sm" onClick={() => setCreating('allieva')}>
+              <UserPlus /> Nuova allieva
+            </Button>
+            <Button size="sm" variant="soft" onClick={() => setCreating('insegnante')}>
+              <GraduationCap /> Nuova insegnante
+            </Button>
+          </>
+        }
+      />
+      {creating && <NewPersonDialog kind={creating} onClose={() => setCreating(null)} />}
 
       <div className="mb-5 space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row">
@@ -142,7 +159,12 @@ export function AdminUsers() {
                     <td className="max-w-56 px-3 py-3 text-ink-soft">
                       <span className="line-clamp-2">{r.classes}</span>
                     </td>
-                    <td className="px-3 py-3">{r.status === 'staff' ? <Badge tone="neutral">Staff</Badge> : <MembershipBadge status={r.status} />}</td>
+                    <td className="px-3 py-3">
+                      <div className="flex flex-wrap gap-1">
+                        {r.status === 'staff' ? <Badge tone="neutral">Staff</Badge> : <MembershipBadge status={r.status} />}
+                        {r.person.invitePending && <Badge tone="warn">Invito inviato</Badge>}
+                      </div>
+                    </td>
                     <td className="px-5 py-3 text-right">
                       <div className="flex justify-end gap-1.5">
                         {r.kind === 'allieva' && (
@@ -173,6 +195,7 @@ export function AdminUsers() {
                     <span className="mt-1.5 flex flex-wrap gap-1.5">
                       <Badge tone={r.kind === 'insegnante' ? 'tessuti' : 'rosa'}>{r.kind === 'insegnante' ? 'Insegnante' : 'Allieva'}</Badge>
                       {r.status !== 'staff' && <MembershipBadge status={r.status} />}
+                      {r.person.invitePending && <Badge tone="warn">Invito inviato</Badge>}
                     </span>
                   </span>
                 </button>

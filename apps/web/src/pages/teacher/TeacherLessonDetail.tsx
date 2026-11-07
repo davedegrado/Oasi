@@ -143,21 +143,17 @@ export function TeacherLessonDetail({ basePath = '/insegnante/lezioni', studentB
                 <CheckCheck /> Tutte presenti
               </Button>
             </div>
-            <div className="mb-4 grid grid-cols-3 gap-2 text-center">
+            <div className="mb-4 grid grid-cols-2 gap-2 text-center">
               <div className="rounded-2xl bg-ok-soft p-3">
-                <p className="font-display text-2xl font-extrabold text-ok">{decl.yes}</p>
-                <p className="text-[11px] font-semibold text-ok">ci saranno</p>
+                <p className="font-display text-2xl font-extrabold text-ok">{decl.expected}</p>
+                <p className="text-[11px] font-semibold text-ok">attese a lezione</p>
               </div>
               <div className="rounded-2xl bg-danger-soft p-3">
-                <p className="font-display text-2xl font-extrabold text-danger">{decl.no}</p>
-                <p className="text-[11px] font-semibold text-danger">non ci saranno</p>
-              </div>
-              <div className="rounded-2xl bg-cipria-100 p-3">
-                <p className="font-display text-2xl font-extrabold text-ink-soft">{decl.unknown}</p>
-                <p className="text-[11px] font-semibold text-ink-muted">senza risposta</p>
+                <p className="font-display text-2xl font-extrabold text-danger">{decl.cancelled}</p>
+                <p className="text-[11px] font-semibold text-danger">hanno disdetto</p>
               </div>
             </div>
-            <p className="mb-3 text-xs text-ink-muted">In alto le risposte date dalle allieve nell’app; i pulsanti a destra registrano la presenza effettiva.</p>
+            <p className="mb-3 text-xs text-ink-muted">Le allieve sono attese di default e possono disdire dall’app; i pulsanti a destra registrano la presenza effettiva.</p>
             <ul className="divide-y divide-line/70">
               {roster.map(({ student: s, isMakeup, declared }) => {
                 const m = lesson.attendance[s.id]
@@ -169,8 +165,7 @@ export function TeacherLessonDetail({ basePath = '/insegnante/lezioni', studentB
                         <p className="truncate font-semibold text-ink">{fullName(s)}</p>
                         <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                           {isMakeup ? <Badge tone="rosa">Recupero</Badge> : <LevelBadge level={s.level} />}
-                          {declared === 'presente' && <Badge tone="ok">Ha detto: ci sarò</Badge>}
-                          {declared === 'assente' && <Badge tone="danger">Ha detto: non ci sarò</Badge>}
+                          {declared === 'assente' && <Badge tone="danger">Ha disdetto</Badge>}
                           {s.membership.status !== 'attiva' && <MembershipBadge status={s.membership.status} />}
                         </div>
                       </div>

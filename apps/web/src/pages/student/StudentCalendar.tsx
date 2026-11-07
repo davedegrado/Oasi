@@ -39,7 +39,7 @@ export function StudentCalendar() {
       <PageHeader
         eyebrow="Calendario"
         title="Le tue lezioni"
-        description="Mese, settimana o giorno. Rispondi “Ci sarò” o “Non ci sarò”: la tua insegnante saprà già chi c’è."
+        description="Mese, settimana o giorno. Sei attesa a tutte le tue lezioni: se non puoi venire, disdici e la tua insegnante lo saprà subito."
         className="mb-0"
         actions={
           <Link to="/allieva/classi" className={buttonVariants({ variant: 'soft', size: 'sm' })}>

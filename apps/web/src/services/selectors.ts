@@ -1,4 +1,5 @@
 import type {
+  DemoPersona,
   AttendanceMark,
   ClassGroup,
   Discipline,
@@ -206,12 +207,34 @@ export function expectedAttendance(db: OasiDatabase, lesson: Lesson): number {
   return lessonRoster(db, lesson).filter((e) => e.declared !== 'assente' && e.student.membership.status !== 'sospesa').length
 }
 
+/** Di default tutte le iscritte sono attese: contano solo le disdette */
 export function declarationSummary(db: OasiDatabase, lesson: Lesson) {
   const roster = lessonRoster(db, lesson)
-  return {
-    yes: roster.filter((e) => e.declared === 'presente').length,
-    no: roster.filter((e) => e.declared === 'assente').length,
-    unknown: roster.filter((e) => !e.declared).length,
-    total: roster.length,
-  }
+  const cancelled = roster.filter((e) => e.declared === 'assente').length
+  return { expected: roster.length - cancelled, cancelled, total: roster.length }
+}
+
+// ── Notifiche ────────────────────────────────────────────────────
+export function notificationKeys(persona: DemoPersona | null): string[] {
+  if (!persona) return []
+  if (persona.role === 'allieva') return [`student:${persona.userId}`, 'students']
+  if (persona.role === 'insegnante') return [`teacher:${persona.userId}`, 'teachers']
+  return ['admin']
+}
+
+/** Chiave personale usata per segnare come lette */
+export function readerKey(persona: DemoPersona | null): string {
+  return notificationKeys(persona)[0] ?? 'anon'
+}
+
+export function notificationsFor(db: OasiDatabase, persona: DemoPersona | null) {
+  const keys = notificationKeys(persona)
+  const me = readerKey(persona)
+  const list = (db.notifications ?? []).filter((n) => n.to.some((t) => keys.includes(t))).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  return { list, unread: list.filter((n) => !n.readBy.includes(me)).length, me }
+}
+
+export function upcomingClosures(db: OasiDatabase) {
+  const today = todayISO()
+  return (db.closures ?? []).filter((c) => c.endDate >= today).sort((a, b) => a.startDate.localeCompare(b.startDate))
 }

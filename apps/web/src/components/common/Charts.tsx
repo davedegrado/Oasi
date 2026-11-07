@@ -51,7 +51,9 @@ export function Ring({ value, size = 64, thickness = 7, color = 'var(--color-ros
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
         <circle cx={size / 2} cy={size / 2} r={r} stroke="var(--color-cipria-100)" strokeWidth={thickness} fill="none" />
-        <circle cx={size / 2} cy={size / 2} r={r} stroke={color} strokeWidth={thickness} fill="none" strokeLinecap="round" strokeDasharray={`${(Math.min(100, value) / 100) * c} ${c}`} className="transition-all duration-700" />
+        {value > 0 && (
+          <circle cx={size / 2} cy={size / 2} r={r} stroke={color} strokeWidth={thickness} fill="none" strokeLinecap="round" strokeDasharray={`${(Math.min(100, value) / 100) * c} ${c}`} className="transition-all duration-700" />
+        )}
       </svg>
       <div className="absolute inset-0 grid place-items-center">{children}</div>
     </div>

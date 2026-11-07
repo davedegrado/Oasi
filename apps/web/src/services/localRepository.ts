@@ -1,6 +1,6 @@
-import type { OasiDatabase } from '@/types'
-import { createSeedDatabase, DATABASE_VERSION } from '@/data/seed'
-import { addDays, startOfWeek, todayISO } from '@/lib/dates'
+import type { AppNotification, OasiDatabase } from '@/types'
+import { applyClosure, createSeedDatabase, DATABASE_VERSION } from '@/data/seed'
+import { addDays, formatDate, startOfWeek, todayISO } from '@/lib/dates'
 import { uid } from '@/lib/utils'
 import type { OasiRepository } from './repository'
 
@@ -24,7 +24,7 @@ function migrateFrom4(db: OasiDatabase): OasiDatabase {
   const seed = createSeedDatabase()
   return {
     ...db,
-    version: DATABASE_VERSION,
+    version: 5,
     enrollmentRequests: db.enrollmentRequests ?? [],
     makeupRequests: db.makeupRequests ?? [],
     lessons: db.lessons.map((l) => ({ ...l, declarations: l.declarations ?? {} })),
@@ -35,13 +35,30 @@ function migrateFrom4(db: OasiDatabase): OasiDatabase {
   }
 }
 
+/** v5 → v6: chiusure e centro notifiche; "Ci sarò" diventa il default (restano solo le disdette) */
+function migrateFrom5(db: OasiDatabase): OasiDatabase {
+  const seed = createSeedDatabase()
+  const lessons = db.lessons.map((l) => ({
+    ...l,
+    declarations: Object.fromEntries(Object.entries(l.declarations ?? {}).filter(([, v]) => v === 'assente')),
+  }))
+  return {
+    ...db,
+    version: DATABASE_VERSION,
+    lessons: seed.closures.reduce(applyClosure, lessons),
+    closures: db.closures ?? seed.closures,
+    notifications: db.notifications ?? seed.notifications,
+  }
+}
+
 function loadFromStorage(): OasiDatabase | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as OasiDatabase
-    if (parsed.version === 3) return migrateFrom4(migrateFrom3(parsed))
-    if (parsed.version === 4) return migrateFrom4(parsed)
+    if (parsed.version === 3) return migrateFrom5(migrateFrom4(migrateFrom3(parsed)))
+    if (parsed.version === 4) return migrateFrom5(migrateFrom4(parsed))
+    if (parsed.version === 5) return migrateFrom5(parsed)
     if (parsed.version !== DATABASE_VERSION) return null
     return parsed
   } catch {
@@ -69,6 +86,43 @@ function persist(db: OasiDatabase) {
     // Quota superata (es. troppe immagini caricate): la demo continua in memoria
     console.warn('[Oasi] impossibile salvare su localStorage', err)
   }
+}
+
+type NewNotification = Omit<AppNotification, 'id' | 'createdAt' | 'readBy'>
+
+function withNotifications(db: OasiDatabase, items: NewNotification[]): OasiDatabase {
+  const now = new Date().toISOString()
+  return {
+    ...db,
+    notifications: [...items.map((n) => ({ ...n, id: uid('ntf'), createdAt: now, readBy: [] })), ...(db.notifications ?? [])].slice(0, 200),
+  }
+}
+
+const studentName = (db: OasiDatabase, id: string) => {
+  const s = db.students.find((x) => x.id === id)
+  return s ? `${s.firstName} ${s.lastName}` : 'Un’allieva'
+}
+
+function restoreLesson(db: OasiDatabase, l: OasiDatabase['lessons'][number]) {
+  const cls = db.classes.find((c) => c.id === l.classId)
+  return { ...l, status: 'regolare' as const, closureId: undefined, note: undefined, startTime: cls?.startTime ?? l.startTime, endTime: cls?.endTime ?? l.endTime }
+}
+
+/** Avvisa le allieve della classe (e i recuperi) quando una lezione viene annullata o variata */
+function notifyLessonChange(prev: OasiDatabase, lessonId: string, status: string | undefined, note: string | undefined, next: OasiDatabase): OasiDatabase {
+  if (status !== 'annullata' && status !== 'variata') return next
+  const lesson = next.lessons.find((l) => l.id === lessonId)
+  const cls = prev.classes.find((c) => c.id === lesson?.classId)
+  if (!lesson || !cls) return next
+  const makeups = prev.makeupRequests.filter((r) => r.targetLessonId === lessonId && r.status === 'approvata').map((r) => r.studentId)
+  const to = [...cls.studentIds, ...makeups].map((id) => `student:${id}`)
+  return withNotifications(next, [{
+    kind: 'variazione',
+    title: status === 'annullata' ? `Lezione annullata: ${cls.name}` : `Nuovo orario: ${cls.name}`,
+    body: `${formatDate(lesson.date, { weekday: true })}${status === 'variata' ? `, ${lesson.startTime}–${lesson.endTime}` : ''}${note ? `. ${note}` : ''}`,
+    to,
+    link: { allieva: '/allieva/calendario' },
+  }])
 }
 
 export class LocalRepository implements OasiRepository {
@@ -164,26 +218,29 @@ export class LocalRepository implements OasiRepository {
       const open = db.enrollmentRequests.some((r) => r.classId === classId && r.studentId === studentId && r.status === 'in_attesa')
       const enrolled = db.classes.find((c) => c.id === classId)?.studentIds.includes(studentId)
       if (open || enrolled) return db
-      return {
-        ...db,
-        enrollmentRequests: [
-          { id: uid('enr'), classId, studentId, note, status: 'in_attesa', createdAt: todayISO() },
-          ...db.enrollmentRequests,
-        ],
-      }
+      const cls = db.classes.find((c) => c.id === classId)
+      return withNotifications(
+        {
+          ...db,
+          enrollmentRequests: [{ id: uid('enr'), classId, studentId, note, status: 'in_attesa', createdAt: todayISO() }, ...db.enrollmentRequests],
+        },
+        [{ kind: 'iscrizione', title: 'Nuova richiesta di iscrizione', body: `${studentName(db, studentId)} chiede di entrare in ${cls?.name ?? 'una classe'}.`, to: [`teacher:${cls?.teacherId}`, 'admin'], link: { insegnante: '/insegnante/lezioni?tab=richieste', admin: '/admin/classi' } }],
+      )
     })
 
   requestMakeup: OasiRepository['requestMakeup'] = (studentId, targetLessonId, missedLessonId, note) =>
     this.commit((db) => {
       const open = db.makeupRequests.some((r) => r.targetLessonId === targetLessonId && r.studentId === studentId && r.status !== 'rifiutata')
       if (open) return db
-      return {
-        ...db,
-        makeupRequests: [
-          { id: uid('mku'), studentId, targetLessonId, missedLessonId, note, status: 'in_attesa', createdAt: todayISO() },
-          ...db.makeupRequests,
-        ],
-      }
+      const lesson = db.lessons.find((l) => l.id === targetLessonId)
+      const cls = db.classes.find((c) => c.id === lesson?.classId)
+      return withNotifications(
+        {
+          ...db,
+          makeupRequests: [{ id: uid('mku'), studentId, targetLessonId, missedLessonId, note, status: 'in_attesa', createdAt: todayISO() }, ...db.makeupRequests],
+        },
+        [{ kind: 'recupero', title: 'Richiesta di recupero', body: `${studentName(db, studentId)} chiede di recuperare con ${cls?.name ?? 'una classe'}${lesson ? ` ${formatDate(lesson.date, { weekday: true })} alle ${lesson.startTime}` : ''}.`, to: [`teacher:${cls?.teacherId}`, 'admin'], link: { insegnante: '/insegnante/lezioni?tab=richieste', admin: '/admin/classi' } }],
+      )
     })
 
   decideEnrollment: OasiRepository['decideEnrollment'] = (requestId, approve, decidedBy) => {
@@ -191,7 +248,7 @@ export class LocalRepository implements OasiRepository {
     const cls = this.db.classes.find((c) => c.id === req?.classId)
     if (!req || !cls || req.status !== 'in_attesa') return Promise.resolve()
     if (approve && cls.studentIds.length >= cls.capacity) return Promise.reject(new Error('La classe ha raggiunto la capienza massima.'))
-    return this.commit((db) => ({
+    return this.commit((db) => withNotifications({
       ...db,
       enrollmentRequests: db.enrollmentRequests.map((r) =>
         r.id === requestId ? { ...r, status: approve ? 'approvata' : 'rifiutata', decidedAt: todayISO(), decidedBy } : r,
@@ -200,7 +257,13 @@ export class LocalRepository implements OasiRepository {
       students: approve
         ? db.students.map((s) => (s.id === req.studentId ? { ...s, classIds: [...new Set([...s.classIds, cls.id])] } : s))
         : db.students,
-    }))
+    }, [{
+      kind: 'iscrizione',
+      title: approve ? `Iscrizione confermata: ${cls.name}` : `Iscrizione non accettata: ${cls.name}`,
+      body: approve ? 'Le lezioni della classe sono ora nel tuo calendario.' : 'Contatta la segreteria per trovare un’altra classe adatta.',
+      to: [`student:${req.studentId}`],
+      link: { allieva: approve ? '/allieva/calendario' : '/allieva/classi' },
+    }]))
   }
 
   decideMakeup: OasiRepository['decideMakeup'] = (requestId, approve, decidedBy) => {
@@ -208,14 +271,21 @@ export class LocalRepository implements OasiRepository {
     const lesson = this.db.lessons.find((l) => l.id === req?.targetLessonId)
     const cls = this.db.classes.find((c) => c.id === lesson?.classId)
     if (!req || !lesson || !cls || req.status !== 'in_attesa') return Promise.resolve()
+    if (approve && lesson.status === 'annullata') return Promise.reject(new Error('Quella lezione è stata annullata: rifiuta la richiesta così l’allieva sceglie un’altra data.'))
     const makeups = this.db.makeupRequests.filter((r) => r.targetLessonId === lesson.id && r.status === 'approvata').length
     if (approve && cls.studentIds.length + makeups >= cls.capacity) return Promise.reject(new Error('La lezione non ha più posti disponibili.'))
-    return this.commit((db) => ({
+    return this.commit((db) => withNotifications({
       ...db,
       makeupRequests: db.makeupRequests.map((r) =>
         r.id === requestId ? { ...r, status: approve ? 'approvata' : 'rifiutata', decidedAt: todayISO(), decidedBy } : r,
       ),
-    }))
+    }, [{
+      kind: 'recupero',
+      title: approve ? 'Recupero confermato' : 'Recupero non accettato',
+      body: approve ? `Ti aspettiamo a ${cls.name} ${formatDate(lesson.date, { weekday: true })} alle ${lesson.startTime}.` : `La lezione di ${cls.name} del ${formatDate(lesson.date)} non è disponibile: scegli un’altra data.`,
+      to: [`student:${req.studentId}`],
+      link: { allieva: '/allieva/calendario' },
+    }]))
   }
 
   cancelRequest: OasiRepository['cancelRequest'] = (kind, requestId) =>
@@ -226,7 +296,7 @@ export class LocalRepository implements OasiRepository {
     )
 
   updateLesson: OasiRepository['updateLesson'] = (lessonId, patch) =>
-    this.commit((db) => ({
+    this.commit((db) => notifyLessonChange(db, lessonId, patch.status, patch.note, {
       ...db,
       lessons: db.lessons.map((l) => {
         if (l.id !== lessonId) return l
@@ -244,6 +314,52 @@ export class LocalRepository implements OasiRepository {
         }
         return next
       }),
+    }))
+
+  addStudent: OasiRepository['addStudent'] = (student) =>
+    this.commit((db) => ({
+      ...db,
+      students: [...db.students, student],
+      classes: db.classes.map((c) => (student.classIds.includes(c.id) ? { ...c, studentIds: [...new Set([...c.studentIds, student.id])] } : c)),
+    }))
+
+  addTeacher: OasiRepository['addTeacher'] = (teacher) => this.commit((db) => ({ ...db, teachers: [...db.teachers, teacher] }))
+
+  saveClosure: OasiRepository['saveClosure'] = (closure) =>
+    this.commit((db) => {
+      // ripristina le lezioni della versione precedente, poi applica le nuove date
+      const restored = db.lessons.map((l) => (l.closureId === closure.id ? restoreLesson(db, l) : l))
+      return {
+        ...db,
+        closures: [...db.closures.filter((c) => c.id !== closure.id), closure].sort((a, b) => a.startDate.localeCompare(b.startDate)),
+        lessons: applyClosure(restored, closure),
+      }
+    })
+
+  deleteClosure: OasiRepository['deleteClosure'] = (closureId) =>
+    this.commit((db) => ({
+      ...db,
+      closures: db.closures.filter((c) => c.id !== closureId),
+      lessons: db.lessons.map((l) => (l.closureId === closureId ? restoreLesson(db, l) : l)),
+    }))
+
+  sendClosureReminder: OasiRepository['sendClosureReminder'] = (closureId) =>
+    this.commit((db) => {
+      const c = db.closures.find((x) => x.id === closureId)
+      if (!c) return db
+      const when = c.startDate === c.endDate ? formatDate(c.startDate, { weekday: true }) : `dal ${formatDate(c.startDate)} al ${formatDate(c.endDate)}`
+      return withNotifications(
+        { ...db, closures: db.closures.map((x) => (x.id === closureId ? { ...x, reminderSentAt: new Date().toISOString() } : x)) },
+        [{ kind: 'chiusura', title: `Oasi chiusa: ${c.title}`, body: `Nessuna lezione ${when}.${c.note ? ` ${c.note}` : ''}`, to: ['students', 'teachers'], link: { allieva: '/allieva/calendario', insegnante: '/insegnante/lezioni' } }],
+      )
+    })
+
+  notify: OasiRepository['notify'] = (n) => this.commit((db) => withNotifications(db, [n]))
+
+  markNotificationsRead: OasiRepository['markNotificationsRead'] = (key, ids) =>
+    this.commit((db) => ({
+      ...db,
+      notifications: db.notifications.map((n) => (ids.includes(n.id) && !n.readBy.includes(key) ? { ...n, readBy: [...n.readBy, key] } : n)),
     }))
 
   saveFigure: OasiRepository['saveFigure'] = (figure) =>
@@ -325,7 +441,10 @@ export class LocalRepository implements OasiRepository {
   saveEvent: OasiRepository['saveEvent'] = (event) =>
     this.commit((db) => {
       const exists = db.events.some((e) => e.id === event.id)
-      return { ...db, events: exists ? db.events.map((e) => (e.id === event.id ? event : e)) : [...db.events, event] }
+      const next = { ...db, events: exists ? db.events.map((e) => (e.id === event.id ? event : e)) : [...db.events, event] }
+      return exists
+        ? next
+        : withNotifications(next, [{ kind: 'evento', title: `Nuovo evento: ${event.title}`, body: `${formatDate(event.date, { weekday: true })} · ${event.location}${event.signupDeadline ? ` · iscrizioni entro il ${formatDate(event.signupDeadline)}` : ''}`, to: ['students'], link: { allieva: '/allieva/eventi' } }])
     })
 
   deleteEvent: OasiRepository['deleteEvent'] = (eventId) =>

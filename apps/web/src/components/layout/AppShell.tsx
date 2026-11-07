@@ -10,6 +10,9 @@ import { ROLE_LABEL } from '@/lib/labels'
 import { useTenant } from '@/hooks/useTenant'
 import { cn, fullName } from '@/lib/utils'
 import { NAVIGATION } from './navigation'
+import { NotificationBell } from '@/components/notifications/NotificationBell'
+import { useDatabase } from '@/hooks/useDatabase'
+import { pendingRequests } from '@/services/selectors'
 import { RoleSwitcher } from './RoleSwitcher'
 
 function usePersonaCard(role: Role) {
@@ -30,6 +33,13 @@ export function AppShell({ role }: { role: Role }) {
   const items = NAVIGATION[role].filter((i) => !i.module || hasModule(i.module))
   const bottomItems = items.filter((i) => !i.sidebarOnly)
   const profileItem = items.find((i) => i.sidebarOnly)
+  const db = useDatabase()
+  const requestCount = role === 'admin' ? pendingRequests(db, null).total : role === 'insegnante' && persona?.userId ? pendingRequests(db, persona.userId).total : 0
+  const notificationsPath = `/${role}/notifiche`
+  const badge = (b?: string) =>
+    b === 'requests' && requestCount > 0 ? (
+      <span className="absolute -top-0.5 right-[calc(50%-20px)] grid min-w-[18px] place-items-center rounded-full bg-rosa-intenso px-1 text-[10px] leading-[18px] font-bold text-white ring-2 ring-white">{requestCount}</span>
+    ) : null
 
   useEffect(() => {
     window.scrollTo({ top: 0 })
@@ -43,10 +53,11 @@ export function AppShell({ role }: { role: Role }) {
         <NavLink to={items[0].to} className="px-2">
           <Logo />
         </NavLink>
-        <div className="mt-6 flex items-center gap-2 px-2">
+        <div className="mt-6 flex items-center justify-between gap-2 px-2">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-cipria px-3 py-1 text-xs font-semibold text-rosa-scuro">
             <Sparkles className="size-3" /> Demo · {ROLE_LABEL[role]}
           </span>
+          <NotificationBell to={notificationsPath} />
         </div>
         <nav className="relative mt-6 flex flex-col gap-1">
           {items.map((item) => (
@@ -66,7 +77,10 @@ export function AppShell({ role }: { role: Role }) {
                   <span className={cn('grid size-9 place-items-center rounded-full transition', isActive ? 'bg-rosa-intenso text-white shadow-soft' : 'bg-cipria-100 text-ink-soft group-hover:bg-cipria')}>
                     <item.icon className="size-[18px]" />
                   </span>
-                  {item.label}
+                  <span className="flex-1">{item.label}</span>
+                  {item.badge === 'requests' && requestCount > 0 && (
+                    <span className="rounded-full bg-rosa-intenso px-2 py-0.5 text-xs font-bold text-white">{requestCount}</span>
+                  )}
                 </>
               )}
             </NavLink>
@@ -95,6 +109,7 @@ export function AppShell({ role }: { role: Role }) {
             <Logo />
           </NavLink>
           <div className="flex items-center gap-2">
+            <NotificationBell to={notificationsPath} />
             <button
               type="button"
               onClick={() => setSwitcherOpen(true)}
@@ -133,12 +148,15 @@ export function AppShell({ role }: { role: Role }) {
               end={item.end}
               className={({ isActive }) =>
                 cn(
-                  'flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-[1.25rem] py-2 text-[10.5px] font-semibold transition',
+                  'relative flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-[1.25rem] py-2 text-[10.5px] font-semibold transition',
                   isActive ? 'bg-cipria text-rosa-scuro' : 'text-ink-muted active:bg-cipria-50',
                 )
               }
             >
-              <item.icon className="size-[21px]" strokeWidth={2} />
+              <span className="relative w-full">
+                <item.icon className="mx-auto size-[21px]" strokeWidth={2} />
+                {badge(item.badge)}
+              </span>
               <span className="w-full truncate px-0.5 text-center">{item.label}</span>
             </NavLink>
           ))}

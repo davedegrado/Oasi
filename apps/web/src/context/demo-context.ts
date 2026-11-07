@@ -4,6 +4,7 @@ import type { DemoPersona, Role } from '@/types'
 export interface DemoContextValue {
   persona: DemoPersona | null
   selectRole: (role: Role) => void
+  enterAs: (role: Role, userId: string | null) => void
   setUserId: (userId: string) => void
   exit: () => void
 }

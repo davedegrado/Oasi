@@ -1,5 +1,5 @@
 import type { TenantConfig } from '@/tenant/types'
-import { photo } from '@/lib/assets'
+import { asset, photo } from '@/lib/assets'
 
 const ALL_MODULES = [
   'users', 'students', 'guardians', 'teachers', 'classes', 'calendar', 'bookings', 'attendance', 'makeups',
@@ -34,7 +34,7 @@ export const DEMO_TENANTS: TenantConfig[] = [
     slug: 'oasi-metropolitana',
     appName: 'Oasi Metropolitana',
     shortName: 'Oasi',
-    logoUrl: null,
+    logoUrl: asset('images/logo-oasi.webp'),
     coverUrl: photo('cerchio-12'),
     colors: PLATFORM_DEFAULTS.colors,
     texts: {

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight, BellRing, CalendarClock, ChevronRight, Clock, MapPin, Megaphone, Sparkles } from 'lucide-react'
+import { ArrowRight, BellRing, CalendarClock, ChevronRight, Clock, MapPin, Megaphone, RefreshCcw, Sparkles } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Avatar } from '@/components/ui/avatar'
 import { HoopArc, SilkLines } from '@/components/common/Decor'
@@ -29,6 +29,13 @@ export function StudentHome() {
   const events = upcomingEvents(db).slice(0, 3)
   const summary = progressSummary(db, student.id)
   const recent = recentProgress(db, student.id, 4)
+  const myMakeups = db.makeupRequests
+    .filter((r) => r.studentId === student.id && r.status !== 'rifiutata')
+    .map((request) => {
+      const lesson = db.lessons.find((l) => l.id === request.targetLessonId)
+      return lesson && lesson.date >= todayISO() ? { request, lesson, cls: findClass(db, lesson.classId) } : null
+    })
+    .filter((x): x is NonNullable<typeof x> => !!x)
   const working = db.figures.filter((f) => db.progress[student.id]?.[f.id]?.status === 'in_progetto')
 
   return (
@@ -89,8 +96,18 @@ export function StudentHome() {
             </div>
           </Link>
         ) : (
-          <Card>
-            <CardContent>Nessuna lezione in programma.</CardContent>
+          <Card className="animate-fade-up">
+            <CardContent className="space-y-3">
+              <p className="font-display text-xl font-bold">{student.classIds.length === 0 ? 'Benvenuta! Iniziamo?' : 'Nessuna lezione in programma'}</p>
+              <p className="text-sm text-ink-soft">
+                {student.classIds.length === 0
+                  ? 'Scegli il corso che fa per te e invia la richiesta di iscrizione: l’insegnante la confermerà e le lezioni compariranno qui.'
+                  : 'Nelle prossime settimane non hai lezioni: puoi chiedere un recupero dal calendario.'}
+              </p>
+              <Link to={student.classIds.length === 0 ? '/allieva/classi' : '/allieva/calendario'} className={buttonVariants()}>
+                {student.classIds.length === 0 ? 'Scegli un corso' : 'Apri il calendario'}
+              </Link>
+            </CardContent>
           </Card>
         )}
           {next && (
@@ -177,6 +194,36 @@ export function StudentHome() {
           ))}
         </div>
       </section>
+
+      {/* Recuperi: confermati e in attesa */}
+      {myMakeups.length > 0 && (
+        <section>
+          <SectionTitle title="I tuoi recuperi" />
+          <div className="space-y-2.5">
+            {myMakeups.map(({ request, lesson, cls }) => (
+              <Link
+                key={request.id}
+                to="/allieva/calendario"
+                className={cn(
+                  'flex items-center gap-3 rounded-3xl border p-4 shadow-soft transition hover:border-rosa',
+                  request.status === 'approvata' ? 'border-ok/40 bg-ok-soft' : 'border-warn/30 bg-warn-soft',
+                )}
+              >
+                <RefreshCcw className={cn('size-5 shrink-0', request.status === 'approvata' ? 'text-ok' : 'text-warn')} />
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-ink">
+                    {request.status === 'approvata' ? 'Recupero confermato' : 'Recupero in attesa di conferma'}
+                  </p>
+                  <p className="text-sm text-ink-soft first-letter:uppercase">
+                    {cls?.name} · {formatDate(lesson.date, { weekday: true })} alle {lesson.startTime}
+                  </p>
+                </div>
+                <ChevronRight className="size-5 text-ink-muted" />
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Accesso rapido */}
       <section className="grid grid-cols-2 gap-3">

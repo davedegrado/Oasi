@@ -23,6 +23,8 @@ export interface NavItem {
   module?: string
   /** Solo nella sidebar desktop: su smartphone è nell'header */
   sidebarOnly?: boolean
+  /** Contatore di richieste da approvare */
+  badge?: 'requests'
 }
 
 export const NAVIGATION: Record<Role, NavItem[]> = {
@@ -36,7 +38,7 @@ export const NAVIGATION: Record<Role, NavItem[]> = {
   ],
   insegnante: [
     { to: '/insegnante', label: 'Dashboard', icon: LayoutDashboard, end: true },
-    { to: '/insegnante/lezioni', label: 'Lezioni', icon: BookOpenCheck },
+    { to: '/insegnante/lezioni', label: 'Lezioni', icon: BookOpenCheck, badge: 'requests' },
     { to: '/insegnante/allieve', label: 'Allieve', icon: Users },
     { to: '/insegnante/figure', label: 'Figure', icon: Sparkles, module: 'figure_archive' },
     { to: '/insegnante/eventi', label: 'Eventi', icon: CalendarHeart, module: 'events' },
@@ -45,7 +47,7 @@ export const NAVIGATION: Record<Role, NavItem[]> = {
   admin: [
     { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
     { to: '/admin/utenti', label: 'Utenti', icon: Users },
-    { to: '/admin/classi', label: 'Classi', icon: GraduationCap, module: 'classes' },
+    { to: '/admin/classi', label: 'Classi', icon: GraduationCap, module: 'classes', badge: 'requests' },
     { to: '/admin/figure', label: 'Archivio', icon: Sparkles, module: 'figure_archive' },
     { to: '/admin/eventi', label: 'Eventi', icon: CalendarHeart, module: 'events' },
     { to: '/admin/gestione', label: 'Gestione', icon: Settings2 },

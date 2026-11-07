@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { EnterDialog } from '@/components/layout/EnterDialog'
 import { ArrowRight, GraduationCap, MapPin, Shield, UserRound } from 'lucide-react'
 import type { Role } from '@/types'
 import { Logo } from '@/components/common/Logo'
@@ -40,9 +42,12 @@ export function WelcomePage() {
   const words = config.texts.welcomeTitle.split(' ')
   const lastWord = words.pop()
 
+  const [choosing, setChoosing] = useState<Role | null>(null)
   const enter = (role: Role) => {
-    selectRole(role)
-    navigate(ROLE_HOME[role])
+    if (role === 'admin') {
+      selectRole(role)
+      navigate(ROLE_HOME[role])
+    } else setChoosing(role)
   }
 
   return (
@@ -115,6 +120,7 @@ export function WelcomePage() {
           </div>
         </div>
       </div>
+      {choosing && <EnterDialog role={choosing} onClose={() => setChoosing(null)} />}
     </div>
   )
 }

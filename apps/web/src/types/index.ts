@@ -14,6 +14,7 @@ export type AttendanceMark = 'presente' | 'assente'
 export type LessonStatus = 'regolare' | 'annullata' | 'variata'
 
 export interface Teacher {
+  invitePending?: boolean
   id: string
   firstName: string
   lastName: string
@@ -35,6 +36,8 @@ export interface Membership {
 }
 
 export interface Student {
+  /** Invito inviato dall'amministrazione, non ancora accettato (simulazione) */
+  invitePending?: boolean
   id: string
   firstName: string
   lastName: string
@@ -77,8 +80,10 @@ export interface Lesson {
   originalEndTime?: string
   /** Presenza effettiva registrata dall'insegnante */
   attendance: Record<string, AttendanceMark>
-  /** Presenza o assenza annunciata in anticipo dall'allieva */
+  /** Disdette: di default l'allieva è attesa; qui si registra solo chi non verrà */
   declarations?: Record<string, AttendanceMark>
+  /** Lezione annullata da una chiusura della sede */
+  closureId?: string
 }
 
 export interface FigureStep {
@@ -197,6 +202,38 @@ export interface OasiDatabase {
   announcements: Announcement[]
   enrollmentRequests: EnrollmentRequest[]
   makeupRequests: MakeupRequest[]
+  closures: Closure[]
+  notifications: AppNotification[]
+}
+
+export type ClosureKind = 'festivita' | 'sciopero' | 'chiusura'
+
+/** Giorni senza lezione: festività, scioperi, chiusure della sede */
+export interface Closure {
+  id: string
+  kind: ClosureKind
+  title: string
+  startDate: string
+  endDate: string
+  note: string
+  reminderSentAt?: string
+}
+
+export type NotificationKind = 'iscrizione' | 'recupero' | 'variazione' | 'chiusura' | 'evento' | 'comunicazione'
+
+/**
+ * Notifica nel centro notifiche. Destinatari: "student:<id>", "teacher:<id>",
+ * "admin", "students" (tutte le allieve), "teachers".
+ */
+export interface AppNotification {
+  id: string
+  kind: NotificationKind
+  title: string
+  body: string
+  to: string[]
+  link?: { allieva?: string; insegnante?: string; admin?: string }
+  createdAt: string
+  readBy: string[]
 }
 
 export interface DemoPersona {

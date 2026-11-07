@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
 import type { Lesson } from '@/types'
 import { PageHeader } from '@/components/common/PageHeader'
@@ -20,7 +20,8 @@ export function TeacherLessons() {
   const db = useDatabase()
   const teacher = useCurrentTeacher()
   const navigate = useNavigate()
-  const [tab, setTab] = useState<Tab>('prossime')
+  const [params] = useSearchParams()
+  const [tab, setTab] = useState<Tab>(params.get('tab') === 'richieste' ? 'richieste' : 'prossime')
   const [classFilter, setClassFilter] = useState<string>('tutte')
   const myClasses = db.classes.filter((c) => c.teacherId === teacher.id)
   const all = lessonsForTeacher(db, teacher.id).filter((l) => classFilter === 'tutte' || l.classId === classFilter)

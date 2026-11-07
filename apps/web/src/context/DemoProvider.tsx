@@ -35,6 +35,7 @@ export function DemoProvider({ children }: { children: ReactNode }) {
     () => ({
       persona,
       selectRole: (role: Role) => update({ role, userId: DEFAULT_USER[role] }),
+      enterAs: (role: Role, userId: string | null) => update({ role, userId }),
       setUserId: (userId: string) => persona && update({ ...persona, userId }),
       exit: () => update(null),
     }),

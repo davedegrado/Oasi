@@ -17,9 +17,17 @@ export function LogoMark({ className }: { className?: string }) {
 export function Logo({ className, compact, light }: { className?: string; compact?: boolean; light?: boolean }) {
   const { config } = useTenant()
   const subtitle = config.appName.replace(config.shortName, '').trim()
+  if (config.logoUrl) {
+    // Il logo della palestra contiene già il nome: niente scritta accanto
+    return (
+      <span className={cn('inline-flex items-center', className)}>
+        <img src={config.logoUrl} alt={config.appName} className={cn('size-12 rounded-full bg-white object-contain p-0.5', light && 'shadow-soft')} />
+      </span>
+    )
+  }
   return (
     <span className={cn('inline-flex items-center gap-2.5', className)}>
-      {config.logoUrl ? <img src={config.logoUrl} alt="" className="size-10 rounded-full object-cover" /> : <LogoMark />}
+      <LogoMark />
       {!compact && (
         <span className="flex flex-col leading-none">
           <span className={cn('font-display text-xl font-extrabold tracking-tight', light ? 'text-white' : 'text-ink')}>{config.shortName}</span>

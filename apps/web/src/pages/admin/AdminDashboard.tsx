@@ -9,9 +9,10 @@ import { MembershipBadge } from '@/components/common/badges'
 import { STATUS_COLOR } from '@/lib/statusStyle'
 import { EventCard } from '@/components/events/EventCard'
 import { RequestsPanel } from '@/components/requests/RequestsPanel'
+import { CLOSURE_KIND_LABEL } from '@/components/closures/closureLabels'
 import { useDatabase } from '@/hooks/useDatabase'
 import { useTenant } from '@/hooks/useTenant'
-import { classOccupancy, figureStatus, recentAttendance, sortLessons, upcomingEvents } from '@/services/selectors'
+import { classOccupancy, figureStatus, recentAttendance, sortLessons, upcomingClosures, upcomingEvents } from '@/services/selectors'
 import { formatDate, formatDateShort, todayISO } from '@/lib/dates'
 import { STATUS_LABEL, STATUS_ORDER } from '@/lib/labels'
 import { fullName, percent } from '@/lib/utils'
@@ -57,6 +58,32 @@ export function AdminDashboard() {
       </div>
 
       <RequestsPanel teacherId={null} decidedBy="admin" hideWhenEmpty />
+
+      <section>
+        <SectionTitle
+          title="Prossime chiusure"
+          action={
+            <Link to="/admin/gestione" className="inline-flex items-center gap-1 text-sm font-semibold text-rosa-intenso">
+              Gestisci <ArrowRight className="size-4" />
+            </Link>
+          }
+        />
+        <Card>
+          <CardContent className="p-3 sm:p-4">
+            {upcomingClosures(db).length === 0 && <p className="p-2 text-sm text-ink-muted">Nessuna chiusura in programma. Aggiungi festività, scioperi o chiusure dalla pagina Gestione.</p>}
+            <ul className="divide-y divide-line/70">
+              {upcomingClosures(db).slice(0, 4).map((c) => (
+                <li key={c.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+                  <span>
+                    <b>{c.title}</b> <span className="text-ink-muted">· {CLOSURE_KIND_LABEL[c.kind]}</span>
+                  </span>
+                  <span className="text-ink-muted">{formatDateShort(c.startDate)}{c.endDate !== c.startDate ? ` – ${formatDateShort(c.endDate)}` : ''}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      </section>
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Card>
