@@ -1,6 +1,7 @@
 import type { OasiDatabase } from '@/types'
 import { createSeedDatabase, DATABASE_VERSION } from '@/data/seed'
 import { addDays, startOfWeek, todayISO } from '@/lib/dates'
+import { uid } from '@/lib/utils'
 import type { OasiRepository } from './repository'
 
 const STORAGE_KEY = 'oasi-demo-db'
@@ -15,7 +16,23 @@ function migrateFrom3(db: OasiDatabase): OasiDatabase {
       ),
     ]),
   )
-  return { ...db, version: DATABASE_VERSION, progress }
+  return { ...db, version: 4, progress }
+}
+
+/** v4 → v5: richieste di iscrizione e recupero, presenze annunciate, scadenze eventi */
+function migrateFrom4(db: OasiDatabase): OasiDatabase {
+  const seed = createSeedDatabase()
+  return {
+    ...db,
+    version: DATABASE_VERSION,
+    enrollmentRequests: db.enrollmentRequests ?? [],
+    makeupRequests: db.makeupRequests ?? [],
+    lessons: db.lessons.map((l) => ({ ...l, declarations: l.declarations ?? {} })),
+    events: [
+      ...db.events.map((e) => ({ ...e, signupDeadline: e.signupDeadline ?? seed.events.find((s) => s.id === e.id)?.signupDeadline })),
+      ...seed.events.filter((s) => !db.events.some((e) => e.id === s.id) && (s.type === 'gara' || s.type === 'saggio')),
+    ],
+  }
 }
 
 function loadFromStorage(): OasiDatabase | null {
@@ -23,7 +40,8 @@ function loadFromStorage(): OasiDatabase | null {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as OasiDatabase
-    if (parsed.version === 3) return migrateFrom3(parsed)
+    if (parsed.version === 3) return migrateFrom4(migrateFrom3(parsed))
+    if (parsed.version === 4) return migrateFrom4(parsed)
     if (parsed.version !== DATABASE_VERSION) return null
     return parsed
   } catch {
@@ -124,9 +142,88 @@ export class LocalRepository implements OasiRepository {
       const lesson = db.lessons.find((l) => l.id === lessonId)
       const cls = db.classes.find((c) => c.id === lesson?.classId)
       if (!lesson || !cls) return db
-      const attendance = Object.fromEntries(cls.studentIds.map((id) => [id, mark]))
+      const makeups = db.makeupRequests.filter((r) => r.targetLessonId === lessonId && r.status === 'approvata').map((r) => r.studentId)
+      const attendance = Object.fromEntries([...cls.studentIds, ...makeups].map((id) => [id, mark]))
       return { ...db, lessons: db.lessons.map((l) => (l.id === lessonId ? { ...l, attendance } : l)) }
     })
+
+  setDeclaration: OasiRepository['setDeclaration'] = (lessonId, studentId, mark) =>
+    this.commit((db) => ({
+      ...db,
+      lessons: db.lessons.map((l) => {
+        if (l.id !== lessonId) return l
+        const declarations = { ...(l.declarations ?? {}) }
+        if (mark) declarations[studentId] = mark
+        else delete declarations[studentId]
+        return { ...l, declarations }
+      }),
+    }))
+
+  requestEnrollment: OasiRepository['requestEnrollment'] = (classId, studentId, note) =>
+    this.commit((db) => {
+      const open = db.enrollmentRequests.some((r) => r.classId === classId && r.studentId === studentId && r.status === 'in_attesa')
+      const enrolled = db.classes.find((c) => c.id === classId)?.studentIds.includes(studentId)
+      if (open || enrolled) return db
+      return {
+        ...db,
+        enrollmentRequests: [
+          { id: uid('enr'), classId, studentId, note, status: 'in_attesa', createdAt: todayISO() },
+          ...db.enrollmentRequests,
+        ],
+      }
+    })
+
+  requestMakeup: OasiRepository['requestMakeup'] = (studentId, targetLessonId, missedLessonId, note) =>
+    this.commit((db) => {
+      const open = db.makeupRequests.some((r) => r.targetLessonId === targetLessonId && r.studentId === studentId && r.status !== 'rifiutata')
+      if (open) return db
+      return {
+        ...db,
+        makeupRequests: [
+          { id: uid('mku'), studentId, targetLessonId, missedLessonId, note, status: 'in_attesa', createdAt: todayISO() },
+          ...db.makeupRequests,
+        ],
+      }
+    })
+
+  decideEnrollment: OasiRepository['decideEnrollment'] = (requestId, approve, decidedBy) => {
+    const req = this.db.enrollmentRequests.find((r) => r.id === requestId)
+    const cls = this.db.classes.find((c) => c.id === req?.classId)
+    if (!req || !cls || req.status !== 'in_attesa') return Promise.resolve()
+    if (approve && cls.studentIds.length >= cls.capacity) return Promise.reject(new Error('La classe ha raggiunto la capienza massima.'))
+    return this.commit((db) => ({
+      ...db,
+      enrollmentRequests: db.enrollmentRequests.map((r) =>
+        r.id === requestId ? { ...r, status: approve ? 'approvata' : 'rifiutata', decidedAt: todayISO(), decidedBy } : r,
+      ),
+      classes: approve ? db.classes.map((c) => (c.id === cls.id ? { ...c, studentIds: [...c.studentIds, req.studentId] } : c)) : db.classes,
+      students: approve
+        ? db.students.map((s) => (s.id === req.studentId ? { ...s, classIds: [...new Set([...s.classIds, cls.id])] } : s))
+        : db.students,
+    }))
+  }
+
+  decideMakeup: OasiRepository['decideMakeup'] = (requestId, approve, decidedBy) => {
+    const req = this.db.makeupRequests.find((r) => r.id === requestId)
+    const lesson = this.db.lessons.find((l) => l.id === req?.targetLessonId)
+    const cls = this.db.classes.find((c) => c.id === lesson?.classId)
+    if (!req || !lesson || !cls || req.status !== 'in_attesa') return Promise.resolve()
+    const makeups = this.db.makeupRequests.filter((r) => r.targetLessonId === lesson.id && r.status === 'approvata').length
+    if (approve && cls.studentIds.length + makeups >= cls.capacity) return Promise.reject(new Error('La lezione non ha più posti disponibili.'))
+    return this.commit((db) => ({
+      ...db,
+      makeupRequests: db.makeupRequests.map((r) =>
+        r.id === requestId ? { ...r, status: approve ? 'approvata' : 'rifiutata', decidedAt: todayISO(), decidedBy } : r,
+      ),
+    }))
+  }
+
+  cancelRequest: OasiRepository['cancelRequest'] = (kind, requestId) =>
+    this.commit((db) =>
+      kind === 'enrollment'
+        ? { ...db, enrollmentRequests: db.enrollmentRequests.filter((r) => r.id !== requestId) }
+        : { ...db, makeupRequests: db.makeupRequests.filter((r) => r.id !== requestId) },
+    )
 
   updateLesson: OasiRepository['updateLesson'] = (lessonId, patch) =>
     this.commit((db) => ({

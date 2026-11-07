@@ -28,6 +28,8 @@ export function AppShell({ role }: { role: Role }) {
   const card = usePersonaCard(role)
   const { hasModule } = useTenant()
   const items = NAVIGATION[role].filter((i) => !i.module || hasModule(i.module))
+  const bottomItems = items.filter((i) => !i.sidebarOnly)
+  const profileItem = items.find((i) => i.sidebarOnly)
 
   useEffect(() => {
     window.scrollTo({ top: 0 })
@@ -92,16 +94,28 @@ export function AppShell({ role }: { role: Role }) {
           <NavLink to={items[0].to} aria-label="Home">
             <Logo />
           </NavLink>
-          <button
-            type="button"
-            onClick={() => setSwitcherOpen(true)}
-            className="flex items-center gap-2 rounded-full border border-line bg-white py-1 pr-3 pl-1 shadow-soft transition active:scale-95"
-            aria-label="Cambia ruolo demo"
-          >
-            <Avatar person={card.person} size="xs" />
-            <span className="text-xs font-semibold text-ink">{ROLE_LABEL[role]}</span>
-            <ArrowLeftRight className="size-3.5 text-rosa-intenso" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSwitcherOpen(true)}
+              className="flex h-9 items-center gap-1.5 rounded-full border border-line bg-white px-3 shadow-soft transition active:scale-95"
+              aria-label="Cambia ruolo demo"
+            >
+              <span className="text-xs font-semibold text-ink">{ROLE_LABEL[role]}</span>
+              <ArrowLeftRight className="size-3.5 text-rosa-intenso" />
+            </button>
+            {profileItem ? (
+              <NavLink
+                to={profileItem.to}
+                aria-label="Profilo"
+                className={({ isActive }) => cn('rounded-full ring-2 transition active:scale-95', isActive ? 'ring-rosa-intenso' : 'ring-transparent')}
+              >
+                <Avatar person={card.person} size="sm" />
+              </NavLink>
+            ) : (
+              <Avatar person={card.person} size="sm" />
+            )}
+          </div>
         </div>
       </header>
 
@@ -112,7 +126,7 @@ export function AppShell({ role }: { role: Role }) {
       {/* Navigazione inferiore mobile */}
       <nav className="fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden" aria-label="Navigazione principale">
         <div className="mx-auto flex max-w-lg items-stretch justify-between rounded-[1.75rem] border border-line/80 bg-white/92 p-1.5 shadow-float backdrop-blur-xl">
-          {items.map((item) => (
+          {bottomItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

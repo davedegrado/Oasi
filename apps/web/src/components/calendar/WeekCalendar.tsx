@@ -14,15 +14,31 @@ type View = 'mese' | 'settimana' | 'giorno'
 interface WeekCalendarProps {
   lessons: Lesson[]
   onLessonClick?: (lesson: Lesson) => void
+  /** Se definito, solo queste lezioni sono cliccabili */
+  canClick?: (lesson: Lesson) => boolean
   renderAside?: (lesson: Lesson) => React.ReactNode
+  renderFooter?: (lesson: Lesson) => React.ReactNode
+  renderBadges?: (lesson: Lesson) => React.ReactNode
+  initialView?: View
 }
 
 /** Calendario con vista settimanale e giornaliera */
-export function WeekCalendar({ lessons, onLessonClick, renderAside }: WeekCalendarProps) {
+export function WeekCalendar({ lessons, onLessonClick, canClick, renderAside, renderFooter, renderBadges, initialView = 'settimana' }: WeekCalendarProps) {
   const db = useDatabase()
   const today = todayISO()
   const [selected, setSelected] = useState(today)
-  const [view, setView] = useState<View>('settimana')
+  const [view, setView] = useState<View>(initialView)
+  const clickable = (l: Lesson) => !!onLessonClick && (!canClick || canClick(l))
+  const card = (l: Lesson) => (
+    <LessonCard
+      key={l.id}
+      lesson={l}
+      onClick={clickable(l) ? () => onLessonClick!(l) : undefined}
+      aside={renderAside?.(l)}
+      footer={renderFooter?.(l)}
+      badges={renderBadges?.(l)}
+    />
+  )
   const days = weekDays(selected)
 
   const byDay = useMemo(() => {
@@ -55,7 +71,7 @@ export function WeekCalendar({ lessons, onLessonClick, renderAside }: WeekCalend
             <ChevronLeft />
           </Button>
           <div className="min-w-32 px-1 text-center">
-            <p className="font-display font-bold text-ink capitalize">{view === 'giorno' ? formatDate(selected, { weekday: true }) : view === 'mese' ? monthLabel(selected) : weekLabel}</p>
+            <p className="font-display font-bold text-ink first-letter:uppercase">{view === 'giorno' ? formatDate(selected, { weekday: true }) : view === 'mese' ? monthLabel(selected) : weekLabel}</p>
           </div>
           <Button size="icon" variant="outline" aria-label="Periodo successivo" onClick={() => move(1)}>
             <ChevronRight />
@@ -160,7 +176,7 @@ export function WeekCalendar({ lessons, onLessonClick, renderAside }: WeekCalend
               <p className="mt-1 text-sm text-ink-muted">Giorno di riposo: stretching e idratazione 🌸</p>
             </div>
           ) : (
-            dayLessons.map((l) => <LessonCard key={l.id} lesson={l} onClick={onLessonClick ? () => onLessonClick(l) : undefined} aside={renderAside?.(l)} />)
+            dayLessons.map(card)
           )}
         </div>
       ) : (
@@ -172,14 +188,12 @@ export function WeekCalendar({ lessons, onLessonClick, renderAside }: WeekCalend
               .filter((d) => byDay.get(d)?.length)
               .map((d) => (
                 <div key={d}>
-                  <p className={cn('mb-2 text-sm font-bold capitalize', d === today ? 'text-rosa-intenso' : 'text-ink-soft')}>
+                  <p className={cn('mb-2 text-sm font-bold first-letter:uppercase', d === today ? 'text-rosa-intenso' : 'text-ink-soft')}>
                     {d === today ? 'Oggi · ' : ''}
                     {formatDate(d, { weekday: true })}
                   </p>
                   <div className="space-y-2.5">
-                    {byDay.get(d)!.map((l) => (
-                      <LessonCard key={l.id} lesson={l} onClick={onLessonClick ? () => onLessonClick(l) : undefined} aside={renderAside?.(l)} />
-                    ))}
+                    {byDay.get(d)!.map(card)}
                   </div>
                 </div>
               ))}
@@ -196,12 +210,11 @@ export function WeekCalendar({ lessons, onLessonClick, renderAside }: WeekCalend
                     const cls = findClass(db, l.classId)
                     if (!cls) return null
                     const cancelled = l.status === 'annullata'
-                    const Comp = onLessonClick ? 'button' : 'div'
                     return (
-                      <Comp
+                      <button
                         key={l.id}
-                        type={onLessonClick ? 'button' : undefined}
-                        onClick={onLessonClick ? () => onLessonClick(l) : () => { setSelected(d); setView('giorno') }}
+                        type="button"
+                        onClick={clickable(l) ? () => onLessonClick!(l) : () => { setSelected(d); setView('giorno') }}
                         className={cn(
                           'block w-full cursor-pointer rounded-2xl border-l-4 bg-white p-2.5 text-left shadow-soft transition hover:shadow-float',
                           cls.discipline === 'cerchio' ? 'border-cerchio' : 'border-tessuti',
@@ -218,7 +231,8 @@ export function WeekCalendar({ lessons, onLessonClick, renderAside }: WeekCalend
                             {cancelled ? 'Annullata' : 'Variata'}
                           </span>
                         )}
-                      </Comp>
+                        {renderBadges?.(l)}
+                      </button>
                     )
                   })}
                 </div>

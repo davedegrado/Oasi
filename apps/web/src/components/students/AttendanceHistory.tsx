@@ -55,7 +55,7 @@ export function AttendanceHistory({ studentId, title = 'Storico presenze' }: { s
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-ink">{e.cls?.name}</p>
-                <p className="text-xs text-ink-muted capitalize">
+                <p className="text-xs text-ink-muted first-letter:uppercase">
                   {formatDate(e.lesson.date, { weekday: true })} · {e.lesson.startTime}
                 </p>
               </div>

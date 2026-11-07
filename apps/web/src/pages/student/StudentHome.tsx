@@ -1,16 +1,17 @@
 import { Link } from 'react-router-dom'
 import { ArrowRight, BellRing, CalendarClock, ChevronRight, Clock, MapPin, Megaphone, Sparkles } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
 import { HoopArc, SilkLines } from '@/components/common/Decor'
 import { SectionTitle } from '@/components/common/PageHeader'
 import { Ring } from '@/components/common/Charts'
 import { DisciplineIcon, StatusBadge } from '@/components/common/badges'
 import { EventCard } from '@/components/events/EventCard'
-import { useDatabase, useRepository } from '@/hooks/useDatabase'
+import { EventSignupButton } from '@/components/events/EventSignupButton'
+import { DeclarationToggle } from '@/components/lessons/DeclarationToggle'
+import { buttonVariants } from '@/components/ui/button-variants'
+import { useDatabase } from '@/hooks/useDatabase'
 import { useCurrentStudent } from '@/hooks/useDemo'
-import { useToast } from '@/hooks/useToast'
 import { findClass, findTeacher, lessonsForStudent, nextLesson, progressSummary, recentProgress, upcomingEvents } from '@/services/selectors'
 import { formatDate, greeting, relativeDayLabel, todayISO } from '@/lib/dates'
 import { DISCIPLINE_LABEL } from '@/lib/labels'
@@ -18,8 +19,6 @@ import { cn, fullName } from '@/lib/utils'
 
 export function StudentHome() {
   const db = useDatabase()
-  const repo = useRepository()
-  const { toast } = useToast()
   const student = useCurrentStudent()
   const lessons = lessonsForStudent(db, student.id)
   const next = nextLesson(lessons)
@@ -35,7 +34,7 @@ export function StudentHome() {
   return (
     <div className="space-y-8">
       <section className="animate-fade-up">
-        <p className="text-sm font-medium text-ink-muted capitalize">{formatDate(todayISO(), { weekday: true })}</p>
+        <p className="text-sm font-medium text-ink-muted first-letter:uppercase">{formatDate(todayISO(), { weekday: true })}</p>
         <h1 className="mt-1 text-[30px] leading-tight font-extrabold sm:text-4xl">
           {greeting()}, <span className="text-rosa-intenso">{student.firstName}</span>
         </h1>
@@ -43,6 +42,7 @@ export function StudentHome() {
       </section>
 
       <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
+        <div className="space-y-3">
         {/* Prossima lezione */}
         {next && nextCls ? (
           <Link
@@ -67,7 +67,7 @@ export function StudentHome() {
                 <span className="inline-flex items-center gap-1.5">
                   <MapPin className="size-4" /> {nextCls.room}
                 </span>
-                <span className="capitalize">{formatDate(next.date, { weekday: true })}</span>
+                <span className="first-letter:uppercase">{formatDate(next.date, { weekday: true })}</span>
               </div>
               {nextTeacher && (
                 <div className="mt-5 flex items-center justify-between gap-3 rounded-3xl bg-white/15 p-3 backdrop-blur">
@@ -93,6 +93,14 @@ export function StudentHome() {
             <CardContent>Nessuna lezione in programma.</CardContent>
           </Card>
         )}
+          {next && (
+            <Card>
+              <CardContent className="p-4">
+                <DeclarationToggle lesson={next} studentId={student.id} />
+              </CardContent>
+            </Card>
+          )}
+        </div>
 
         {/* Progresso sintetico */}
         <Card className="animate-fade-up [animation-delay:80ms]">
@@ -148,7 +156,7 @@ export function StudentHome() {
                     {cls?.name}: {l.status === 'annullata' ? 'lezione annullata' : `nuovo orario ${l.startTime}–${l.endTime}`}
                   </p>
                   <p className="mt-0.5 text-sm text-ink-soft">
-                    <span className="capitalize">{formatDate(l.date, { weekday: true })}</span>. {l.note}
+                    <span className="first-letter:uppercase">{formatDate(l.date, { weekday: true })}</span>. {l.note}
                   </p>
                 </div>
               </div>
@@ -168,6 +176,18 @@ export function StudentHome() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* Accesso rapido */}
+      <section className="grid grid-cols-2 gap-3">
+        <Link to="/allieva/classi" className="rounded-3xl border border-line/70 bg-white p-4 shadow-soft transition hover:border-rosa">
+          <p className="font-display font-bold">Corsi</p>
+          <p className="text-xs text-ink-muted">Iscriviti a una nuova classe</p>
+        </Link>
+        <Link to="/allieva/calendario" className="rounded-3xl border border-line/70 bg-white p-4 shadow-soft transition hover:border-rosa">
+          <p className="font-display font-bold">Recuperi</p>
+          <p className="text-xs text-ink-muted">Scegli una lezione in “Tutta la palestra”</p>
+        </Link>
       </section>
 
       {/* Archivio figure */}
@@ -192,30 +212,17 @@ export function StudentHome() {
 
       {/* Eventi */}
       <section>
-        <SectionTitle title="Eventi in arrivo" />
+        <SectionTitle
+          title="Eventi in arrivo"
+          action={
+            <Link to="/allieva/eventi" className={buttonVariants({ variant: 'ghost', size: 'sm' })}>
+              Tutti gli eventi
+            </Link>
+          }
+        />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {events.map((e) => {
-            const joined = e.participantIds.includes(student.id)
-            const full = !joined && e.participantIds.length >= e.capacity
-            return (
-              <EventCard
-                key={e.id}
-                event={e}
-                footer={
-                  <Button
-                    size="sm"
-                    variant={joined ? 'soft' : 'primary'}
-                    disabled={full}
-                    onClick={async () => {
-                      await repo.toggleEventParticipation(e.id, student.id)
-                      toast(joined ? 'Adesione annullata' : 'Adesione confermata!')
-                    }}
-                  >
-                    {joined ? '✓ Partecipo' : full ? 'Posti esauriti' : 'Partecipo'}
-                  </Button>
-                }
-              />
-            )
+            return <EventCard key={e.id} event={e} footer={<EventSignupButton event={e} studentId={student.id} />} />
           })}
         </div>
       </section>

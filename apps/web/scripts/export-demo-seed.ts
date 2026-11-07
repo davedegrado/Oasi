@@ -40,7 +40,7 @@ const STATUS_MAP: Record<LearningStatus, string> = {
 }
 
 const MEMBERSHIP_MAP = { attiva: 'active', in_scadenza: 'expiring', sospesa: 'suspended', prova: 'trial' } as const
-const EVENT_TYPE_MAP = { spettacolo: 'show', workshop: 'workshop', stage: 'stage', sociale: 'social' } as const
+const EVENT_TYPE_MAP = { spettacolo: 'show', workshop: 'workshop', stage: 'stage', sociale: 'social', gara: 'competition', saggio: 'recital' } as const
 
 function oasiSeed(db: OasiDatabase): string {
   const T = uuid('tenant:oasi-metropolitana')
@@ -132,7 +132,7 @@ function oasiSeed(db: OasiDatabase): string {
   // Eventi, adesioni, comunicazioni
   const eventId = (id: string) => uuid(`oasi:event:${id}`)
   push(`insert into app.events (tenant_id, id, type, title, description, date, start_time, end_time, location, image_path, capacity, signup_deadline, is_demo) values\n  ${db.events
-    .map((e) => `(${q(T)}, ${q(eventId(e.id))}, ${q(EVENT_TYPE_MAP[e.type])}, ${q(e.title)}, ${q(e.description)}, ${rel(e.date)}, ${q(e.startTime)}, ${q(e.endTime)}, ${q(e.location)}, ${q(e.image)}, ${e.capacity}, ${rel(e.date)} - 2, true)`)
+    .map((e) => `(${q(T)}, ${q(eventId(e.id))}, ${q(EVENT_TYPE_MAP[e.type])}, ${q(e.title)}, ${q(e.description)}, ${rel(e.date)}, ${q(e.startTime)}, ${q(e.endTime)}, ${q(e.location)}, ${q(e.image)}, ${e.capacity}, ${e.signupDeadline ? rel(e.signupDeadline) : 'null'}, true)`)
     .join(',\n  ')};`)
   push(`insert into app.event_signups (tenant_id, event_id, member_id) values\n  ${db.events
     .flatMap((e) => e.participantIds.map((sid) => `(${q(T)}, ${q(eventId(e.id))}, ${q(memberId(sid))})`))

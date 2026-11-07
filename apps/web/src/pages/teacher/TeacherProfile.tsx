@@ -62,7 +62,7 @@ export function TeacherProfile() {
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="font-display text-lg font-bold">{c.name}</p>
-                      <p className="mt-0.5 flex items-center gap-1.5 text-sm text-ink-muted capitalize">
+                      <p className="mt-0.5 flex items-center gap-1.5 text-sm text-ink-muted first-letter:uppercase">
                         <Clock className="size-3.5" /> {weekdayName(c.weekday)} {c.startTime}–{c.endTime}
                       </p>
                       <p className="flex items-center gap-1.5 text-sm text-ink-muted">

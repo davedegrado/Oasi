@@ -75,7 +75,10 @@ export interface Lesson {
   note?: string
   originalStartTime?: string
   originalEndTime?: string
+  /** Presenza effettiva registrata dall'insegnante */
   attendance: Record<string, AttendanceMark>
+  /** Presenza o assenza annunciata in anticipo dall'allieva */
+  declarations?: Record<string, AttendanceMark>
 }
 
 export interface FigureStep {
@@ -111,7 +114,7 @@ export type ProgressMap = Record<string, Record<string, FigureProgress>>
 export interface OasiEvent {
   id: string
   title: string
-  type: 'spettacolo' | 'workshop' | 'stage' | 'sociale'
+  type: EventType
   date: string
   startTime: string
   endTime: string
@@ -120,6 +123,37 @@ export interface OasiEvent {
   image: string
   capacity: number
   participantIds: string[]
+  /** Ultimo giorno utile per aderire (YYYY-MM-DD) */
+  signupDeadline?: string
+}
+
+export type EventType = 'workshop' | 'stage' | 'gara' | 'saggio' | 'spettacolo' | 'sociale'
+
+export type RequestStatus = 'in_attesa' | 'approvata' | 'rifiutata'
+
+/** Richiesta di iscrizione a una classe (decide l'insegnante della classe o l'amministrazione) */
+export interface EnrollmentRequest {
+  id: string
+  classId: string
+  studentId: string
+  note: string
+  status: RequestStatus
+  createdAt: string
+  decidedAt?: string
+  decidedBy?: string
+}
+
+/** Richiesta di recupero su una lezione di un'altra classe */
+export interface MakeupRequest {
+  id: string
+  studentId: string
+  targetLessonId: string
+  missedLessonId?: string
+  note: string
+  status: RequestStatus
+  createdAt: string
+  decidedAt?: string
+  decidedBy?: string
 }
 
 export interface Announcement {
@@ -161,6 +195,8 @@ export interface OasiDatabase {
   progress: ProgressMap
   events: OasiEvent[]
   announcements: Announcement[]
+  enrollmentRequests: EnrollmentRequest[]
+  makeupRequests: MakeupRequest[]
 }
 
 export interface DemoPersona {

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowDown, ArrowLeft, ArrowUp, ImagePlus, Star, Trash2, Upload } from 'lucide-react'
+import { ArrowDown, ArrowUp, ImagePlus, Star, Trash2, Upload } from 'lucide-react'
+import { BackButton } from '@/components/common/BackButton'
 import type { Discipline, Figure, FigureStep, Level } from '@/types'
 import { PageHeader } from '@/components/common/PageHeader'
 import { ListEditor } from '@/components/common/ListEditor'
@@ -133,9 +134,7 @@ export function FigureEditorPage({ basePath }: { basePath: string }) {
 
   return (
     <div className="animate-fade-up">
-      <Link to={existing ? `${basePath}/${existing.id}` : basePath} className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-rosa-intenso">
-        <ArrowLeft className="size-4" /> {existing ? 'Torna alla figura' : 'Archivio figure'}
-      </Link>
+      <BackButton fallback={existing ? `${basePath}/${existing.id}` : basePath} />
       <PageHeader eyebrow={existing ? 'Modifica figura' : 'Nuova figura'} title={existing ? existing.name : 'Aggiungi una figura'} description="Le modifiche sono salvate solo su questo dispositivo (demo)." />
 
       {errors.length > 0 && (

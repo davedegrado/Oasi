@@ -30,6 +30,7 @@ function emptyEvent(): OasiEvent {
     image: photo('tessuti-05'),
     capacity: 15,
     participantIds: [],
+    signupDeadline: addDays(todayISO(), 10),
   }
 }
 
@@ -147,6 +148,7 @@ function EventDialog({ initial, isNew, onClose }: { initial: OasiEvent; isNew: b
   const save = async () => {
     if (!event.title.trim()) return setError('Inserisci un titolo')
     if (!event.date) return setError('Inserisci una data')
+    if (event.signupDeadline && event.signupDeadline > event.date) return setError('La scadenza delle adesioni deve precedere l’evento')
     await repo.saveEvent({ ...event, title: event.title.trim() })
     toast(isNew ? 'Evento creato: visibile alle allieve' : 'Evento aggiornato')
     onClose()
@@ -219,9 +221,14 @@ function EventDialog({ initial, isNew, onClose }: { initial: OasiEvent; isNew: b
         <Field label="Luogo" htmlFor="e-loc">
           <Input id="e-loc" value={event.location} onChange={(e) => set('location', e.target.value)} />
         </Field>
-        <Field label="Posti disponibili" htmlFor="e-cap">
-          <Input id="e-cap" type="number" min={1} value={event.capacity} onChange={(e) => set('capacity', Math.max(1, Number(e.target.value) || 1))} />
-        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Posti disponibili" htmlFor="e-cap">
+            <Input id="e-cap" type="number" min={1} value={event.capacity} onChange={(e) => set('capacity', Math.max(1, Number(e.target.value) || 1))} />
+          </Field>
+          <Field label="Scadenza adesioni" htmlFor="e-deadline">
+            <Input id="e-deadline" type="date" value={event.signupDeadline ?? ''} max={event.date} onChange={(e) => set('signupDeadline', e.target.value || undefined)} />
+          </Field>
+        </div>
         <Field label="Descrizione" htmlFor="e-desc">
           <Textarea id="e-desc" rows={3} value={event.description} onChange={(e) => set('description', e.target.value)} />
         </Field>

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import type { Student } from '@/types'
 import { Avatar } from '@/components/ui/avatar'
 import { DisciplineBadge, LevelBadge, MembershipBadge } from '@/components/common/badges'
@@ -8,7 +9,7 @@ import { findClass, findTeacher } from '@/services/selectors'
 import { ageFrom, formatDate } from '@/lib/dates'
 import { fullName } from '@/lib/utils'
 
-export function StudentHeader({ student, actions }: { student: Student; actions?: ReactNode }) {
+export function StudentHeader({ student, actions, classesLink }: { student: Student; actions?: ReactNode; classesLink?: string }) {
   const db = useDatabase()
   const classes = student.classIds.map((id) => findClass(db, id)).filter((c) => !!c)
   const teachers = [...new Set(classes.map((c) => c.teacherId))].map((id) => findTeacher(db, id)).filter((t) => !!t)
@@ -43,6 +44,11 @@ export function StudentHeader({ student, actions }: { student: Student; actions?
             ))}
             {classes.length === 0 && <li className="text-sm text-ink-muted">Nessuna classe assegnata</li>}
           </ul>
+          {classesLink && (
+            <Link to={classesLink} className="mt-3 inline-block text-sm font-semibold text-rosa-intenso">
+              Iscriviti a un altro corso →
+            </Link>
+          )}
         </div>
         <div className="rounded-3xl bg-cipria-50 p-4">
           <p className="text-xs font-semibold tracking-wider text-ink-muted uppercase">Insegnanti</p>

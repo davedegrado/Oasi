@@ -1,5 +1,5 @@
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { BackButton } from '@/components/common/BackButton'
 import { EmptyState } from '@/components/common/EmptyState'
 import { StudentHeader } from '@/components/students/StudentHeader'
 import { FiguresByStatus, ProgressOverview } from '@/components/students/ProgressOverview'
@@ -18,9 +18,7 @@ export function StudentJourneyPage({ backTo, backLabel, figureBase, showAdmin }:
 
   return (
     <div className="animate-fade-up space-y-5">
-      <Link to={backTo} className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-rosa-intenso">
-        <ArrowLeft className="size-4" /> {backLabel}
-      </Link>
+      <BackButton fallback={backTo} className="mb-0" />
       <StudentHeader student={student} />
       <ProgressOverview studentId={student.id} />
       <div className="grid gap-5 md:grid-cols-2">

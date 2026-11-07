@@ -10,6 +10,7 @@ import { Segmented } from '@/components/ui/segmented'
 import { ProgressBar } from '@/components/ui/progress'
 import { Avatar, AvatarStack } from '@/components/ui/avatar'
 import { DisciplineBadge, LevelBadge } from '@/components/common/badges'
+import { RequestsPanel } from '@/components/requests/RequestsPanel'
 import { useDatabase, useRepository } from '@/hooks/useDatabase'
 import { useToast } from '@/hooks/useToast'
 import { classOccupancy, findStudent, findTeacher } from '@/services/selectors'
@@ -55,6 +56,9 @@ export function AdminClasses() {
           </Button>
         }
       />
+      <div className="mb-6">
+        <RequestsPanel teacherId={null} decidedBy="admin" title="Richieste di iscrizione e recupero" hideWhenEmpty />
+      </div>
       <Segmented
         className="mb-5"
         value={filter}
@@ -85,7 +89,7 @@ export function AdminClasses() {
                 </div>
                 <h2 className="mt-2 font-display text-xl font-bold">{c.name}</h2>
                 <div className="mt-1.5 space-y-1 text-sm text-ink-muted">
-                  <p className="flex items-center gap-1.5 capitalize">
+                  <p className="flex items-center gap-1.5 first-letter:uppercase">
                     <Clock className="size-3.5" /> {weekdayName(c.weekday)} · {c.startTime}–{c.endTime}
                   </p>
                   <p className="flex items-center gap-1.5">

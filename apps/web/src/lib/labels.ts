@@ -47,8 +47,16 @@ export const ROLE_LABEL: Record<Role, string> = {
 }
 
 export const EVENT_TYPE_LABEL = {
-  spettacolo: 'Spettacolo',
   workshop: 'Workshop',
   stage: 'Stage',
+  gara: 'Gara',
+  saggio: 'Saggio',
+  spettacolo: 'Spettacolo',
   sociale: 'Evento sociale',
+} as const
+
+export const REQUEST_STATUS_LABEL = {
+  in_attesa: 'In attesa',
+  approvata: 'Approvata',
+  rifiutata: 'Rifiutata',
 } as const

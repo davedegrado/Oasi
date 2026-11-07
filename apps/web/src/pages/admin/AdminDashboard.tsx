@@ -8,6 +8,7 @@ import { Donut, Legend, MiniBars } from '@/components/common/Charts'
 import { MembershipBadge } from '@/components/common/badges'
 import { STATUS_COLOR } from '@/lib/statusStyle'
 import { EventCard } from '@/components/events/EventCard'
+import { RequestsPanel } from '@/components/requests/RequestsPanel'
 import { useDatabase } from '@/hooks/useDatabase'
 import { useTenant } from '@/hooks/useTenant'
 import { classOccupancy, figureStatus, recentAttendance, sortLessons, upcomingEvents } from '@/services/selectors'
@@ -41,7 +42,7 @@ export function AdminDashboard() {
   return (
     <div className="space-y-8">
       <section className="animate-fade-up">
-        <p className="text-sm font-medium text-ink-muted capitalize">{formatDate(todayISO(), { weekday: true })}</p>
+        <p className="text-sm font-medium text-ink-muted first-letter:uppercase">{formatDate(todayISO(), { weekday: true })}</p>
         <h1 className="mt-1 text-[30px] leading-tight font-extrabold sm:text-4xl">
           Panoramica <span className="text-rosa-intenso">{config.shortName}</span>
         </h1>
@@ -54,6 +55,8 @@ export function AdminDashboard() {
         <StatCard label="Corsi attivi" value={db.classes.length} hint={`${db.classes.reduce((s, c) => s + classOccupancy(c).free, 0)} posti liberi`} icon={<GraduationCap />} tone="ok" />
         <StatCard label="Presenze recenti" value={`${percent(recentPresent, recentTotal)}%`} hint="ultime 8 lezioni" icon={<Percent />} tone="warn" />
       </div>
+
+      <RequestsPanel teacherId={null} decidedBy="admin" hideWhenEmpty />
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Card>

@@ -16,7 +16,7 @@ import { demoAnnouncementSeeds, demoAssociation, demoEventSeeds } from './events
 import { demoFigureSeeds, photo } from './figures'
 import { demoStudentSeeds, demoTeachers } from './people'
 
-export const DATABASE_VERSION = 4
+export const DATABASE_VERSION = 5
 
 /** Hash deterministico: la demo genera sempre gli stessi dati per lo stesso giorno */
 function hash(text: string): number {
@@ -103,8 +103,19 @@ function buildLessons(classes: ClassGroup[], today: string): Lesson[] {
           attendance[sid] = hash(`${sid}-${date}`) % 100 < 84 ? 'presente' : 'assente'
         }
       }
+      // Alcune allieve hanno già annunciato presenza o assenza per le prossime lezioni
+      const declarations: Record<string, AttendanceMark> = {}
+      if (!ended && override?.status !== 'annullata' && week <= 1) {
+        for (const sid of cls.studentIds) {
+          if (sid === 'stu-giulia') continue
+          const roll = hash(`decl-${sid}-${date}`) % 100
+          if (roll < 55) declarations[sid] = 'presente'
+          else if (roll < 68) declarations[sid] = 'assente'
+        }
+      }
       lessons.push({
         id: `les-${cls.id.replace('cls-', '')}-${date}`,
+        declarations,
         classId: cls.id,
         date,
         startTime,
@@ -185,20 +196,43 @@ function buildProgress(students: Student[], figures: Figure[], classes: ClassGro
   return progress
 }
 
+/** Richieste dimostrative in attesa, per mostrare il flusso di approvazione */
+function buildRequests(classes: ClassGroup[], lessons: Lesson[], today: string): Pick<OasiDatabase, 'enrollmentRequests' | 'makeupRequests'> {
+  const future = (classId: string) =>
+    lessons.filter((l) => l.classId === classId && l.date > today && l.status !== 'annullata').sort((a, b) => a.date.localeCompare(b.date))
+  const sofiaTarget = future('cls-cerchio-int')[0]
+  const missed = lessons.filter((l) => l.classId === 'cls-cerchio-base' && l.date < today && l.status === 'annullata')[0]
+  return {
+    enrollmentRequests: [
+      { id: 'enr-noemi-int', classId: 'cls-cerchio-int', studentId: 'stu-noemi', note: 'Chiara mi ha consigliato di provare il livello intermedio.', status: 'in_attesa', createdAt: addDays(today, -1) },
+      { id: 'enr-anna-tint', classId: 'cls-tessuti-int', studentId: 'stu-anna', note: 'Vorrei aggiungere una seconda lezione a settimana.', status: 'in_attesa', createdAt: addDays(today, -2) },
+    ],
+    makeupRequests: sofiaTarget && classes.length
+      ? [{ id: 'mku-sofia', studentId: 'stu-sofia', targetLessonId: sofiaTarget.id, missedLessonId: missed?.id, note: 'Recupero della lezione persa per la chiusura della sede.', status: 'in_attesa', createdAt: addDays(today, -1) }]
+      : [],
+  }
+}
+
 export function createSeedDatabase(today: string = todayISO()): OasiDatabase {
   const students = buildStudents(today)
   const classes = buildClasses(students)
   const figures = buildFigures(today)
+  const lessons = buildLessons(classes, today)
   return {
     version: DATABASE_VERSION,
     association: structuredClone(demoAssociation),
     teachers: structuredClone(demoTeachers),
     students,
     classes,
-    lessons: buildLessons(classes, today),
+    lessons,
     figures,
     progress: buildProgress(students, figures, classes, today),
-    events: demoEventSeeds.map(({ inDays, ...e }) => ({ ...e, date: addDays(today, inDays) })),
+    events: demoEventSeeds.map(({ inDays, deadlineInDays, ...e }) => ({
+      ...e,
+      date: addDays(today, inDays),
+      signupDeadline: deadlineInDays !== undefined ? addDays(today, deadlineInDays) : undefined,
+    })),
     announcements: demoAnnouncementSeeds.map(({ daysAgo, ...a }) => ({ ...a, date: addDays(today, -daysAgo) })),
+    ...buildRequests(classes, lessons, today),
   }
 }

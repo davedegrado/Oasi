@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react'
-import { Clock, MapPin, Users } from 'lucide-react'
+import { CalendarX2, Clock, MapPin, Users } from 'lucide-react'
 import type { OasiEvent } from '@/types'
 import { Badge } from '@/components/ui/badge'
 import { EVENT_TYPE_LABEL } from '@/lib/labels'
-import { dayNumber, monthShort } from '@/lib/dates'
+import { dayNumber, formatDate, monthShort, todayISO } from '@/lib/dates'
 import { cn } from '@/lib/utils'
 
 interface EventCardProps {
@@ -63,6 +63,12 @@ export function EventCard({ event, footer, variant = 'vertical', className }: Ev
           <span className="flex items-center gap-2">
             <Users className="size-4 text-rosa" /> {event.participantIds.length} adesioni · {spots > 0 ? `${spots} posti liberi` : 'completo'}
           </span>
+          {event.signupDeadline && (
+            <span className={cn('flex items-center gap-2', event.signupDeadline < todayISO() ? 'text-danger' : 'text-warn')}>
+              <CalendarX2 className="size-4" />
+              {event.signupDeadline < todayISO() ? 'Iscrizioni chiuse' : `Iscrizioni entro il ${formatDate(event.signupDeadline)}`}
+            </span>
+          )}
         </div>
         <p className="mt-3 line-clamp-3 text-sm leading-relaxed text-ink-soft">{event.description}</p>
         {footer && <div className="mt-4 flex flex-wrap gap-2 pt-1">{footer}</div>}

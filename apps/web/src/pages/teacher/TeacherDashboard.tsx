@@ -7,6 +7,7 @@ import { StatCard } from '@/components/common/StatCard'
 import { SectionTitle } from '@/components/common/PageHeader'
 import { DisciplineBadge, LevelBadge } from '@/components/common/badges'
 import { LessonCard } from '@/components/lessons/LessonCard'
+import { RequestsPanel } from '@/components/requests/RequestsPanel'
 import { useDatabase } from '@/hooks/useDatabase'
 import { useCurrentTeacher } from '@/hooks/useDemo'
 import {
@@ -40,7 +41,7 @@ export function TeacherDashboard() {
   return (
     <div className="space-y-8">
       <section className="animate-fade-up">
-        <p className="text-sm font-medium text-ink-muted capitalize">{formatDate(todayISO(), { weekday: true })}</p>
+        <p className="text-sm font-medium text-ink-muted first-letter:uppercase">{formatDate(todayISO(), { weekday: true })}</p>
         <h1 className="mt-1 text-[30px] leading-tight font-extrabold sm:text-4xl">
           {greeting()}, <span className="text-rosa-intenso">{teacher.firstName}</span>
         </h1>
@@ -53,6 +54,8 @@ export function TeacherDashboard() {
         <StatCard label="Presenze previste" value={expectedNext ? expectedAttendance(db, expectedNext) : 0} hint={expectedNext ? `prossima: ${relativeDayLabel(expectedNext.date).toLowerCase()}` : '—'} icon={<ClipboardCheck />} tone="ok" />
         <StatCard label="Media presenze" value={`${avgRate}%`} hint="ultime 5 settimane" icon={<Percent />} tone="warn" />
       </div>
+
+      <RequestsPanel teacherId={teacher.id} decidedBy={teacher.id} hideWhenEmpty />
 
       {toFill.length > 0 && (
         <Link to={`/insegnante/lezioni/${toFill[toFill.length - 1].id}`} className="flex items-center gap-3 rounded-3xl bg-warn-soft p-4 transition hover:brightness-[0.98]">

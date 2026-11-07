@@ -17,7 +17,7 @@ export function StudentProfile() {
 
   return (
     <div className="animate-fade-up space-y-5">
-      <StudentHeader student={student} />
+      <StudentHeader student={student} classesLink="/allieva/classi" />
       <div className="grid gap-5 lg:grid-cols-2">
         <div className="space-y-5">
           <GoalsCard key={student.id} student={student} editable />

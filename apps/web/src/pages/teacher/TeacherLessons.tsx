@@ -8,12 +8,13 @@ import { Badge } from '@/components/ui/badge'
 import { LessonCard } from '@/components/lessons/LessonCard'
 import { WeekCalendar } from '@/components/calendar/WeekCalendar'
 import { EmptyState } from '@/components/common/EmptyState'
+import { RequestsPanel } from '@/components/requests/RequestsPanel'
 import { useDatabase } from '@/hooks/useDatabase'
 import { useCurrentTeacher } from '@/hooks/useDemo'
-import { expectedAttendance, findClass, isLessonPast, lessonsForTeacher } from '@/services/selectors'
+import { expectedAttendance, findClass, isLessonPast, lessonsForTeacher, pendingRequests } from '@/services/selectors'
 import { compareDateTime } from '@/lib/dates'
 
-type Tab = 'prossime' | 'storico' | 'calendario'
+type Tab = 'prossime' | 'storico' | 'calendario' | 'richieste'
 
 export function TeacherLessons() {
   const db = useDatabase()
@@ -58,6 +59,7 @@ export function TeacherLessons() {
             { value: 'prossime', label: 'Prossime', count: upcoming.length },
             { value: 'storico', label: 'Storico', count: history.length },
             { value: 'calendario', label: 'Calendario' },
+            { value: 'richieste', label: 'Richieste', count: pendingRequests(db, teacher.id).total },
           ]}
         />
         <Segmented
@@ -68,7 +70,8 @@ export function TeacherLessons() {
         />
       </div>
 
-      {tab === 'calendario' && <WeekCalendar lessons={all} onLessonClick={open} />}
+      {tab === 'calendario' && <WeekCalendar lessons={all} onLessonClick={open} initialView="mese" />}
+      {tab === 'richieste' && <RequestsPanel teacherId={teacher.id} decidedBy={teacher.id} title="Iscrizioni e recuperi" />}
 
       {tab === 'prossime' && (
         <div className="space-y-3">
@@ -84,7 +87,7 @@ export function TeacherLessons() {
                   <div className="flex items-center gap-1.5">
                     <div className="text-center">
                       <p className="font-display text-lg font-extrabold">{expectedAttendance(db, l)}</p>
-                      <p className="text-[10px] text-ink-muted">iscritte</p>
+                      <p className="text-[10px] text-ink-muted">previste</p>
                     </div>
                     <ChevronRight className="size-4 text-ink-muted" />
                   </div>

@@ -1,7 +1,7 @@
 import { photo } from '@/lib/assets'
 import type { Announcement, AssociationInfo, OasiEvent } from '@/types'
 
-type EventSeed = Omit<OasiEvent, 'date' | 'participantIds'> & { inDays: number; participantIds: string[] }
+type EventSeed = Omit<OasiEvent, 'date' | 'participantIds' | 'signupDeadline'> & { inDays: number; deadlineInDays?: number; participantIds: string[] }
 
 export const demoEventSeeds: EventSeed[] = [
   {
@@ -9,6 +9,7 @@ export const demoEventSeeds: EventSeed[] = [
     title: 'Workshop “Linee e flessibilità”',
     type: 'workshop',
     inDays: 9,
+    deadlineInDays: 7,
     startTime: '15:00',
     endTime: '17:30',
     location: 'Sala Luna — Viale Verdi 186, Modena',
@@ -23,6 +24,7 @@ export const demoEventSeeds: EventSeed[] = [
     title: 'Spettacolo di Natale “Sospese tra le stelle”',
     type: 'spettacolo',
     inDays: 37,
+    deadlineInDays: 25,
     startTime: '17:00',
     endTime: '19:00',
     location: 'Polisportiva Modena Est',
@@ -37,6 +39,7 @@ export const demoEventSeeds: EventSeed[] = [
     title: 'Stage di tessuti con artista ospite',
     type: 'stage',
     inDays: 64,
+    deadlineInDays: 50,
     startTime: '10:00',
     endTime: '16:00',
     location: 'Sala Seta — Viale Verdi 186, Modena',
@@ -45,6 +48,36 @@ export const demoEventSeeds: EventSeed[] = [
     image: photo('tessuti-30'),
     capacity: 10,
     participantIds: ['stu-alice', 'stu-ilaria'],
+  },
+  {
+    id: 'evt-gara-uisp',
+    title: 'Gara regionale UISP di danza aerea',
+    type: 'gara',
+    inDays: 52,
+    deadlineInDays: 30,
+    startTime: '09:30',
+    endTime: '18:00',
+    location: 'PalaPanini — Modena',
+    description:
+      'Competizione non agonistica a livelli per cerchio e tessuti: esibizione individuale o in duo con valutazione formativa della giuria. Iscrizioni entro la scadenza per organizzare i turni di prova.',
+    image: photo('cerchio-19'),
+    capacity: 12,
+    participantIds: ['stu-alice', 'stu-elisa'],
+  },
+  {
+    id: 'evt-saggio-fine-anno',
+    title: 'Saggio di fine anno',
+    type: 'saggio',
+    inDays: 120,
+    deadlineInDays: 75,
+    startTime: '18:00',
+    endTime: '20:30',
+    location: 'Teatro della Polisportiva Modena Est',
+    description:
+      'Tutte le classi portano in scena una coreografia di gruppo preparata durante l’anno. Aperto a famiglie e amici.',
+    image: photo('tessuti-31'),
+    capacity: 60,
+    participantIds: ['stu-giulia', 'stu-martina', 'stu-sofia', 'stu-beatrice', 'stu-camilla'],
   },
   {
     id: 'evt-aperitivo',

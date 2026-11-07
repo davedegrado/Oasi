@@ -32,6 +32,17 @@ export interface OasiRepository {
   setAllAttendance(lessonId: string, mark: AttendanceMark): Promise<void>
   updateLesson(lessonId: string, patch: Partial<Pick<Lesson, 'status' | 'startTime' | 'endTime' | 'note'>>): Promise<void>
 
+  /** Presenza o assenza annunciata in anticipo dall'allieva (null = annulla) */
+  setDeclaration(lessonId: string, studentId: string, mark: AttendanceMark | null): Promise<void>
+
+  // Richieste di iscrizione e di recupero
+  requestEnrollment(classId: string, studentId: string, note: string): Promise<void>
+  requestMakeup(studentId: string, targetLessonId: string, missedLessonId: string | undefined, note: string): Promise<void>
+  /** Approva o rifiuta; decidedBy = id insegnante o 'admin'. Rifiuta se la classe è piena. */
+  decideEnrollment(requestId: string, approve: boolean, decidedBy: string): Promise<void>
+  decideMakeup(requestId: string, approve: boolean, decidedBy: string): Promise<void>
+  cancelRequest(kind: 'enrollment' | 'makeup', requestId: string): Promise<void>
+
   // Figure
   saveFigure(figure: Figure): Promise<void>
   deleteFigure(figureId: string): Promise<void>

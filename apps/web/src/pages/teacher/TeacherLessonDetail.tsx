@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Ban, Check, CheckCheck, Clock, MapPin, RotateCcw, Users, X } from 'lucide-react'
+import { BackButton } from '@/components/common/BackButton'
+import { Ban, Check, CheckCheck, Clock, MapPin, RotateCcw, Users, X } from 'lucide-react'
 import type { AttendanceMark, LessonStatus } from '@/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
 import { Dialog } from '@/components/ui/dialog'
 import { Field, Input, Textarea } from '@/components/ui/input'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -13,7 +15,7 @@ import { LessonStatusBadge } from '@/components/lessons/LessonCard'
 import { HoopArc } from '@/components/common/Decor'
 import { useDatabase, useRepository } from '@/hooks/useDatabase'
 import { useToast } from '@/hooks/useToast'
-import { findClass, findStudent, findTeacher, isLessonPast } from '@/services/selectors'
+import { declarationSummary, findClass, findTeacher, isLessonPast, lessonRoster } from '@/services/selectors'
 import { formatDate, relativeDayLabel } from '@/lib/dates'
 import { cn, fullName } from '@/lib/utils'
 
@@ -30,7 +32,9 @@ export function TeacherLessonDetail({ basePath = '/insegnante/lezioni', studentB
 
   if (!lesson || !cls) return <EmptyState title="Lezione non trovata" action={<Link to={basePath}>Torna alle lezioni</Link>} />
 
-  const students = cls.studentIds.map((sid) => findStudent(db, sid)).filter((s) => !!s)
+  const roster = lessonRoster(db, lesson)
+  const students = roster.map((e) => e.student)
+  const decl = declarationSummary(db, lesson)
   const marks = students.map((s) => lesson.attendance[s.id])
   const present = marks.filter((m) => m === 'presente').length
   const absent = marks.filter((m) => m === 'assente').length
@@ -57,9 +61,7 @@ export function TeacherLessonDetail({ basePath = '/insegnante/lezioni', studentB
 
   return (
     <div className="animate-fade-up space-y-5">
-      <Link to={basePath} className="inline-flex items-center gap-1.5 text-sm font-semibold text-ink-soft hover:text-rosa-intenso">
-        <ArrowLeft className="size-4" /> Lezioni
-      </Link>
+      <BackButton fallback={basePath} className="mb-0" />
 
       <div className="relative overflow-hidden rounded-4xl bg-white p-5 shadow-soft sm:p-7">
         <HoopArc className="absolute -top-14 -right-14 size-52 text-rosa/30" />
@@ -70,7 +72,7 @@ export function TeacherLessonDetail({ basePath = '/insegnante/lezioni', studentB
             <LessonStatusBadge lesson={lesson} />
           </div>
           <h1 className="mt-3 text-3xl font-extrabold">{cls.name}</h1>
-          <p className="mt-1 font-semibold text-rosa-intenso capitalize">
+          <p className="mt-1 font-semibold text-rosa-intenso first-letter:uppercase">
             {relativeDayLabel(lesson.date) !== formatDate(lesson.date) ? `${relativeDayLabel(lesson.date)} · ` : ''}
             {formatDate(lesson.date, { weekday: true, year: true })}
           </p>
@@ -141,9 +143,23 @@ export function TeacherLessonDetail({ basePath = '/insegnante/lezioni', studentB
                 <CheckCheck /> Tutte presenti
               </Button>
             </div>
-            {!past && <p className="mb-3 rounded-2xl bg-cipria-50 p-3 text-xs text-ink-soft">Lezione non ancora svolta: puoi comunque pre-compilare il registro (es. assenze già comunicate).</p>}
+            <div className="mb-4 grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-2xl bg-ok-soft p-3">
+                <p className="font-display text-2xl font-extrabold text-ok">{decl.yes}</p>
+                <p className="text-[11px] font-semibold text-ok">ci saranno</p>
+              </div>
+              <div className="rounded-2xl bg-danger-soft p-3">
+                <p className="font-display text-2xl font-extrabold text-danger">{decl.no}</p>
+                <p className="text-[11px] font-semibold text-danger">non ci saranno</p>
+              </div>
+              <div className="rounded-2xl bg-cipria-100 p-3">
+                <p className="font-display text-2xl font-extrabold text-ink-soft">{decl.unknown}</p>
+                <p className="text-[11px] font-semibold text-ink-muted">senza risposta</p>
+              </div>
+            </div>
+            <p className="mb-3 text-xs text-ink-muted">In alto le risposte date dalle allieve nell’app; i pulsanti a destra registrano la presenza effettiva.</p>
             <ul className="divide-y divide-line/70">
-              {students.map((s) => {
+              {roster.map(({ student: s, isMakeup, declared }) => {
                 const m = lesson.attendance[s.id]
                 return (
                   <li key={s.id} className="flex items-center gap-3 py-3">
@@ -151,8 +167,10 @@ export function TeacherLessonDetail({ basePath = '/insegnante/lezioni', studentB
                       <Avatar person={s} size="md" />
                       <div className="min-w-0">
                         <p className="truncate font-semibold text-ink">{fullName(s)}</p>
-                        <div className="mt-0.5 flex items-center gap-1.5">
-                          <LevelBadge level={s.level} />
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                          {isMakeup ? <Badge tone="rosa">Recupero</Badge> : <LevelBadge level={s.level} />}
+                          {declared === 'presente' && <Badge tone="ok">Ha detto: ci sarò</Badge>}
+                          {declared === 'assente' && <Badge tone="danger">Ha detto: non ci sarò</Badge>}
                           {s.membership.status !== 'attiva' && <MembershipBadge status={s.membership.status} />}
                         </div>
                       </div>

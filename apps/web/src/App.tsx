@@ -8,6 +8,7 @@ import { TenantProvider } from '@/tenant/TenantProvider'
 import { AppShell } from '@/components/layout/AppShell'
 import { RequireRole } from '@/components/layout/RequireRole'
 import { UpdatePrompt } from '@/components/layout/UpdatePrompt'
+import { NavigationTracker } from '@/components/common/NavigationTracker'
 import { WelcomePage } from '@/pages/auth/WelcomePage'
 import { StudentHome } from '@/pages/student/StudentHome'
 import { StudentCalendar } from '@/pages/student/StudentCalendar'
@@ -15,6 +16,8 @@ import { StudentFigures } from '@/pages/student/StudentFigures'
 import { StudentFigureDetail } from '@/pages/student/StudentFigureDetail'
 import { StudentProgress } from '@/pages/student/StudentProgress'
 import { StudentProfile } from '@/pages/student/StudentProfile'
+import { StudentClasses } from '@/pages/student/StudentClasses'
+import { StudentEvents } from '@/pages/student/StudentEvents'
 import { TeacherDashboard } from '@/pages/teacher/TeacherDashboard'
 import { TeacherLessons } from '@/pages/teacher/TeacherLessons'
 import { TeacherLessonDetail } from '@/pages/teacher/TeacherLessonDetail'
@@ -37,6 +40,7 @@ export default function App() {
       <DemoProvider>
         <ToastProvider>
           <UpdatePrompt />
+          <NavigationTracker />
           <Routes>
             <Route path="/" element={<WelcomePage />} />
 
@@ -54,6 +58,8 @@ export default function App() {
               <Route path="figure/:id" element={<StudentFigureDetail />} />
               <Route path="progressi" element={<StudentProgress />} />
               <Route path="profilo" element={<StudentProfile />} />
+              <Route path="classi" element={<StudentClasses />} />
+              <Route path="eventi" element={<StudentEvents />} />
             </Route>
 
             <Route
@@ -74,6 +80,7 @@ export default function App() {
               <Route path="figure/:id" element={<ManageFigureDetailPage basePath="/insegnante/figure" studentBase="/insegnante/allieve" />} />
               <Route path="figure/:id/modifica" element={<FigureEditorPage basePath="/insegnante/figure" />} />
               <Route path="profilo" element={<TeacherProfile />} />
+              <Route path="eventi" element={<AdminEvents />} />
             </Route>
 
             <Route

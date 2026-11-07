@@ -13,6 +13,10 @@ interface LessonCardProps {
   showDate?: boolean
   onClick?: () => void
   aside?: ReactNode
+  /** Contenuto sotto la scheda (es. "Ci sarò / Non ci sarò") */
+  footer?: ReactNode
+  /** Etichette extra accanto alla disciplina (es. "Recupero") */
+  badges?: ReactNode
   compact?: boolean
   className?: string
 }
@@ -33,7 +37,7 @@ export function LessonStatusBadge({ lesson }: { lesson: Lesson }) {
   return null
 }
 
-export function LessonCard({ lesson, showDate, onClick, aside, compact, className }: LessonCardProps) {
+export function LessonCard({ lesson, showDate, onClick, aside, footer, badges, compact, className }: LessonCardProps) {
   const db = useDatabase()
   const cls = findClass(db, lesson.classId)
   const teacher = findTeacher(db, cls?.teacherId)
@@ -46,19 +50,20 @@ export function LessonCard({ lesson, showDate, onClick, aside, compact, classNam
       type={onClick ? 'button' : undefined}
       onClick={onClick}
       className={cn(
-        'relative flex w-full items-stretch gap-3.5 overflow-hidden rounded-3xl border border-line/70 bg-white p-3.5 text-left shadow-soft transition sm:p-4',
+        'relative flex w-full flex-col overflow-hidden rounded-3xl border border-line/70 bg-white p-3.5 text-left shadow-soft transition sm:p-4',
         onClick && 'hover:border-rosa/70 hover:shadow-float active:scale-[0.995]',
         cancelled && 'bg-white/70',
         className,
       )}
     >
+      <div className="flex w-full items-stretch gap-3.5">
       <span className={cn('w-1.5 shrink-0 rounded-full', cls.discipline === 'cerchio' ? 'bg-cerchio' : 'bg-tessuti', cancelled && 'opacity-30')} />
       <div className="flex w-16 shrink-0 flex-col justify-center">
         <span className={cn('font-display text-lg leading-none font-extrabold text-ink', cancelled && 'text-ink-muted line-through')}>{lesson.startTime}</span>
         <span className="mt-1 text-xs text-ink-muted">{lesson.endTime}</span>
       </div>
       <div className="min-w-0 flex-1">
-        {showDate && <p className="mb-0.5 text-xs font-semibold text-rosa-intenso capitalize">{relativeDayLabel(lesson.date) === formatDate(lesson.date) ? formatDate(lesson.date, { weekday: true }) : `${relativeDayLabel(lesson.date)} · ${formatDate(lesson.date)}`}</p>}
+        {showDate && <p className="mb-0.5 text-xs font-semibold text-rosa-intenso first-letter:uppercase">{relativeDayLabel(lesson.date) === formatDate(lesson.date) ? formatDate(lesson.date, { weekday: true }) : `${relativeDayLabel(lesson.date)} · ${formatDate(lesson.date)}`}</p>}
         <p className={cn('truncate font-display font-bold text-ink', cancelled && 'text-ink-muted')}>{cls.name}</p>
         {!compact && (
           <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-muted">
@@ -71,6 +76,7 @@ export function LessonCard({ lesson, showDate, onClick, aside, compact, classNam
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <DisciplineBadge discipline={cls.discipline} />
           <LessonStatusBadge lesson={lesson} />
+          {badges}
         </div>
         {lesson.status === 'variata' && lesson.originalStartTime && (
           <p className="mt-2 flex items-start gap-1.5 text-xs text-warn">
@@ -84,6 +90,8 @@ export function LessonCard({ lesson, showDate, onClick, aside, compact, classNam
         {lesson.status === 'annullata' && lesson.note && <p className="mt-2 text-xs text-danger">{lesson.note}</p>}
       </div>
       {aside && <div className="flex shrink-0 items-center">{aside}</div>}
+      </div>
+      {footer && <div className="mt-3 border-t border-line/70 pt-3">{footer}</div>}
     </Comp>
   )
 }

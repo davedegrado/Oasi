@@ -21,6 +21,8 @@ export interface NavItem {
   end?: boolean
   /** Modulo richiesto: la voce sparisce se il modulo non è attivo per la palestra */
   module?: string
+  /** Solo nella sidebar desktop: su smartphone è nell'header */
+  sidebarOnly?: boolean
 }
 
 export const NAVIGATION: Record<Role, NavItem[]> = {
@@ -29,14 +31,16 @@ export const NAVIGATION: Record<Role, NavItem[]> = {
     { to: '/allieva/calendario', label: 'Calendario', icon: CalendarDays, module: 'calendar' },
     { to: '/allieva/figure', label: 'Figure', icon: Sparkles, module: 'figure_archive' },
     { to: '/allieva/progressi', label: 'Progressi', icon: BarChart3, module: 'progress' },
-    { to: '/allieva/profilo', label: 'Profilo', icon: UserRound },
+    { to: '/allieva/eventi', label: 'Eventi', icon: CalendarHeart, module: 'events' },
+    { to: '/allieva/profilo', label: 'Profilo', icon: UserRound, sidebarOnly: true },
   ],
   insegnante: [
     { to: '/insegnante', label: 'Dashboard', icon: LayoutDashboard, end: true },
     { to: '/insegnante/lezioni', label: 'Lezioni', icon: BookOpenCheck },
     { to: '/insegnante/allieve', label: 'Allieve', icon: Users },
     { to: '/insegnante/figure', label: 'Figure', icon: Sparkles, module: 'figure_archive' },
-    { to: '/insegnante/profilo', label: 'Profilo', icon: UserRound },
+    { to: '/insegnante/eventi', label: 'Eventi', icon: CalendarHeart, module: 'events' },
+    { to: '/insegnante/profilo', label: 'Profilo', icon: UserRound, sidebarOnly: true },
   ],
   admin: [
     { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },

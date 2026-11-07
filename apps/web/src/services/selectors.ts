@@ -42,9 +42,56 @@ export function lessonsForClasses(db: OasiDatabase, classIds: string[]): Lesson[
   return sortLessons(db.lessons.filter((l) => classIds.includes(l.classId)))
 }
 
+/** Lezioni dell'allieva: le sue classi + i recuperi approvati */
 export function lessonsForStudent(db: OasiDatabase, studentId: string): Lesson[] {
   const student = findStudent(db, studentId)
-  return student ? lessonsForClasses(db, student.classIds) : []
+  if (!student) return []
+  const makeupIds = new Set(approvedMakeupLessonIds(db, studentId))
+  return sortLessons(db.lessons.filter((l) => student.classIds.includes(l.classId) || makeupIds.has(l.id)))
+}
+
+export function approvedMakeupLessonIds(db: OasiDatabase, studentId: string): string[] {
+  return db.makeupRequests.filter((r) => r.studentId === studentId && r.status === 'approvata').map((r) => r.targetLessonId)
+}
+
+export function isMakeupFor(db: OasiDatabase, lessonId: string, studentId: string): boolean {
+  return db.makeupRequests.some((r) => r.targetLessonId === lessonId && r.studentId === studentId && r.status === 'approvata')
+}
+
+export interface RosterEntry {
+  student: Student
+  isMakeup: boolean
+  declared: AttendanceMark | null
+  actual: AttendanceMark | null
+}
+
+/** Elenco della lezione: iscritte alla classe + recuperi approvati */
+export function lessonRoster(db: OasiDatabase, lesson: Lesson): RosterEntry[] {
+  const cls = findClass(db, lesson.classId)
+  const regular = (cls?.studentIds ?? []).map((id) => ({ id, isMakeup: false }))
+  const makeups = db.makeupRequests
+    .filter((r) => r.targetLessonId === lesson.id && r.status === 'approvata')
+    .map((r) => ({ id: r.studentId, isMakeup: true }))
+  return [...regular, ...makeups]
+    .map(({ id, isMakeup }) => ({ student: findStudent(db, id), isMakeup }))
+    .filter((e): e is { student: Student; isMakeup: boolean } => !!e.student)
+    .map(({ student, isMakeup }) => ({
+      student,
+      isMakeup,
+      declared: lesson.declarations?.[student.id] ?? null,
+      actual: lesson.attendance[student.id] ?? null,
+    }))
+}
+
+/** Richieste in attesa che un insegnante (o l'amministrazione, teacherId null) deve gestire */
+export function pendingRequests(db: OasiDatabase, teacherId: string | null) {
+  const manages = (classId: string) => teacherId === null || findClass(db, classId)?.teacherId === teacherId
+  const enrollments = db.enrollmentRequests.filter((r) => r.status === 'in_attesa' && manages(r.classId))
+  const makeups = db.makeupRequests.filter((r) => {
+    const lesson = db.lessons.find((l) => l.id === r.targetLessonId)
+    return r.status === 'in_attesa' && !!lesson && manages(lesson.classId)
+  })
+  return { enrollments, makeups, total: enrollments.length + makeups.length }
 }
 
 export function lessonsForTeacher(db: OasiDatabase, teacherId: string): Lesson[] {
@@ -70,7 +117,7 @@ export function studentAttendance(db: OasiDatabase, studentId: string): Attendan
   return db.lessons
     .filter((l) => {
       const cls = findClass(db, l.classId)
-      return cls?.studentIds.includes(studentId) || l.attendance[studentId] !== undefined
+      return cls?.studentIds.includes(studentId) || l.attendance[studentId] !== undefined || isMakeupFor(db, l.id, studentId)
     })
     .filter((l) => isLessonPast(l) || l.attendance[studentId] !== undefined)
     .filter((l) => l.status !== 'annullata')
@@ -154,8 +201,17 @@ export function recentAttendance(db: OasiDatabase, lessons: Lesson[], limit = 6)
     })
 }
 
+/** Presenze previste: iscritte + recuperi, meno chi ha annunciato l'assenza o è sospesa */
 export function expectedAttendance(db: OasiDatabase, lesson: Lesson): number {
-  const cls = findClass(db, lesson.classId)
-  if (!cls) return 0
-  return cls.studentIds.filter((id) => findStudent(db, id)?.membership.status !== 'sospesa').length
+  return lessonRoster(db, lesson).filter((e) => e.declared !== 'assente' && e.student.membership.status !== 'sospesa').length
+}
+
+export function declarationSummary(db: OasiDatabase, lesson: Lesson) {
+  const roster = lessonRoster(db, lesson)
+  return {
+    yes: roster.filter((e) => e.declared === 'presente').length,
+    no: roster.filter((e) => e.declared === 'assente').length,
+    unknown: roster.filter((e) => !e.declared).length,
+    total: roster.length,
+  }
 }

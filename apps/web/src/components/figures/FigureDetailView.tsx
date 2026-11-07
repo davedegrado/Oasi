@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertCircle, ArrowLeft, CheckCircle2, Link2 } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Link2 } from 'lucide-react'
+import { BackButton } from '@/components/common/BackButton'
 import type { Figure } from '@/types'
 import { DifficultyDots, DisciplineBadge, LevelBadge } from '@/components/common/badges'
 import { Card, CardContent } from '@/components/ui/card'
@@ -31,9 +32,7 @@ export function FigureDetailView({ figure, backTo, linkBase, panel, actions }: F
   return (
     <div className="animate-fade-up">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <Link to={backTo} className="inline-flex items-center gap-1.5 rounded-full py-1.5 pr-3 text-sm font-semibold text-ink-soft transition hover:text-rosa-intenso">
-          <ArrowLeft className="size-4" /> Archivio figure
-        </Link>
+        <BackButton fallback={backTo} className="mb-0" />
         {actions && <div className="flex gap-2">{actions}</div>}
       </div>
 
