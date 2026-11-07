@@ -1,0 +1,169 @@
+export type Role = 'allieva' | 'insegnante' | 'admin'
+
+export type Discipline = 'cerchio' | 'tessuti'
+
+export type Level = 'base' | 'intermedio' | 'avanzato'
+
+export type LearningStatus = 'da_imparare' | 'in_apprendimento' | 'riuscita' | 'in_progetto'
+
+export type MembershipStatus = 'attiva' | 'in_scadenza' | 'sospesa' | 'prova'
+
+export type AttendanceMark = 'presente' | 'assente'
+
+export type LessonStatus = 'regolare' | 'annullata' | 'variata'
+
+export interface Teacher {
+  id: string
+  firstName: string
+  lastName: string
+  avatar: string
+  disciplines: Discipline[]
+  bio: string
+  email: string
+  phone: string
+  since: number
+}
+
+export interface Membership {
+  status: MembershipStatus
+  cardNumber: string
+  expiresAt: string
+  medicalCertificateExpiresAt: string
+  feePlan: string
+  feePaidUntil: string
+}
+
+export interface Student {
+  id: string
+  firstName: string
+  lastName: string
+  avatar: string
+  birthDate: string
+  email: string
+  phone: string
+  level: Level
+  mainDiscipline: Discipline
+  classIds: string[]
+  joinedAt: string
+  goals: string[]
+  membership: Membership
+}
+
+export interface ClassGroup {
+  id: string
+  name: string
+  discipline: Discipline
+  level: Level
+  teacherId: string
+  weekday: number // 1 = lunedì ... 7 = domenica
+  startTime: string // HH:mm
+  endTime: string
+  room: string
+  capacity: number
+  studentIds: string[]
+  description: string
+}
+
+export interface Lesson {
+  id: string
+  classId: string
+  date: string // YYYY-MM-DD
+  startTime: string
+  endTime: string
+  status: LessonStatus
+  note?: string
+  originalStartTime?: string
+  originalEndTime?: string
+  attendance: Record<string, AttendanceMark>
+}
+
+export interface FigureStep {
+  id: string
+  image: string
+  caption: string
+}
+
+export interface Figure {
+  id: string
+  name: string
+  discipline: Discipline
+  level: Level
+  difficulty: 1 | 2 | 3 | 4 | 5
+  teacherId: string
+  cover: string
+  steps: FigureStep[]
+  description: string
+  attentionPoints: string[]
+  prerequisites: string[]
+  createdAt: string
+}
+
+export interface FigureProgress {
+  status: LearningStatus
+  note: string
+  updatedAt: string
+}
+
+/** studentId -> figureId -> progresso */
+export type ProgressMap = Record<string, Record<string, FigureProgress>>
+
+export interface OasiEvent {
+  id: string
+  title: string
+  type: 'spettacolo' | 'workshop' | 'stage' | 'sociale'
+  date: string
+  startTime: string
+  endTime: string
+  location: string
+  description: string
+  image: string
+  capacity: number
+  participantIds: string[]
+}
+
+export interface Announcement {
+  id: string
+  title: string
+  body: string
+  date: string
+  priority: 'normale' | 'importante'
+  audience: 'tutti' | 'allieve' | 'insegnanti'
+}
+
+export interface AssociationInfo {
+  name: string
+  legalForm: string
+  affiliation: string
+  address: string
+  email: string
+  phone: string
+  website: string
+  season: string
+  rooms: string[]
+  settings: {
+    maxStudentsPerClass: number
+    absenceNoticeHours: number
+    remindersEnabled: boolean
+    progressVisibleToTeachers: boolean
+    trialLessonEnabled: boolean
+  }
+}
+
+export interface OasiDatabase {
+  version: number
+  association: AssociationInfo
+  teachers: Teacher[]
+  students: Student[]
+  classes: ClassGroup[]
+  lessons: Lesson[]
+  figures: Figure[]
+  progress: ProgressMap
+  events: OasiEvent[]
+  announcements: Announcement[]
+}
+
+export interface DemoPersona {
+  role: Role
+  /** id dell'allieva o dell'insegnante impersonata */
+  userId: string | null
+}
