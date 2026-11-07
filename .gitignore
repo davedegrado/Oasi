@@ -34,3 +34,6 @@ TestResults/
 .env
 .env.local
 dist-pages
+
+# Documenti commerciali (mai nel repository pubblico)
+*.pdf
