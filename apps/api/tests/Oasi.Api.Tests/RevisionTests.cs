@@ -29,7 +29,7 @@ public sealed class RevisionTests(ApiFixture api)
     {
         var res = await api.For(Seed.OasiHost, Seed.OasiAdmin).PostAsJsonAsync("/v1/document-types", new
         {
-            name, category, isRequired = required, signatureMode = signature, templateText = template, validityMonths = validity,
+            name = $"Test · {name}", category, isRequired = required, signatureMode = signature, templateText = template, validityMonths = validity,
         });
         Assert.Equal(HttpStatusCode.Created, res.StatusCode);
         return (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
@@ -186,6 +186,10 @@ public sealed class RevisionTests(ApiFixture api)
         var martina = api.For(Seed.OasiHost, Martina);
         var lesson = (await martina.GetFromJsonAsync<JsonElement[]>($"/v1/lessons?from={InDays(1)}&to={InDays(21)}"))!.First(l => l.GetProperty("status").GetString() == "scheduled");
         var date = lesson.GetProperty("date").GetString()!;
+        // Sofia ha chiesto di recuperare proprio in quella lezione
+        var makeup = await api.For(Seed.OasiHost, Seed.Sofia).PostAsJsonAsync("/v1/makeups", new { targetLessonId = lesson.GetProperty("id").GetGuid() });
+        Assert.Equal(HttpStatusCode.Created, makeup.StatusCode);
+        var makeupId = (await makeup.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
 
         var res = await admin.PostAsJsonAsync("/v1/closures", new { kind = "strike", title = "Sciopero generale", startDate = date, endDate = date, note = "Recupero sabato", notifyNow = true });
         Assert.Equal(HttpStatusCode.Created, res.StatusCode);
@@ -207,6 +211,11 @@ public sealed class RevisionTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.Conflict, (await martina.PutAsJsonAsync($"/v1/lessons/{id}/declaration", new { declared = "absent" })).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await api.For(Seed.OasiHost, Seed.Sofia).PostAsJsonAsync("/v1/makeups", new { targetLessonId = id })).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await api.For(Seed.OasiHost, Seed.Elena).PutAsJsonAsync($"/v1/lessons/{id}", new { status = "scheduled" })).StatusCode);
+
+        // Il recupero fissato in quel giorno è annullato e Sofia viene avvisata
+        Assert.Equal("cancelled", await api.Scalar<string>("select status from app.makeup_requests where id = @makeupId", new { makeupId }));
+        var sofiaNotes = await api.For(Seed.OasiHost, Seed.Sofia).GetFromJsonAsync<JsonElement[]>("/v1/notifications");
+        Assert.Contains(sofiaNotes!, n => n.GetProperty("title").GetString() == "Recupero annullato");
 
         // Le persone interessate ricevono la comunicazione
         var notes = await martina.GetFromJsonAsync<JsonElement[]>("/v1/notifications");

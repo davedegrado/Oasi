@@ -6,12 +6,14 @@ import { DisciplineIcon, StatusBadge } from '@/components/common/badges'
 import { STATUS_COLOR } from '@/lib/statusStyle'
 import { useDatabase } from '@/hooks/useDatabase'
 import { figureStatus, progressSummary } from '@/services/selectors'
-import { DISCIPLINE_LABEL, DISCIPLINES, LEVEL_LABEL, LEVELS, STATUS_LABEL, STATUS_ORDER } from '@/lib/labels'
+import { LEVEL_LABEL, LEVELS, STATUS_LABEL, STATUS_ORDER } from '@/lib/labels'
+import { useDisciplines } from '@/hooks/useDisciplines'
 import { percent } from '@/lib/utils'
 
 /** Grafici di riepilogo dei progressi di un'allieva */
 export function ProgressOverview({ studentId }: { studentId: string }) {
   const db = useDatabase()
+  const disciplines = useDisciplines()
   const summary = progressSummary(db, studentId)
   const segments = STATUS_ORDER.slice()
     .reverse()
@@ -36,16 +38,17 @@ export function ProgressOverview({ studentId }: { studentId: string }) {
       <Card>
         <CardContent className="space-y-5">
           <h2 className="text-base font-bold">Distribuzione per disciplina</h2>
-          {DISCIPLINES.map((d) => {
+          {disciplines.list.filter((d) => db.figures.some((f) => f.discipline === d.id)).map((info) => {
+            const d = info.id
             const s = progressSummary(db, studentId, d)
             return (
               <div key={d} className="flex items-center gap-4">
-                <Ring value={s.completion} size={58} thickness={6} color={d === 'cerchio' ? 'var(--color-cerchio)' : 'var(--color-tessuti)'}>
-                  <DisciplineIcon discipline={d} className={d === 'cerchio' ? 'size-4 text-cerchio' : 'size-4 text-tessuti'} />
+                <Ring value={s.completion} size={58} thickness={6} color={info.color}>
+                  <span style={{ color: info.color }}><DisciplineIcon discipline={d} className="size-4" /></span>
                 </Ring>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline justify-between gap-2">
-                    <p className="font-semibold text-ink">{DISCIPLINE_LABEL[d]}</p>
+                    <p className="font-semibold text-ink">{info.name}</p>
                     <p className="text-sm text-ink-muted">
                       <b className="text-ink">{s.counts.riuscita}</b>/{s.total} · {s.completion}%
                     </p>
@@ -87,6 +90,7 @@ export function ProgressOverview({ studentId }: { studentId: string }) {
 /** Elenco figure per uno stato */
 export function FiguresByStatus({ studentId, status, linkBase, empty }: { studentId: string; status: LearningStatus; linkBase: string; empty?: string }) {
   const db = useDatabase()
+  const disciplines = useDisciplines()
   const figures = db.figures.filter((f) => figureStatus(db, studentId, f.id) === status)
   return (
     <Card>
@@ -107,7 +111,7 @@ export function FiguresByStatus({ studentId, status, linkBase, empty }: { studen
                     <img src={f.cover} alt="" className="size-12 rounded-xl object-cover" loading="lazy" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold">{f.name}</p>
-                      <p className="truncate text-xs text-ink-muted">{note ? `“${note}”` : `${DISCIPLINE_LABEL[f.discipline]} · ${LEVEL_LABEL[f.level]}`}</p>
+                      <p className="truncate text-xs text-ink-muted">{note ? `“${note}”` : `${disciplines.get(f.discipline).name} · ${LEVEL_LABEL[f.level]}`}</p>
                     </div>
                     <StatusBadge status={status} className="hidden sm:inline-flex" />
                   </Link>

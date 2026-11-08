@@ -1,14 +1,4 @@
-import type { Discipline, LearningStatus, Level, MembershipStatus, Role } from '@/types'
-
-export const DISCIPLINE_LABEL: Record<Discipline, string> = {
-  cerchio: 'Cerchio aereo',
-  tessuti: 'Tessuti aerei',
-}
-
-export const DISCIPLINE_SHORT: Record<Discipline, string> = {
-  cerchio: 'Cerchio',
-  tessuti: 'Tessuti',
-}
+import type { DocumentCategory, DocumentStatus, LearningStatus, Level, MembershipStatus, Role } from '@/types'
 
 export const LEVEL_LABEL: Record<Level, string> = {
   base: 'Base',
@@ -17,7 +7,6 @@ export const LEVEL_LABEL: Record<Level, string> = {
 }
 
 export const LEVELS: Level[] = ['base', 'intermedio', 'avanzato']
-export const DISCIPLINES: Discipline[] = ['cerchio', 'tessuti']
 
 export const STATUS_ORDER: LearningStatus[] = ['da_imparare', 'in_progetto', 'riuscita']
 
@@ -60,3 +49,19 @@ export const REQUEST_STATUS_LABEL = {
   approvata: 'Approvata',
   rifiutata: 'Rifiutata',
 } as const
+
+export const DOCUMENT_CATEGORY_LABEL: Record<DocumentCategory, string> = {
+  personale: 'Documenti personali',
+  iscrizione: 'Moduli di iscrizione',
+  liberatoria: 'Liberatorie',
+  consenso: 'Consensi',
+  certificato_medico: 'Certificati medici',
+  altro: 'Altri documenti',
+}
+
+export const DOCUMENT_STATUS_LABEL: Record<DocumentStatus, string> = {
+  in_verifica: 'In verifica',
+  approvato: 'Approvato',
+  rifiutato: 'Rifiutato',
+  da_sostituire: 'Da sostituire',
+}

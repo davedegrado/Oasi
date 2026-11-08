@@ -9,7 +9,8 @@ import { DisciplineIcon } from '@/components/common/badges'
 import { STATUS_STYLE } from '@/lib/statusStyle'
 import { useDatabase } from '@/hooks/useDatabase'
 import { figureStatus, findTeacher } from '@/services/selectors'
-import { DISCIPLINE_LABEL, DISCIPLINES, LEVEL_LABEL, LEVELS, STATUS_LABEL, STATUS_ORDER } from '@/lib/labels'
+import { LEVEL_LABEL, LEVELS, STATUS_LABEL, STATUS_ORDER } from '@/lib/labels'
+import { useDisciplines } from '@/hooks/useDisciplines'
 import { cn, normalize } from '@/lib/utils'
 import { FigureCard } from './FigureCard'
 
@@ -71,16 +72,16 @@ export function FigureArchive({ basePath, studentId, studentIdsForStats, emptyAc
     })
   }, [db, discipline, level, status, query, studentId])
 
-  const counts = useMemo(
-    () => ({
-      tutte: db.figures.length,
-      cerchio: db.figures.filter((f) => f.discipline === 'cerchio').length,
-      tessuti: db.figures.filter((f) => f.discipline === 'tessuti').length,
-    }),
-    [db.figures],
-  )
+  const disciplines = useDisciplines()
+  // Discipline con archivio didattico attivo, più quelle che hanno già figure (lo storico resta visibile)
+  const archiveDisciplines = disciplines.list.filter((d) => (d.isActive && d.hasFigureArchive) || db.figures.some((f) => f.discipline === d.id)).map((d) => d.id)
+  const counts = useMemo(() => {
+    const map: Record<string, number> = { tutte: db.figures.length }
+    for (const f of db.figures) map[f.discipline] = (map[f.discipline] ?? 0) + 1
+    return map
+  }, [db.figures])
 
-  const groups: { discipline: Discipline; figures: Figure[] }[] = DISCIPLINES.map((d) => ({
+  const groups: { discipline: Discipline; figures: Figure[] }[] = archiveDisciplines.map((d) => ({
     discipline: d,
     figures: filtered.filter((f) => f.discipline === d).sort((a, b) => LEVELS.indexOf(a.level) - LEVELS.indexOf(b.level) || a.difficulty - b.difficulty),
   })).filter((g) => g.figures.length > 0)
@@ -107,8 +108,7 @@ export function FigureArchive({ basePath, studentId, studentIdsForStats, emptyAc
             onChange={(v) => setParam('disciplina', v === 'tutte' ? null : v)}
             options={[
               { value: 'tutte', label: 'Tutte', count: counts.tutte },
-              { value: 'cerchio', label: 'Cerchio', count: counts.cerchio },
-              { value: 'tessuti', label: 'Tessuti', count: counts.tessuti },
+              ...archiveDisciplines.map((d) => ({ value: d, label: disciplines.get(d).shortName, count: counts[d] ?? 0 })),
             ]}
           />
         </div>
@@ -145,10 +145,10 @@ export function FigureArchive({ basePath, studentId, studentIdsForStats, emptyAc
           {groups.map((g) => (
             <section key={g.discipline}>
               <div className="mb-3.5 flex items-center gap-2.5">
-                <span className={cn('grid size-8 place-items-center rounded-full text-white', g.discipline === 'cerchio' ? 'bg-cerchio' : 'bg-tessuti')}>
+                <span className="grid size-8 place-items-center rounded-full text-white" style={{ background: disciplines.get(g.discipline).color }}>
                   <DisciplineIcon discipline={g.discipline} className="size-4" />
                 </span>
-                <h2 className="text-lg font-bold text-ink">{DISCIPLINE_LABEL[g.discipline]}</h2>
+                <h2 className="text-lg font-bold text-ink">{disciplines.get(g.discipline).name}</h2>
                 <span className="text-sm text-ink-muted">· {g.figures.length} figure</span>
               </div>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">

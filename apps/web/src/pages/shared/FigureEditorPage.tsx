@@ -20,12 +20,13 @@ import { compressImage } from '@/lib/image'
 import { LEVEL_LABEL, LEVELS } from '@/lib/labels'
 import { todayISO } from '@/lib/dates'
 import { cn, fullName, uid } from '@/lib/utils'
+import { useDisciplines } from '@/hooks/useDisciplines'
 
-function emptyFigure(teacherId: string): Figure {
+function emptyFigure(teacherId: string, discipline: string): Figure {
   return {
     id: uid('fig'),
     name: '',
-    discipline: 'cerchio',
+    discipline,
     level: 'base',
     difficulty: 2,
     teacherId,
@@ -45,9 +46,10 @@ export function FigureEditorPage({ basePath }: { basePath: string }) {
   const { persona } = useDemo()
   const { toast } = useToast()
   const navigate = useNavigate()
+  const disciplines = useDisciplines()
   const existing = id ? findFigure(db, id) : undefined
   const isTeacher = persona?.role === 'insegnante'
-  const [figure, setFigure] = useState<Figure>(() => (existing ? structuredClone(existing) : emptyFigure(isTeacher && persona?.userId ? persona.userId : db.teachers[0].id)))
+  const [figure, setFigure] = useState<Figure>(() => (existing ? structuredClone(existing) : emptyFigure(isTeacher && persona?.userId ? persona.userId : db.teachers[0].id, db.disciplines.find((d) => d.isActive && d.hasFigureArchive)?.id ?? db.disciplines[0]?.id ?? '')))
   const [pickerOpen, setPickerOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [errors, setErrors] = useState<string[]>([])
@@ -159,10 +161,9 @@ export function FigureEditorPage({ basePath }: { basePath: string }) {
               <Segmented<Discipline>
                 value={figure.discipline}
                 onChange={(v) => set('discipline', v)}
-                options={[
-                  { value: 'cerchio', label: 'Cerchio aereo' },
-                  { value: 'tessuti', label: 'Tessuti aerei' },
-                ]}
+                options={disciplines.list
+                  .filter((d) => (d.isActive && d.hasFigureArchive) || d.id === figure.discipline)
+                  .map((d) => ({ value: d.id, label: d.name }))}
               />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -302,7 +303,7 @@ export function FigureEditorPage({ basePath }: { basePath: string }) {
         <Button variant="dark" className="w-full" onClick={() => fileRef.current?.click()} disabled={uploading}>
           <Upload /> {uploading ? 'Caricamento…' : 'Carica dal dispositivo'}
         </Button>
-        <p className="mt-5 mb-2 text-sm font-semibold text-ink-soft">Libreria demo · {figure.discipline === 'cerchio' ? 'Cerchio aereo' : 'Tessuti aerei'}</p>
+        <p className="mt-5 mb-2 text-sm font-semibold text-ink-soft">Libreria demo · {disciplines.get(figure.discipline).name}</p>
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
           {library.map((src) => {
             const used = figure.steps.some((s) => s.image === src)

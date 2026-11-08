@@ -5,6 +5,7 @@ import { DifficultyDots, DisciplineIcon, StatusBadge } from '@/components/common
 import { Badge } from '@/components/ui/badge'
 import { LEVEL_LABEL } from '@/lib/labels'
 import { cn } from '@/lib/utils'
+import { useDisciplines } from '@/hooks/useDisciplines'
 
 interface FigureCardProps {
   figure: Figure
@@ -15,6 +16,7 @@ interface FigureCardProps {
 }
 
 export function FigureCard({ figure, to, status, meta, className }: FigureCardProps) {
+  const disciplines = useDisciplines()
   return (
     <Link
       to={to}
@@ -27,11 +29,9 @@ export function FigureCard({ figure, to, status, meta, className }: FigureCardPr
         <img src={figure.cover} alt={figure.name} loading="lazy" className="size-full object-cover transition duration-700 group-hover:scale-105" />
         <div className="absolute inset-0 bg-gradient-to-t from-ink/55 via-transparent to-transparent" />
         <span
-          className={cn(
-            'absolute top-2.5 left-2.5 grid size-8 place-items-center rounded-full text-white shadow-soft',
-            figure.discipline === 'cerchio' ? 'bg-cerchio' : 'bg-tessuti',
-          )}
-          title={figure.discipline === 'cerchio' ? 'Cerchio aereo' : 'Tessuti aerei'}
+          className="absolute top-2.5 left-2.5 grid size-8 place-items-center rounded-full text-white shadow-soft"
+          style={{ background: disciplines.get(figure.discipline).color }}
+          title={disciplines.get(figure.discipline).name}
         >
           <DisciplineIcon discipline={figure.discipline} className="size-4" />
         </span>

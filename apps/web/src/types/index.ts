@@ -1,6 +1,21 @@
 export type Role = 'allieva' | 'insegnante' | 'admin'
 
-export type Discipline = 'cerchio' | 'tessuti'
+/** Identificativo (slug) di una disciplina configurata dalla palestra, es. "cerchio" */
+export type Discipline = string
+
+export type DisciplineIconName = 'circle' | 'wind' | 'sparkles' | 'music' | 'flower' | 'dumbbell' | 'star'
+
+/** Disciplina: dato della palestra, non definita nel codice */
+export interface DisciplineInfo {
+  id: Discipline
+  name: string
+  shortName: string
+  description: string
+  color: string
+  icon: DisciplineIconName
+  hasFigureArchive: boolean
+  isActive: boolean
+}
 
 export type Level = 'base' | 'intermedio' | 'avanzato'
 
@@ -204,6 +219,10 @@ export interface OasiDatabase {
   makeupRequests: MakeupRequest[]
   closures: Closure[]
   notifications: AppNotification[]
+  disciplines: DisciplineInfo[]
+  documentTypes: DocumentType[]
+  documents: MemberDocument[]
+  sharedDocuments: SharedDocument[]
 }
 
 export type ClosureKind = 'festivita' | 'sciopero' | 'chiusura'
@@ -219,7 +238,7 @@ export interface Closure {
   reminderSentAt?: string
 }
 
-export type NotificationKind = 'iscrizione' | 'recupero' | 'variazione' | 'chiusura' | 'evento' | 'comunicazione'
+export type NotificationKind = 'iscrizione' | 'recupero' | 'variazione' | 'chiusura' | 'evento' | 'comunicazione' | 'documento'
 
 /**
  * Notifica nel centro notifiche. Destinatari: "student:<id>", "teacher:<id>",
@@ -240,4 +259,71 @@ export interface DemoPersona {
   role: Role
   /** id dell'allieva o dell'insegnante impersonata */
   userId: string | null
+}
+
+// ── Archivio documentale ───────────────────────────────────────────
+export type DocumentCategory = 'personale' | 'iscrizione' | 'liberatoria' | 'consenso' | 'certificato_medico' | 'altro'
+export type DocumentStatus = 'in_verifica' | 'approvato' | 'rifiutato' | 'da_sostituire'
+export type SignatureMode = 'nessuna' | 'caricamento_firmato' | 'elettronica'
+
+/** Tipologia di documento richiesta dalla palestra */
+export interface DocumentType {
+  id: string
+  name: string
+  category: DocumentCategory
+  description: string
+  required: boolean
+  signatureMode: SignatureMode
+  /** Testo da firmare elettronicamente nell'app */
+  templateText?: string
+  validityMonths?: number
+  /** Dati sanitari: solo amministrazione e interessata */
+  sensitive: boolean
+  active: boolean
+}
+
+export interface DocumentEvent {
+  action: 'caricato' | 'firmato' | 'approvato' | 'rifiutato' | 'sostituzione_richiesta' | 'sostituito'
+  at: string
+  by: string
+  note?: string
+}
+
+/**
+ * Documento di una persona: UNA sola riga per versione, letta sia dal profilo
+ * sia dall'Archivio generale (nessuna copia). Le sostituzioni creano una nuova
+ * versione collegata alla precedente.
+ */
+export interface MemberDocument {
+  id: string
+  memberId: string
+  typeId: string
+  version: number
+  replacesId?: string
+  current: boolean
+  status: DocumentStatus
+  fileName?: string
+  fileType?: string
+  fileSize?: number
+  /** Demo: file salvato nel browser come data URL */
+  fileData?: string
+  signature?: { method: 'caricamento_firmato' | 'elettronica'; signedAt: string; signerName: string }
+  uploadedAt: string
+  uploadedBy: string
+  expiresOn?: string
+  reviewNote?: string
+  reviewedAt?: string
+  history: DocumentEvent[]
+}
+
+/** Documenti messi a disposizione dalla palestra (regolamento, modulistica) */
+export interface SharedDocument {
+  id: string
+  title: string
+  description: string
+  fileName: string
+  fileType: string
+  fileData?: string
+  audience: 'tutti' | 'allieve' | 'insegnanti'
+  uploadedAt: string
 }

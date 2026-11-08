@@ -45,7 +45,7 @@ public static class ClosureEndpoints
                     insert into app.closures (tenant_id, kind, title, start_date, end_date, note, created_by)
                     values (app.current_tenant(), @Kind, @Title, @StartDate::date, @EndDate::date, coalesce(@Note, ''), @user) returning id",
                     new { input.Kind, input.Title, input.StartDate, input.EndDate, input.Note, user = m.UserId }, tx);
-                await Apply(c, tx, newId);
+                await Apply(c, tx, newId, m.UserId);
                 if (input.NotifyNow == true) await Remind(c, tx, newId, m.UserId);
                 return newId;
             });
@@ -62,7 +62,7 @@ public static class ClosureEndpoints
                 var n = await c.ExecuteAsync(@"update app.closures set kind = @Kind, title = @Title, start_date = @StartDate::date, end_date = @EndDate::date, note = coalesce(@Note, '')
                     where id = @id", new { id, input.Kind, input.Title, input.StartDate, input.EndDate, input.Note }, tx);
                 if (n == 0) throw ApiException.NotFound("Chiusura");
-                await Apply(c, tx, id);
+                await Apply(c, tx, id, m.UserId);
                 if (input.NotifyNow == true) await Remind(c, tx, id, m.UserId);
             });
             return Results.NoContent();
@@ -118,13 +118,31 @@ public static class ClosureEndpoints
         if (e.DayNumber - s.DayNumber > 120) throw ApiException.Invalid("Una chiusura può durare al massimo 120 giorni.");
     }
 
-    /// <summary>Annulla le lezioni nelle date della chiusura (quelle già annullate per altri motivi restano com'erano).</summary>
-    internal static Task Apply(IDbConnection c, IDbTransaction tx, Guid closureId) =>
-        c.ExecuteAsync(@"
+    /// <summary>
+    /// Annulla le lezioni nelle date della chiusura (quelle già annullate per altri motivi restano com'erano)
+    /// e chiude i recuperi richiesti o approvati su quelle lezioni, avvisando le allieve interessate:
+    /// nessun appuntamento resta fissato in un giorno di chiusura.
+    /// </summary>
+    internal static async Task Apply(IDbConnection c, IDbTransaction tx, Guid closureId, Guid? actor = null)
+    {
+        await c.ExecuteAsync(@"
             update app.lessons l set status = 'cancelled', closure_id = x.id,
               note = case when x.note = '' then x.title else x.title || ': ' || x.note end
             from app.closures x
             where x.id = @closureId and l.date between x.start_date and x.end_date and l.status <> 'cancelled'", new { closureId }, tx);
+        var members = await c.QueryAsync<Guid>(@"
+            update app.makeup_requests r set status = 'cancelled', decided_at = now(), decided_by = @actor,
+              note = trim(coalesce(r.note, '') || ' [Annullato: palestra chiusa]')
+            from app.lessons l
+            where l.id = r.target_lesson_id and l.closure_id = @closureId and r.status in ('requested', 'approved')
+            returning r.member_id", new { closureId, actor }, tx);
+        foreach (var memberId in members.Distinct())
+        {
+            var users = await Notifier.UsersOfMember(c, tx, memberId);
+            await Notifier.ToUsers(c, tx, users, "schedule_changes", "Recupero annullato",
+                "La lezione scelta per il recupero cade in un giorno di chiusura: richiedine un'altra.", actor);
+        }
+    }
 
     /// <summary>Applica tutte le chiusure alle lezioni di una classe appena creata.</summary>
     internal static Task ApplyAllClosures(IDbConnection c, IDbTransaction tx, Guid classId) =>

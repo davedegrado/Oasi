@@ -1,4 +1,4 @@
-import type { AppNotification, OasiDatabase } from '@/types'
+import type { AppNotification, MemberDocument, OasiDatabase } from '@/types'
 import { applyClosure, createSeedDatabase, DATABASE_VERSION } from '@/data/seed'
 import { addDays, formatDate, startOfWeek, todayISO } from '@/lib/dates'
 import { uid } from '@/lib/utils'
@@ -44,10 +44,23 @@ function migrateFrom5(db: OasiDatabase): OasiDatabase {
   }))
   return {
     ...db,
-    version: DATABASE_VERSION,
+    version: 6,
     lessons: seed.closures.reduce(applyClosure, lessons),
     closures: db.closures ?? seed.closures,
     notifications: db.notifications ?? seed.notifications,
+  }
+}
+
+/** v6 → v7: discipline come dati, archivio documentale */
+function migrateFrom6(db: OasiDatabase): OasiDatabase {
+  const seed = createSeedDatabase()
+  return {
+    ...db,
+    version: DATABASE_VERSION,
+    disciplines: db.disciplines ?? seed.disciplines,
+    documentTypes: db.documentTypes ?? seed.documentTypes,
+    documents: db.documents ?? seed.documents.filter((d) => db.students.some((s) => s.id === d.memberId)),
+    sharedDocuments: db.sharedDocuments ?? seed.sharedDocuments,
   }
 }
 
@@ -56,9 +69,10 @@ function loadFromStorage(): OasiDatabase | null {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as OasiDatabase
-    if (parsed.version === 3) return migrateFrom5(migrateFrom4(migrateFrom3(parsed)))
-    if (parsed.version === 4) return migrateFrom5(migrateFrom4(parsed))
-    if (parsed.version === 5) return migrateFrom5(parsed)
+    if (parsed.version === 3) return migrateFrom6(migrateFrom5(migrateFrom4(migrateFrom3(parsed))))
+    if (parsed.version === 4) return migrateFrom6(migrateFrom5(migrateFrom4(parsed)))
+    if (parsed.version === 5) return migrateFrom6(migrateFrom5(parsed))
+    if (parsed.version === 6) return migrateFrom6(parsed)
     if (parsed.version !== DATABASE_VERSION) return null
     return parsed
   } catch {
@@ -101,6 +115,39 @@ function withNotifications(db: OasiDatabase, items: NewNotification[]): OasiData
 const studentName = (db: OasiDatabase, id: string) => {
   const s = db.students.find((x) => x.id === id)
   return s ? `${s.firstName} ${s.lastName}` : 'Un’allieva'
+}
+
+export const MAX_DOCUMENT_BYTES = 4 * 1024 * 1024
+export const ALLOWED_DOCUMENT_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic']
+
+function addMonths(iso: string, months: number) {
+  const d = new Date(`${iso}T12:00:00`)
+  d.setMonth(d.getMonth() + months)
+  return d.toISOString().slice(0, 10)
+}
+
+/** Nuova versione di un documento: la precedente resta nello storico, non è più "corrente" */
+function newVersion(
+  db: OasiDatabase,
+  memberId: string,
+  typeId: string,
+  data: Pick<MemberDocument, 'status' | 'uploadedBy'> & Partial<MemberDocument>,
+  action: 'caricato' | 'firmato',
+): OasiDatabase {
+  const previous = db.documents.find((d) => d.memberId === memberId && d.typeId === typeId && d.current)
+  const now = new Date().toISOString()
+  const doc: MemberDocument = {
+    ...data,
+    id: uid('doc'),
+    memberId,
+    typeId,
+    version: (previous?.version ?? 0) + 1,
+    replacesId: previous?.id,
+    current: true,
+    uploadedAt: now,
+    history: [...(previous ? [{ action: 'sostituito' as const, at: now, by: data.uploadedBy, note: `Sostituisce la versione ${previous.version}` }] : []), { action, at: now, by: data.uploadedBy }],
+  }
+  return { ...db, documents: [doc, ...db.documents.map((d) => (d.id === previous?.id ? { ...d, current: false } : d))] }
 }
 
 function restoreLesson(db: OasiDatabase, l: OasiDatabase['lessons'][number]) {
@@ -157,8 +204,12 @@ export class LocalRepository implements OasiRepository {
     this.listeners.forEach((l) => l())
   }
 
-  private commit(mutator: (draft: OasiDatabase) => OasiDatabase) {
-    this.db = mutator(this.db)
+  private commit(mutator: (draft: OasiDatabase) => OasiDatabase): Promise<void> {
+    try {
+      this.db = mutator(this.db)
+    } catch (err) {
+      return Promise.reject(err)
+    }
     persist(this.db)
     this.emit()
     return Promise.resolve()
@@ -329,11 +380,20 @@ export class LocalRepository implements OasiRepository {
     this.commit((db) => {
       // ripristina le lezioni della versione precedente, poi applica le nuove date
       const restored = db.lessons.map((l) => (l.closureId === closure.id ? restoreLesson(db, l) : l))
-      return {
+      const lessons = applyClosure(restored, closure)
+      // Nessun appuntamento incompatibile: i recuperi fissati nei giorni di chiusura vengono annullati
+      const closed = new Set(lessons.filter((l) => l.closureId === closure.id).map((l) => l.id))
+      const hit = db.makeupRequests.filter((r) => closed.has(r.targetLessonId) && r.status !== 'rifiutata')
+      const now = new Date().toISOString()
+      const next: OasiDatabase = {
         ...db,
         closures: [...db.closures.filter((c) => c.id !== closure.id), closure].sort((a, b) => a.startDate.localeCompare(b.startDate)),
-        lessons: applyClosure(restored, closure),
+        lessons,
+        makeupRequests: db.makeupRequests.map((r) => (hit.includes(r) ? { ...r, status: 'rifiutata', decidedAt: now, decidedBy: 'admin', note: `${r.note} [Annullato: palestra chiusa]`.trim() } : r)),
       }
+      return hit.length
+        ? withNotifications(next, [{ kind: 'recupero', title: 'Recupero annullato', body: `La lezione scelta per il recupero cade in un giorno di chiusura (${closure.title}): richiedine un’altra.`, to: [...new Set(hit.map((r) => `student:${r.studentId}`))], link: { allieva: '/allieva/calendario' } }])
+        : next
     })
 
   deleteClosure: OasiRepository['deleteClosure'] = (closureId) =>
@@ -386,6 +446,10 @@ export class LocalRepository implements OasiRepository {
   saveClass: OasiRepository['saveClass'] = (cls) =>
     this.commit((db) => {
       const exists = db.classes.some((c) => c.id === cls.id)
+      const discipline = db.disciplines.find((d) => d.id === cls.discipline)
+      if (!discipline) throw new Error('Scegli una disciplina configurata')
+      if (!discipline.isActive && db.classes.find((c) => c.id === cls.id)?.discipline !== cls.discipline)
+        throw new Error(`La disciplina ${discipline.name} è disattivata: riattivala per creare nuove classi`)
       const classes = exists ? db.classes.map((c) => (c.id === cls.id ? cls : c)) : [...db.classes, cls]
       // Mantiene coerenti le iscrizioni lato allieva
       const students = db.students.map((s) => {
@@ -411,7 +475,8 @@ export class LocalRepository implements OasiRepository {
             attendance: {},
           }
         })
-        lessons = [...lessons, ...generated]
+        // le chiusure già pianificate valgono anche per la nuova classe
+        lessons = [...lessons, ...db.closures.reduce(applyClosure, generated)]
       } else {
         // Aggiorna orari delle lezioni future regolari
         const today = todayISO()
@@ -462,6 +527,105 @@ export class LocalRepository implements OasiRepository {
         }
       }),
     }))
+
+  saveDiscipline: OasiRepository['saveDiscipline'] = (discipline) =>
+    this.commit((db) => {
+      const name = discipline.name.trim()
+      if (!name) throw new Error('Il nome della disciplina è obbligatorio')
+      if (db.disciplines.some((d) => d.id !== discipline.id && d.name.toLowerCase() === name.toLowerCase())) throw new Error('Esiste già una disciplina con questo nome')
+      const exists = db.disciplines.some((d) => d.id === discipline.id)
+      const item = { ...discipline, name, shortName: discipline.shortName.trim() || name }
+      return { ...db, disciplines: exists ? db.disciplines.map((d) => (d.id === item.id ? item : d)) : [...db.disciplines, item] }
+    })
+
+  saveDocumentType: OasiRepository['saveDocumentType'] = (type) =>
+    this.commit((db) => {
+      if (!type.name.trim()) throw new Error('Il nome della tipologia è obbligatorio')
+      if (type.signatureMode === 'elettronica' && !type.templateText?.trim()) throw new Error('Per la firma elettronica serve il testo da firmare')
+      const exists = db.documentTypes.some((t) => t.id === type.id)
+      return { ...db, documentTypes: exists ? db.documentTypes.map((t) => (t.id === type.id ? type : t)) : [...db.documentTypes, type] }
+    })
+
+  uploadDocument: OasiRepository['uploadDocument'] = (input) =>
+    this.commit((db) => {
+      const type = db.documentTypes.find((t) => t.id === input.typeId && t.active)
+      if (!type) throw new Error('Tipologia di documento non disponibile')
+      if (!db.students.some((s) => s.id === input.memberId)) throw new Error('Profilo non trovato')
+      if (input.fileSize > MAX_DOCUMENT_BYTES) throw new Error('Il file supera i 4 MB consentiti nella demo')
+      if (!ALLOWED_DOCUMENT_TYPES.includes(input.fileType)) throw new Error('Formato non ammesso: carica un PDF o un’immagine')
+      const today = todayISO()
+      const expiresOn = input.expiresOn || (type.validityMonths ? addMonths(today, type.validityMonths) : undefined)
+      const next = newVersion(db, input.memberId, input.typeId, {
+        status: 'in_verifica',
+        fileName: input.fileName,
+        fileType: input.fileType,
+        fileSize: input.fileSize,
+        fileData: input.fileData,
+        signature: input.signedUpload ? { method: 'caricamento_firmato', signedAt: new Date().toISOString(), signerName: studentName(db, input.memberId) } : undefined,
+        uploadedBy: input.uploadedBy,
+        expiresOn,
+      }, 'caricato')
+      return withNotifications(next, [{
+        kind: 'documento',
+        title: 'Documento da verificare',
+        body: `${studentName(db, input.memberId)} ha caricato “${type.name}”.`,
+        to: ['admin'],
+        link: { admin: `/admin/archivio?stato=in_verifica` },
+      }])
+    })
+
+  signDocument: OasiRepository['signDocument'] = (memberId, typeId, signerName) =>
+    this.commit((db) => {
+      const type = db.documentTypes.find((t) => t.id === typeId && t.active)
+      if (!type || type.signatureMode !== 'elettronica' || !type.templateText) throw new Error('Questo documento non si firma nell’app')
+      const expected = studentName(db, memberId)
+      if (signerName.trim().toLowerCase() !== expected.toLowerCase()) throw new Error(`Per firmare scrivi il tuo nome completo: ${expected}`)
+      const today = todayISO()
+      return newVersion(db, memberId, typeId, {
+        status: 'approvato',
+        signature: { method: 'elettronica', signedAt: new Date().toISOString(), signerName: expected },
+        uploadedBy: memberId,
+        expiresOn: type.validityMonths ? addMonths(today, type.validityMonths) : undefined,
+      }, 'firmato')
+    })
+
+  reviewDocument: OasiRepository['reviewDocument'] = (documentId, decision, note) =>
+    this.commit((db) => {
+      const doc = db.documents.find((d) => d.id === documentId)
+      if (!doc || !doc.current) throw new Error('Si può verificare solo la versione corrente')
+      if (decision !== 'approva' && !note.trim()) throw new Error('Spiega all’allieva cosa correggere')
+      const status = decision === 'approva' ? 'approvato' : decision === 'rifiuta' ? 'rifiutato' : 'da_sostituire'
+      const action = decision === 'approva' ? 'approvato' : decision === 'rifiuta' ? 'rifiutato' : 'sostituzione_richiesta'
+      const now = new Date().toISOString()
+      const type = db.documentTypes.find((t) => t.id === doc.typeId)
+      const next = {
+        ...db,
+        documents: db.documents.map((d) =>
+          d.id === documentId
+            ? { ...d, status, reviewNote: note.trim() || undefined, reviewedAt: now, history: [...d.history, { action, at: now, by: 'admin', note: note.trim() || undefined }] }
+            : d,
+        ),
+      } satisfies OasiDatabase
+      return withNotifications(next, [{
+        kind: 'documento',
+        title: decision === 'approva' ? `Documento approvato: ${type?.name}` : `Documento da ricaricare: ${type?.name}`,
+        body: decision === 'approva' ? 'La segreteria ha verificato il documento.' : note.trim(),
+        to: [`student:${doc.memberId}`],
+        link: { allieva: '/allieva/documenti' },
+      }])
+    })
+
+  saveSharedDocument: OasiRepository['saveSharedDocument'] = (doc) =>
+    this.commit((db) => {
+      const exists = db.sharedDocuments.some((d) => d.id === doc.id)
+      const next = { ...db, sharedDocuments: exists ? db.sharedDocuments.map((d) => (d.id === doc.id ? doc : d)) : [doc, ...db.sharedDocuments] }
+      if (exists) return next
+      const to = doc.audience === 'tutti' ? ['students', 'teachers'] : doc.audience === 'allieve' ? ['students'] : ['teachers']
+      return withNotifications(next, [{ kind: 'documento', title: `Nuovo documento: ${doc.title}`, body: doc.description, to, link: { allieva: '/allieva/documenti' } }])
+    })
+
+  deleteSharedDocument: OasiRepository['deleteSharedDocument'] = (id) =>
+    this.commit((db) => ({ ...db, sharedDocuments: db.sharedDocuments.filter((d) => d.id !== id) }))
 
   updateAssociation: OasiRepository['updateAssociation'] = (patch) =>
     this.commit((db) => ({ ...db, association: { ...db.association, ...patch } }))

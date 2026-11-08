@@ -9,18 +9,19 @@ import { Field, Input, Select } from '@/components/ui/input'
 import { useDatabase, useRepository } from '@/hooks/useDatabase'
 import { useDemo } from '@/hooks/useDemo'
 import { DEFAULT_USER, ROLE_HOME } from '@/context/demo-context'
-import { DISCIPLINE_LABEL, DISCIPLINES } from '@/lib/labels'
+import { useDisciplines } from '@/hooks/useDisciplines'
 import { todayISO } from '@/lib/dates'
 import { fullName, uid } from '@/lib/utils'
 
 /** Scelta del profilo demo: utente con dati di esempio, altra persona, oppure nuova registrazione */
 export function EnterDialog({ role, onClose }: { role: Role; onClose: () => void }) {
   const db = useDatabase()
+  const disciplines = useDisciplines()
   const repo = useRepository()
   const { enterAs } = useDemo()
   const navigate = useNavigate()
   const [mode, setMode] = useState<'choose' | 'register'>('choose')
-  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', discipline: 'cerchio' as Discipline })
+  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', discipline: (db.disciplines.find((d) => d.isActive)?.id ?? '') as Discipline })
   const [error, setError] = useState('')
 
   const people = role === 'allieva' ? db.students : db.teachers
@@ -107,8 +108,8 @@ export function EnterDialog({ role, onClose }: { role: Role; onClose: () => void
           </Field>
           <Field label="Disciplina che ti interessa" htmlFor="reg-disc">
             <Select id="reg-disc" value={form.discipline} onChange={(e) => setForm({ ...form, discipline: e.target.value as Discipline })}>
-              {DISCIPLINES.map((d) => (
-                <option key={d} value={d}>{DISCIPLINE_LABEL[d]}</option>
+              {disciplines.active.map((d) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
               ))}
             </Select>
           </Field>

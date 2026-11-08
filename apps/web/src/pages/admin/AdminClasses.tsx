@@ -17,12 +17,13 @@ import { classOccupancy, findStudent, findTeacher } from '@/services/selectors'
 import { weekdayName } from '@/lib/dates'
 import { LEVEL_LABEL, LEVELS } from '@/lib/labels'
 import { cn, fullName, uid } from '@/lib/utils'
+import { useDisciplines } from '@/hooks/useDisciplines'
 
-function emptyClass(teacherId: string, room: string): ClassGroup {
+function emptyClass(teacherId: string, room: string, discipline: string): ClassGroup {
   return {
     id: uid('cls'),
     name: '',
-    discipline: 'cerchio',
+    discipline,
     level: 'base',
     teacherId,
     weekday: 1,
@@ -37,6 +38,7 @@ function emptyClass(teacherId: string, room: string): ClassGroup {
 
 export function AdminClasses() {
   const db = useDatabase()
+  const disciplines = useDisciplines()
   const [editing, setEditing] = useState<{ cls: ClassGroup; isNew: boolean } | null>(null)
   const [viewing, setViewing] = useState<ClassGroup | null>(null)
   const [filter, setFilter] = useState<'tutte' | Discipline>('tutte')
@@ -51,7 +53,7 @@ export function AdminClasses() {
         title="Corsi e disponibilità"
         description={`${db.classes.length} classi · ${enrolled}/${totalSeats} posti occupati`}
         actions={
-          <Button onClick={() => setEditing({ cls: emptyClass(db.teachers[0].id, db.association.rooms[0]), isNew: true })}>
+          <Button onClick={() => setEditing({ cls: emptyClass(db.teachers[0].id, db.association.rooms[0], disciplines.active[0]?.id ?? ''), isNew: true })}>
             <Plus /> Nuova classe
           </Button>
         }
@@ -63,11 +65,7 @@ export function AdminClasses() {
         className="mb-5"
         value={filter}
         onChange={setFilter}
-        options={[
-          { value: 'tutte', label: 'Tutte' },
-          { value: 'cerchio', label: 'Cerchio' },
-          { value: 'tessuti', label: 'Tessuti' },
-        ]}
+        options={[{ value: 'tutte', label: 'Tutte' }, ...disciplines.list.filter((d) => d.isActive || db.classes.some((c) => c.discipline === d.id)).map((d) => ({ value: d.id, label: d.shortName }))]}
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {classes.map((c) => {
@@ -76,7 +74,7 @@ export function AdminClasses() {
           const students = c.studentIds.map((id) => findStudent(db, id)).filter((s) => !!s)
           return (
             <Card key={c.id} className="flex flex-col overflow-hidden">
-              <div className={cn('h-1.5', c.discipline === 'cerchio' ? 'bg-cerchio' : 'bg-tessuti')} />
+              <div className="h-1.5" style={{ background: disciplines.get(c.discipline).color }} />
               <CardContent className="flex flex-1 flex-col">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex flex-wrap gap-1.5">
@@ -150,6 +148,7 @@ export function AdminClasses() {
 
 function ClassDialog({ initial, isNew, onClose }: { initial: ClassGroup; isNew: boolean; onClose: () => void }) {
   const db = useDatabase()
+  const disciplines = useDisciplines()
   const repo = useRepository()
   const { toast } = useToast()
   const [cls, setCls] = useState(initial)
@@ -214,8 +213,14 @@ function ClassDialog({ initial, isNew, onClose }: { initial: ClassGroup; isNew: 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Disciplina" htmlFor="c-disc">
             <Select id="c-disc" value={cls.discipline} onChange={(e) => set('discipline', e.target.value as Discipline)}>
-              <option value="cerchio">Cerchio aereo</option>
-              <option value="tessuti">Tessuti aerei</option>
+              {disciplines.list
+                .filter((d) => d.isActive || d.id === initial.discipline)
+                .map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                    {d.isActive ? '' : ' (disattivata)'}
+                  </option>
+                ))}
             </Select>
           </Field>
           <Field label="Livello" htmlFor="c-level">

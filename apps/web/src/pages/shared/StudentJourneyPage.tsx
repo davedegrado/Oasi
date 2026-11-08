@@ -6,6 +6,7 @@ import { FiguresByStatus, ProgressOverview } from '@/components/students/Progres
 import { AttendanceHistory } from '@/components/students/AttendanceHistory'
 import { GoalsCard } from '@/components/students/GoalsCard'
 import { AdminInfoCard } from '@/components/students/AdminInfoCard'
+import { MemberDocumentsPanel } from '@/components/documents/MemberDocumentsPanel'
 import { useDatabase } from '@/hooks/useDatabase'
 import { findStudent } from '@/services/selectors'
 
@@ -20,6 +21,12 @@ export function StudentJourneyPage({ backTo, backLabel, figureBase, showAdmin }:
     <div className="animate-fade-up space-y-5">
       <BackButton fallback={backTo} className="mb-0" />
       <StudentHeader student={student} />
+      {/* Documenti: solo amministrazione (le insegnanti non accedono a dati personali e sanitari) */}
+      {showAdmin && (
+        <div id="documenti" className="scroll-mt-24">
+          <MemberDocumentsPanel memberId={student.id} mode="admin" />
+        </div>
+      )}
       <ProgressOverview studentId={student.id} />
       <div className="grid gap-5 md:grid-cols-2">
         <FiguresByStatus studentId={student.id} status="in_progetto" linkBase={figureBase} />

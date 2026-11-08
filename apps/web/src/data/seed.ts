@@ -14,11 +14,13 @@ import type {
 } from '@/types'
 import { addDays, startOfWeek, todayISO } from '@/lib/dates'
 import { demoClasses } from './classes'
+import { demoDisciplines } from './disciplines'
+import { buildDemoDocuments, buildSharedDocuments, demoDocumentTypes } from './documents'
 import { demoAnnouncementSeeds, demoAssociation, demoEventSeeds } from './events'
 import { demoFigureSeeds, photo } from './figures'
 import { demoStudentSeeds, demoTeachers } from './people'
 
-export const DATABASE_VERSION = 6
+export const DATABASE_VERSION = 7
 
 /** Hash deterministico: la demo genera sempre gli stessi dati per lo stesso giorno */
 function hash(text: string): number {
@@ -278,5 +280,9 @@ export function createSeedDatabase(today: string = todayISO()): OasiDatabase {
     ...buildRequests(classes, lessons, today),
     closures,
     notifications: buildNotifications(today),
+    disciplines: structuredClone(demoDisciplines),
+    documentTypes: structuredClone(demoDocumentTypes),
+    documents: buildDemoDocuments(today),
+    sharedDocuments: buildSharedDocuments(today),
   }
 }

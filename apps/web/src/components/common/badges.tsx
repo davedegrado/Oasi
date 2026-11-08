@@ -1,19 +1,36 @@
-import { Circle, Wind } from 'lucide-react'
-import type { Discipline, LearningStatus, Level, MembershipStatus } from '@/types'
+import { Circle, Dumbbell, Flower2, Music, Sparkles, Star, Wind } from 'lucide-react'
+import type { Discipline, DisciplineIconName, LearningStatus, Level, MembershipStatus } from '@/types'
 import { Badge } from '@/components/ui/badge'
-import { DISCIPLINE_SHORT, LEVEL_LABEL, MEMBERSHIP_LABEL, STATUS_LABEL } from '@/lib/labels'
+import { LEVEL_LABEL, MEMBERSHIP_LABEL, STATUS_LABEL } from '@/lib/labels'
+import { softColor, useDisciplines } from '@/hooks/useDisciplines'
 import { cn } from '@/lib/utils'
 import { STATUS_STYLE } from '@/lib/statusStyle'
 
+const ICONS: Record<DisciplineIconName, typeof Circle> = { circle: Circle, wind: Wind, sparkles: Sparkles, music: Music, flower: Flower2, dumbbell: Dumbbell, star: Star }
+
+export function IconByName({ name, className }: { name: DisciplineIconName; className?: string }) {
+  const Icon = ICONS[name] ?? Star
+  return <Icon className={className} strokeWidth={name === 'circle' ? 2.4 : 2} />
+}
+
 export function DisciplineIcon({ discipline, className }: { discipline: Discipline; className?: string }) {
-  return discipline === 'cerchio' ? <Circle className={className} strokeWidth={2.4} /> : <Wind className={className} />
+  const { get } = useDisciplines()
+  return <IconByName name={get(discipline).icon} className={className} />
+}
+
+/** Pallino colorato o striscia con il colore della disciplina */
+export function DisciplineDot({ discipline, className }: { discipline: Discipline; className?: string }) {
+  const { get } = useDisciplines()
+  return <span className={cn('inline-block rounded-full', className)} style={{ background: get(discipline).color }} />
 }
 
 export function DisciplineBadge({ discipline, className }: { discipline: Discipline; className?: string }) {
+  const { get } = useDisciplines()
+  const d = get(discipline)
   return (
-    <Badge tone={discipline} className={className}>
-      <DisciplineIcon discipline={discipline} />
-      {DISCIPLINE_SHORT[discipline]}
+    <Badge className={className} style={{ background: softColor(d.color), color: d.color }}>
+      <IconByName name={d.icon} />
+      {d.shortName}
     </Badge>
   )
 }

@@ -141,6 +141,12 @@ function oasiSeed(db: OasiDatabase): string {
   push(`insert into app.announcements (tenant_id, title, body, priority, audience, published_at, is_demo) values\n  ${db.announcements
     .map((a) => `(${q(T)}, ${q(a.title)}, ${q(a.body)}, ${q(a.priority === 'importante' ? 'important' : 'normal')}, ${q(audience[a.audience])}, ${rel(a.date)}, true)`)
     .join(',\n  ')};`)
+  // Tipologie di documento (i file dimostrativi restano solo nella demo locale)
+  const CATEGORY = { personale: 'personal', iscrizione: 'enrollment', liberatoria: 'waiver', consenso: 'consent', certificato_medico: 'medical', altro: 'other' } as const
+  const SIGNATURE = { nessuna: 'none', caricamento_firmato: 'upload_signed', elettronica: 'electronic' } as const
+  push(`insert into app.document_types (tenant_id, id, name, category, description, is_required, signature_mode, template_text, validity_months, is_sensitive, is_active) values\n  ${db.documentTypes
+    .map((t) => `(${q(T)}, ${q(uuid(`oasi:document-type:${t.id}`))}, ${q(t.name)}, ${q(CATEGORY[t.category])}, ${q(t.description)}, ${t.required}, ${q(SIGNATURE[t.signatureMode])}, ${t.templateText ? q(t.templateText) : 'null'}, ${t.validityMonths ?? 'null'}, ${t.sensitive}, ${t.active})`)
+    .join(',\n  ')};`)
   push('commit;')
   return out.join('\n\n') + '\n'
 }

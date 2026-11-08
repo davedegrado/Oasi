@@ -17,7 +17,7 @@ import { useCurrentStudent } from '@/hooks/useDemo'
 import { useToast } from '@/hooks/useToast'
 import { classOccupancy, findTeacher } from '@/services/selectors'
 import { weekdayName } from '@/lib/dates'
-import { DISCIPLINE_LABEL, DISCIPLINES } from '@/lib/labels'
+import { useDisciplines } from '@/hooks/useDisciplines'
 import { cn, fullName } from '@/lib/utils'
 
 /** Catalogo dei corsi: l'allieva chiede l'iscrizione, l'insegnante della classe la approva */
@@ -26,6 +26,7 @@ export function StudentClasses() {
   const repo = useRepository()
   const { toast } = useToast()
   const student = useCurrentStudent()
+  const disciplines = useDisciplines()
   const [requesting, setRequesting] = useState<ClassGroup | null>(null)
   const [note, setNote] = useState('')
 
@@ -37,12 +38,13 @@ export function StudentClasses() {
       <BackButton fallback="/allieva" />
       <PageHeader eyebrow="Corsi" title="Iscriviti a un corso" description="Scegli una classe e invia la richiesta: l’insegnante della classe la confermerà." />
       <div className="space-y-8">
-        {DISCIPLINES.map((d) => {
+        {disciplines.active.map((info) => {
+          const d = info.id
           const classes = db.classes.filter((c) => c.discipline === d).sort((a, b) => a.weekday - b.weekday)
           if (classes.length === 0) return null
           return (
             <section key={d}>
-              <h2 className="mb-3 text-lg font-bold">{DISCIPLINE_LABEL[d]}</h2>
+              <h2 className="mb-3 text-lg font-bold">{info.name}</h2>
               <div className="grid gap-3 md:grid-cols-2">
                 {classes.map((c) => {
                   const teacher = findTeacher(db, c.teacherId)
@@ -52,7 +54,7 @@ export function StudentClasses() {
                   const pending = req?.status === 'in_attesa'
                   return (
                     <Card key={c.id} className={cn('overflow-hidden', enrolled && 'border-ok/40')}>
-                      <div className={cn('h-1.5', c.discipline === 'cerchio' ? 'bg-cerchio' : 'bg-tessuti')} />
+                      <div className="h-1.5" style={{ background: info.color }} />
                       <CardContent className="space-y-3">
                         <div className="flex items-start justify-between gap-2">
                           <div>

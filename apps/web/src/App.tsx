@@ -18,6 +18,7 @@ import { StudentProgress } from '@/pages/student/StudentProgress'
 import { StudentProfile } from '@/pages/student/StudentProfile'
 import { StudentClasses } from '@/pages/student/StudentClasses'
 import { StudentEvents } from '@/pages/student/StudentEvents'
+import { StudentDocuments } from '@/pages/student/StudentDocuments'
 import { TeacherDashboard } from '@/pages/teacher/TeacherDashboard'
 import { TeacherLessons } from '@/pages/teacher/TeacherLessons'
 import { TeacherLessonDetail } from '@/pages/teacher/TeacherLessonDetail'
@@ -28,6 +29,7 @@ import { AdminUsers } from '@/pages/admin/AdminUsers'
 import { AdminClasses } from '@/pages/admin/AdminClasses'
 import { AdminEvents } from '@/pages/admin/AdminEvents'
 import { AdminSettings } from '@/pages/admin/AdminSettings'
+import { AdminArchive } from '@/pages/admin/AdminArchive'
 import { FigureEditorPage } from '@/pages/shared/FigureEditorPage'
 import { ManageFiguresPage } from '@/pages/shared/ManageFiguresPage'
 import { ManageFigureDetailPage } from '@/pages/shared/ManageFigureDetailPage'
@@ -61,6 +63,7 @@ export default function App() {
               <Route path="profilo" element={<StudentProfile />} />
               <Route path="classi" element={<StudentClasses />} />
               <Route path="eventi" element={<StudentEvents />} />
+              <Route path="documenti" element={<StudentDocuments />} />
               <Route path="notifiche" element={<NotificationsPage />} />
             </Route>
 
@@ -98,6 +101,7 @@ export default function App() {
               <Route path="utenti" element={<AdminUsers />} />
               <Route path="utenti/:id" element={<StudentJourneyPage backTo="/admin/utenti" backLabel="Utenti" figureBase="/admin/figure" showAdmin />} />
               <Route path="classi" element={<AdminClasses />} />
+              <Route path="archivio" element={<AdminArchive />} />
               <Route path="figure" element={<ManageFiguresPage basePath="/admin/figure" />} />
               <Route path="figure/nuova" element={<FigureEditorPage basePath="/admin/figure" />} />
               <Route path="figure/:id" element={<ManageFigureDetailPage basePath="/admin/figure" studentBase="/admin/utenti" />} />

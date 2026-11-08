@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight, BellRing, CalendarClock, ChevronRight, Clock, Megaphone, RefreshCcw, Sparkles } from 'lucide-react'
+import { ArrowRight, BellRing, FileWarning, CalendarClock, ChevronRight, Clock, Megaphone, RefreshCcw, Sparkles } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { HoopArc } from '@/components/common/Decor'
 import { SectionTitle } from '@/components/common/PageHeader'
@@ -12,6 +12,7 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { useDatabase } from '@/hooks/useDatabase'
 import { useCurrentStudent } from '@/hooks/useDemo'
 import { findClass, findTeacher, lessonsForStudent, nextLesson, progressSummary, recentProgress, upcomingEvents } from '@/services/selectors'
+import { documentSummary, memberDocuments } from '@/services/documents'
 import { formatDate, greeting, relativeDayLabel, todayISO } from '@/lib/dates'
 import { cn, fullName } from '@/lib/utils'
 
@@ -34,6 +35,8 @@ export function StudentHome() {
       return lesson && lesson.date >= todayISO() ? { request, lesson, cls: findClass(db, lesson.classId) } : null
     })
     .filter((x): x is NonNullable<typeof x> => !!x)
+  const docs = documentSummary(memberDocuments(db, student.id))
+  const docsToDo = docs.missing.length + docs.toFix.length + docs.expiring.length
   const working = db.figures.filter((f) => db.progress[student.id]?.[f.id]?.status === 'in_progetto')
 
   return (
@@ -48,6 +51,18 @@ export function StudentHome() {
 
       <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
         <div className="space-y-3">
+        {docsToDo > 0 && (
+          <Link to="/allieva/documenti" className="flex animate-fade-up items-center gap-3 rounded-3xl bg-warn-soft p-3.5 text-sm text-ink">
+            <FileWarning className="size-5 shrink-0 text-warn" />
+            <span className="min-w-0 flex-1">
+              <strong>Documenti da sistemare</strong>
+              <span className="block text-ink-soft">
+                {[docs.missing.length && `${docs.missing.length} mancanti`, docs.toFix.length && `${docs.toFix.length} da correggere`, docs.expiring.length && `${docs.expiring.length} in scadenza`].filter(Boolean).join(' · ')}
+              </span>
+            </span>
+            <ChevronRight className="size-4 shrink-0" />
+          </Link>
+        )}
         {/* Prossima lezione (compatta) */}
         {next && nextCls ? (
           <div className="relative animate-fade-up overflow-hidden rounded-3xl bg-gradient-to-br from-rosa-intenso to-rosa p-4 text-white shadow-float sm:p-5">

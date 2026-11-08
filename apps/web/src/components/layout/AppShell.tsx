@@ -36,9 +36,12 @@ export function AppShell({ role }: { role: Role }) {
   const db = useDatabase()
   const requestCount = role === 'admin' ? pendingRequests(db, null).total : role === 'insegnante' && persona?.userId ? pendingRequests(db, persona.userId).total : 0
   const notificationsPath = `/${role}/notifiche`
+  const on = (item: { also?: string[] }, active: boolean) => active || !!item.also?.some((p) => pathname.startsWith(p))
+  const docsToReview = role === 'admin' ? (db.documents ?? []).filter((d) => d.current && d.status === 'in_verifica').length : 0
+  const countFor = (b?: string) => (b === 'requests' ? requestCount : b === 'documents' ? docsToReview : 0)
   const badge = (b?: string) =>
-    b === 'requests' && requestCount > 0 ? (
-      <span className="absolute -top-0.5 right-[calc(50%-20px)] grid min-w-[18px] place-items-center rounded-full bg-rosa-intenso px-1 text-[10px] leading-[18px] font-bold text-white ring-2 ring-white">{requestCount}</span>
+    countFor(b) > 0 ? (
+      <span className="absolute -top-0.5 right-[calc(50%-20px)] grid min-w-[18px] place-items-center rounded-full bg-rosa-intenso px-1 text-[10px] leading-[18px] font-bold text-white ring-2 ring-white">{countFor(b)}</span>
     ) : null
 
   useEffect(() => {
@@ -65,21 +68,21 @@ export function AppShell({ role }: { role: Role }) {
               key={item.to}
               to={item.to}
               end={item.end}
-              className={({ isActive }) =>
+              className={({ isActive: a }) =>
                 cn(
                   'group flex items-center gap-3 rounded-2xl px-3.5 py-3 text-[15px] font-semibold transition',
-                  isActive ? 'bg-cipria text-ink' : 'text-ink-muted hover:bg-cipria-50 hover:text-ink',
+                  on(item, a) ? 'bg-cipria text-ink' : 'text-ink-muted hover:bg-cipria-50 hover:text-ink',
                 )
               }
             >
-              {({ isActive }) => (
+              {({ isActive: a }) => (
                 <>
-                  <span className={cn('grid size-9 place-items-center rounded-full transition', isActive ? 'bg-rosa-intenso text-white shadow-soft' : 'bg-cipria-100 text-ink-soft group-hover:bg-cipria')}>
+                  <span className={cn('grid size-9 place-items-center rounded-full transition', on(item, a) ? 'bg-rosa-intenso text-white shadow-soft' : 'bg-cipria-100 text-ink-soft group-hover:bg-cipria')}>
                     <item.icon className="size-[18px]" />
                   </span>
                   <span className="flex-1">{item.label}</span>
-                  {item.badge === 'requests' && requestCount > 0 && (
-                    <span className="rounded-full bg-rosa-intenso px-2 py-0.5 text-xs font-bold text-white">{requestCount}</span>
+                  {countFor(item.badge) > 0 && (
+                    <span className="rounded-full bg-rosa-intenso px-2 py-0.5 text-xs font-bold text-white">{countFor(item.badge)}</span>
                   )}
                 </>
               )}
@@ -146,10 +149,10 @@ export function AppShell({ role }: { role: Role }) {
               key={item.to}
               to={item.to}
               end={item.end}
-              className={({ isActive }) =>
+              className={({ isActive: a }) =>
                 cn(
                   'relative flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-[1.25rem] py-2 text-[10.5px] font-semibold transition',
-                  isActive ? 'bg-cipria text-rosa-scuro' : 'text-ink-muted active:bg-cipria-50',
+                  on(item, a) ? 'bg-cipria text-rosa-scuro' : 'text-ink-muted active:bg-cipria-50',
                 )
               }
             >

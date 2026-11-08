@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { PageHeader } from '@/components/common/PageHeader'
+import { BackButton } from '@/components/common/BackButton'
 import { FigureArchive } from '@/components/figures/FigureArchive'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { useDatabase } from '@/hooks/useDatabase'
@@ -15,10 +16,11 @@ export function ManageFiguresPage({ basePath }: { basePath: string }) {
   const students = isTeacher && persona?.userId ? studentsOfTeacher(db, persona.userId) : db.students
   return (
     <div className="animate-fade-up">
+      {!isTeacher && <BackButton fallback="/admin/gestione?sezione=didattica" />}
       <PageHeader
-        eyebrow={isTeacher ? 'Figure' : 'Archivio figure'}
-        title={isTeacher ? 'Archivio figure' : 'Gestione archivio'}
-        description={`${db.figures.length} figure tra cerchio e tessuti. Inserisci nuove figure, modifica descrizioni e sequenze fotografiche.`}
+        eyebrow={isTeacher ? 'Figure' : 'Gestione · Didattica'}
+        title="Archivio figure"
+        description={`${db.figures.length} figure in archivio. Inserisci nuove figure, modifica descrizioni e sequenze fotografiche.`}
         actions={
           <Link to={`${basePath}/nuova`} className={buttonVariants()}>
             <Plus /> Nuova figura

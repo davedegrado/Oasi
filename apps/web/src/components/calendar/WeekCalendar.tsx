@@ -8,6 +8,7 @@ import { useDatabase } from '@/hooks/useDatabase'
 import { findClass } from '@/services/selectors'
 import { addDays, dayNumber, formatDate, formatDateShort, formatDayShort, monthDays, monthLabel, todayISO, weekDays } from '@/lib/dates'
 import { cn } from '@/lib/utils'
+import { useDisciplines } from '@/hooks/useDisciplines'
 
 type View = 'mese' | 'settimana' | 'giorno'
 
@@ -20,11 +21,16 @@ interface WeekCalendarProps {
   renderFooter?: (lesson: Lesson) => React.ReactNode
   renderBadges?: (lesson: Lesson) => React.ReactNode
   initialView?: View
+  /** Evidenzia i giorni con chiusure o eventi (calendario generale) */
+  markDay?: (date: string) => { closed?: boolean; event?: boolean }
+  /** Contenuto aggiuntivo in testa alla vista giorno (chiusure, eventi) */
+  renderDayHeader?: (date: string) => React.ReactNode
 }
 
 /** Calendario con vista settimanale e giornaliera */
-export function WeekCalendar({ lessons, onLessonClick, canClick, renderAside, renderFooter, renderBadges, initialView = 'settimana' }: WeekCalendarProps) {
+export function WeekCalendar({ lessons, onLessonClick, canClick, renderAside, renderFooter, renderBadges, initialView = 'settimana', markDay, renderDayHeader }: WeekCalendarProps) {
   const db = useDatabase()
+  const disciplines = useDisciplines()
   const today = todayISO()
   const [selected, setSelected] = useState(today)
   const [view, setView] = useState<View>(initialView)
@@ -104,6 +110,7 @@ export function WeekCalendar({ lessons, onLessonClick, canClick, renderAside, re
           <div className="grid grid-cols-7 gap-1">
             {monthDays(selected).map(({ date, inMonth }) => {
               const items = byDay.get(date) ?? []
+              const mark = markDay?.(date)
               return (
                 <button
                   key={date}
@@ -115,7 +122,8 @@ export function WeekCalendar({ lessons, onLessonClick, canClick, renderAside, re
                   className={cn(
                     'flex aspect-square flex-col items-center justify-center gap-1 rounded-2xl text-sm transition sm:aspect-[4/3]',
                     !inMonth && 'opacity-35',
-                    date === today ? 'bg-ink font-bold text-white' : 'hover:bg-cipria-50',
+                    date === today ? 'bg-ink font-bold text-white' : mark?.closed ? 'bg-danger-soft text-danger' : 'hover:bg-cipria-50',
+                    mark?.event && date !== today && 'ring-2 ring-inset ring-rosa/60',
                   )}
                   aria-label={`${formatDate(date, { weekday: true })}: ${items.length} lezioni`}
                 >
@@ -123,7 +131,7 @@ export function WeekCalendar({ lessons, onLessonClick, canClick, renderAside, re
                   <span className="flex h-1.5 gap-0.5">
                     {items.slice(0, 3).map((l) => {
                       const cls = findClass(db, l.classId)
-                      return <span key={l.id} className={cn('size-1.5 rounded-full', l.status === 'annullata' ? 'bg-ink-muted/40' : cls?.discipline === 'cerchio' ? 'bg-cerchio' : 'bg-tessuti')} />
+                      return <span key={l.id} className={cn('size-1.5 rounded-full', l.status === 'annullata' && 'bg-ink-muted/40')} style={l.status === 'annullata' ? undefined : { background: disciplines.get(cls?.discipline ?? '').color }} />
                     })}
                   </span>
                 </button>
@@ -159,7 +167,7 @@ export function WeekCalendar({ lessons, onLessonClick, canClick, renderAside, re
               <span className="flex h-1.5 gap-0.5">
                 {items.slice(0, 3).map((l) => {
                   const cls = findClass(db, l.classId)
-                  return <span key={l.id} className={cn('size-1.5 rounded-full', l.status === 'annullata' ? 'bg-ink-muted/40' : cls?.discipline === 'cerchio' ? 'bg-cerchio' : 'bg-tessuti')} />
+                  return <span key={l.id} className={cn('size-1.5 rounded-full', l.status === 'annullata' && 'bg-ink-muted/40')} style={l.status === 'annullata' ? undefined : { background: disciplines.get(cls?.discipline ?? '').color }} />
                 })}
               </span>
             </button>
@@ -168,8 +176,16 @@ export function WeekCalendar({ lessons, onLessonClick, canClick, renderAside, re
       </div>
       )}
 
+      {view === 'mese' && markDay && (
+        <p className="-mt-3 mb-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
+          <span className="flex items-center gap-1.5"><span className="size-3 rounded bg-danger-soft" /> Chiusura</span>
+          <span className="flex items-center gap-1.5"><span className="size-3 rounded ring-2 ring-rosa/60 ring-inset" /> Evento</span>
+          <span>Tocca un giorno per i dettagli</span>
+        </p>
+      )}
       {view === 'mese' ? null : view === 'giorno' ? (
         <div className="space-y-3">
+          {renderDayHeader?.(selected)}
           {dayLessons.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-rosa/50 bg-white/60 p-8 text-center">
               <p className="font-display font-bold text-ink">Nessuna lezione</p>
@@ -214,10 +230,10 @@ export function WeekCalendar({ lessons, onLessonClick, canClick, renderAside, re
                       <button
                         key={l.id}
                         type="button"
+                        style={{ borderLeftColor: disciplines.get(cls.discipline).color }}
                         onClick={clickable(l) ? () => onLessonClick!(l) : () => { setSelected(d); setView('giorno') }}
                         className={cn(
                           'block w-full cursor-pointer rounded-2xl border-l-4 bg-white p-2.5 text-left shadow-soft transition hover:shadow-float',
-                          cls.discipline === 'cerchio' ? 'border-cerchio' : 'border-tessuti',
                           cancelled && 'opacity-60',
                         )}
                       >
@@ -243,12 +259,13 @@ export function WeekCalendar({ lessons, onLessonClick, canClick, renderAside, re
       )}
 
       <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-xs text-ink-muted">
-        <span className="flex items-center gap-1.5">
-          <span className="size-2.5 rounded-full bg-cerchio" /> Cerchio aereo
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="size-2.5 rounded-full bg-tessuti" /> Tessuti aerei
-        </span>
+        {disciplines.list
+          .filter((d) => lessons.some((l) => findClass(db, l.classId)?.discipline === d.id))
+          .map((d) => (
+            <span key={d.id} className="flex items-center gap-1.5">
+              <span className="size-2.5 rounded-full" style={{ background: d.color }} /> {d.name}
+            </span>
+          ))}
         <span className="flex items-center gap-1.5">
           <span className="size-2.5 rounded-full bg-warn" /> Orario variato
         </span>

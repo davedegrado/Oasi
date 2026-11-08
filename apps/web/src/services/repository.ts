@@ -1,6 +1,9 @@
 import type {
   AppNotification,
   Closure,
+  DisciplineInfo,
+  DocumentType,
+  SharedDocument,
   Teacher,
   AssociationInfo,
   AttendanceMark,
@@ -75,9 +78,39 @@ export interface OasiRepository {
   deleteEvent(eventId: string): Promise<void>
   toggleEventParticipation(eventId: string, studentId: string): Promise<void>
 
+  // Discipline (dati della palestra): la disattivazione conserva classi, allieve e storico
+  saveDiscipline(discipline: DisciplineInfo): Promise<void>
+
+  // Archivio documentale: un documento appartiene a un profilo, l'archivio lo legge senza copiarlo
+  saveDocumentType(type: DocumentType): Promise<void>
+  /** Caricamento (o sostituzione) di un file: crea una nuova versione in verifica */
+  uploadDocument(input: DocumentUpload): Promise<void>
+  /** Firma elettronica nell'app: il nome deve coincidere con quello del profilo */
+  signDocument(memberId: string, typeId: string, signerName: string): Promise<void>
+  reviewDocument(documentId: string, decision: DocumentDecision, note: string): Promise<void>
+  saveSharedDocument(doc: SharedDocument): Promise<void>
+  deleteSharedDocument(id: string): Promise<void>
+
   // Associazione
   updateAssociation(patch: Partial<AssociationInfo>): Promise<void>
 
   /** Ripristina i dati dimostrativi iniziali */
   reset(): Promise<void>
 }
+
+export interface DocumentUpload {
+  memberId: string
+  typeId: string
+  /** chi carica: id dell'allieva o 'admin' */
+  uploadedBy: string
+  fileName: string
+  fileType: string
+  fileSize: number
+  fileData: string
+  /** il file caricato è già firmato a mano */
+  signedUpload: boolean
+  /** scadenza (es. certificato medico); se assente si usa la validità della tipologia */
+  expiresOn?: string
+}
+
+export type DocumentDecision = 'approva' | 'rifiuta' | 'richiedi_sostituzione'

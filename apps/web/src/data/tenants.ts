@@ -3,7 +3,7 @@ import { asset, photo } from '@/lib/assets'
 
 const ALL_MODULES = [
   'users', 'students', 'guardians', 'teachers', 'classes', 'calendar', 'bookings', 'attendance', 'makeups',
-  'payments', 'events', 'communications', 'notifications', 'figure_archive', 'progress', 'media', 'reports', 'administration',
+  'payments', 'events', 'communications', 'notifications', 'figure_archive', 'progress', 'media', 'reports', 'administration', 'documents',
 ]
 
 /** Valori predefiniti della piattaforma: usati quando un tenant non configura un elemento */

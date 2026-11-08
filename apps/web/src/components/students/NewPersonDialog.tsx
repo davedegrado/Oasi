@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Field, Input, Select, Textarea } from '@/components/ui/input'
 import { useDatabase, useRepository } from '@/hooks/useDatabase'
 import { useToast } from '@/hooks/useToast'
-import { DISCIPLINE_LABEL, DISCIPLINES, LEVEL_LABEL, LEVELS, MEMBERSHIP_LABEL } from '@/lib/labels'
+import { LEVEL_LABEL, LEVELS, MEMBERSHIP_LABEL } from '@/lib/labels'
+import { useDisciplines } from '@/hooks/useDisciplines'
 import { todayISO } from '@/lib/dates'
 import { cn, uid } from '@/lib/utils'
 
@@ -15,12 +16,13 @@ const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())
 /** Nuova allieva o nuova insegnante: la persona riceve un invito via email (simulato nella demo) */
 export function NewPersonDialog({ kind, onClose }: { kind: 'allieva' | 'insegnante'; onClose: () => void }) {
   const db = useDatabase()
+  const disciplines = useDisciplines()
   const repo = useRepository()
   const { toast } = useToast()
   const [f, setF] = useState({
     firstName: '', lastName: '', email: '', phone: '', birthDate: '', bio: '',
-    level: 'base' as Level, discipline: 'cerchio' as Discipline, status: 'attiva' as MembershipStatus,
-    classIds: [] as string[], disciplines: ['cerchio'] as Discipline[], certificate: '',
+    level: 'base' as Level, discipline: (db.disciplines.find((d) => d.isActive)?.id ?? '') as Discipline, status: 'attiva' as MembershipStatus,
+    classIds: [] as string[], disciplines: [] as Discipline[], certificate: '',
   })
   const [error, setError] = useState('')
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((x) => ({ ...x, [k]: v }))
@@ -43,7 +45,7 @@ export function NewPersonDialog({ kind, onClose }: { kind: 'allieva' | 'insegnan
       await repo.addStudent(student)
     } else {
       const teacher: Teacher = {
-        id: uid('tch'), firstName: f.firstName.trim(), lastName: f.lastName.trim(), avatar: '', disciplines: f.disciplines.length ? f.disciplines : ['cerchio'],
+        id: uid('tch'), firstName: f.firstName.trim(), lastName: f.lastName.trim(), avatar: '', disciplines: f.disciplines,
         bio: f.bio.trim(), email: f.email.trim().toLowerCase(), phone: f.phone.trim(), since: new Date().getFullYear(), invitePending: true,
       }
       await repo.addTeacher(teacher)
@@ -108,8 +110,8 @@ export function NewPersonDialog({ kind, onClose }: { kind: 'allieva' | 'insegnan
               </Field>
               <Field label="Disciplina principale" htmlFor="np-disc">
                 <Select id="np-disc" value={f.discipline} onChange={(e) => set('discipline', e.target.value as Discipline)}>
-                  {DISCIPLINES.map((d) => (
-                    <option key={d} value={d}>{DISCIPLINE_LABEL[d]}</option>
+                  {disciplines.active.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
                   ))}
                 </Select>
               </Field>
@@ -140,13 +142,13 @@ export function NewPersonDialog({ kind, onClose }: { kind: 'allieva' | 'insegnan
             <div>
               <p className="mb-2 text-sm font-semibold text-ink-soft">Discipline insegnate</p>
               <div className="flex flex-wrap gap-2">
-                {DISCIPLINES.map((d) => {
+                {disciplines.active.map(({ id: d, name }) => {
                   const on = f.disciplines.includes(d)
                   return (
                     <button key={d} type="button" aria-pressed={on}
                       onClick={() => set('disciplines', on ? f.disciplines.filter((x) => x !== d) : [...f.disciplines, d])}
                       className={cn('rounded-full border px-3.5 py-1.5 text-sm font-semibold', on ? 'border-ink bg-ink text-white' : 'border-line bg-white text-ink-soft')}>
-                      {DISCIPLINE_LABEL[d]}
+                      {name}
                     </button>
                   )
                 })}

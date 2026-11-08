@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { BellOff, CalendarClock, CalendarHeart, CheckCheck, DoorClosed, GraduationCap, Megaphone, RefreshCcw } from 'lucide-react'
+import { BellOff, CalendarClock, CalendarHeart, CheckCheck, DoorClosed, FileText, GraduationCap, Megaphone, RefreshCcw } from 'lucide-react'
 import type { AppNotification, NotificationKind, Role } from '@/types'
 import { PageHeader } from '@/components/common/PageHeader'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -17,6 +17,7 @@ const ICONS: Record<NotificationKind, typeof Megaphone> = {
   chiusura: DoorClosed,
   evento: CalendarHeart,
   comunicazione: Megaphone,
+  documento: FileText,
 }
 
 /** Centro notifiche (nella versione reale si aggiungeranno le notifiche push) */

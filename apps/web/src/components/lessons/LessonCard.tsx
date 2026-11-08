@@ -7,6 +7,7 @@ import { useDatabase } from '@/hooks/useDatabase'
 import { findClass, findTeacher } from '@/services/selectors'
 import { formatDate, relativeDayLabel } from '@/lib/dates'
 import { cn, fullName } from '@/lib/utils'
+import { useDisciplines } from '@/hooks/useDisciplines'
 
 interface LessonCardProps {
   lesson: Lesson
@@ -39,6 +40,7 @@ export function LessonStatusBadge({ lesson }: { lesson: Lesson }) {
 
 export function LessonCard({ lesson, showDate, onClick, aside, footer, badges, compact, className }: LessonCardProps) {
   const db = useDatabase()
+  const disciplines = useDisciplines()
   const cls = findClass(db, lesson.classId)
   const teacher = findTeacher(db, cls?.teacherId)
   if (!cls) return null
@@ -57,7 +59,7 @@ export function LessonCard({ lesson, showDate, onClick, aside, footer, badges, c
       )}
     >
       <div className="flex w-full items-stretch gap-3.5">
-      <span className={cn('w-1.5 shrink-0 rounded-full', cls.discipline === 'cerchio' ? 'bg-cerchio' : 'bg-tessuti', cancelled && 'opacity-30')} />
+      <span className={cn('w-1.5 shrink-0 rounded-full', cancelled && 'opacity-30')} style={{ background: disciplines.get(cls.discipline).color }} />
       <div className="flex w-16 shrink-0 flex-col justify-center">
         <span className={cn('font-display text-lg leading-none font-extrabold text-ink', cancelled && 'text-ink-muted line-through')}>{lesson.startTime}</span>
         <span className="mt-1 text-xs text-ink-muted">{lesson.endTime}</span>
