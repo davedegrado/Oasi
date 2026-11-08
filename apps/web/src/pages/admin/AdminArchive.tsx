@@ -216,8 +216,7 @@ function MissingTab() {
 
 const SIGNATURE_LABEL: Record<DocumentType['signatureMode'], string> = {
   nessuna: 'Nessuna firma',
-  caricamento_firmato: 'Caricamento di un documento già firmato',
-  elettronica: 'Firma elettronica nell’app',
+  caricamento_firmato: 'Da caricare firmato a mano',
 }
 
 function TypesTab() {
@@ -300,7 +299,7 @@ function TypeDialog({ type, onClose }: { type: DocumentType; onClose: () => void
             {CATEGORIES.map((c) => <option key={c} value={c}>{DOCUMENT_CATEGORY_LABEL[c]}</option>)}
           </Select>
         </Field>
-        <Field label="Firma" htmlFor="dt-sign">
+        <Field label="Firma a mano" htmlFor="dt-sign">
           <Select id="dt-sign" value={form.signatureMode} onChange={(e) => set('signatureMode', e.target.value as DocumentType['signatureMode'])}>
             {(Object.keys(SIGNATURE_LABEL) as DocumentType['signatureMode'][]).map((s) => <option key={s} value={s}>{SIGNATURE_LABEL[s]}</option>)}
           </Select>
@@ -308,11 +307,6 @@ function TypeDialog({ type, onClose }: { type: DocumentType; onClose: () => void
         <Field label="Descrizione per le allieve" htmlFor="dt-desc" className="sm:col-span-2">
           <Textarea id="dt-desc" rows={2} value={form.description} onChange={(e) => set('description', e.target.value)} />
         </Field>
-        {form.signatureMode === 'elettronica' && (
-          <Field label="Testo da firmare nell’app" htmlFor="dt-text" className="sm:col-span-2">
-            <Textarea id="dt-text" rows={4} value={form.templateText ?? ''} onChange={(e) => set('templateText', e.target.value)} />
-          </Field>
-        )}
         <Field label="Validità (mesi, vuoto = nessuna scadenza)" htmlFor="dt-val">
           <Input id="dt-val" type="number" min={1} value={form.validityMonths ?? ''} onChange={(e) => set('validityMonths', e.target.value ? Number(e.target.value) : undefined)} />
         </Field>

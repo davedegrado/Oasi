@@ -64,15 +64,33 @@ function migrateFrom6(db: OasiDatabase): OasiDatabase {
   }
 }
 
+type LegacyDoc = OasiDatabase['documents'][number] & { signature?: { method: string } }
+
+/** v7 → v8: nessuna firma nell'app, i moduli si caricano firmati a mano */
+function migrateFrom7(db: OasiDatabase): OasiDatabase {
+  return {
+    ...db,
+    version: DATABASE_VERSION,
+    documentTypes: db.documentTypes.map((t) => {
+      const { templateText: _drop, ...rest } = t as typeof t & { templateText?: string }
+      return { ...rest, signatureMode: (t.signatureMode as string) === 'elettronica' ? 'caricamento_firmato' : t.signatureMode }
+    }),
+    documents: (db.documents as LegacyDoc[])
+      .filter((d) => d.fileData || d.signature?.method !== 'elettronica')
+      .map(({ signature, ...d }) => ({ ...d, signedByHand: d.signedByHand ?? !!signature, history: d.history.filter((h) => (h.action as string) !== 'firmato') })),
+  }
+}
+
 function loadFromStorage(): OasiDatabase | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as OasiDatabase
-    if (parsed.version === 3) return migrateFrom6(migrateFrom5(migrateFrom4(migrateFrom3(parsed))))
-    if (parsed.version === 4) return migrateFrom6(migrateFrom5(migrateFrom4(parsed)))
-    if (parsed.version === 5) return migrateFrom6(migrateFrom5(parsed))
-    if (parsed.version === 6) return migrateFrom6(parsed)
+    if (parsed.version === 3) return migrateFrom7(migrateFrom6(migrateFrom5(migrateFrom4(migrateFrom3(parsed)))))
+    if (parsed.version === 4) return migrateFrom7(migrateFrom6(migrateFrom5(migrateFrom4(parsed))))
+    if (parsed.version === 5) return migrateFrom7(migrateFrom6(migrateFrom5(parsed)))
+    if (parsed.version === 6) return migrateFrom7(migrateFrom6(parsed))
+    if (parsed.version === 7) return migrateFrom7(parsed)
     if (parsed.version !== DATABASE_VERSION) return null
     return parsed
   } catch {
@@ -132,7 +150,6 @@ function newVersion(
   memberId: string,
   typeId: string,
   data: Pick<MemberDocument, 'status' | 'uploadedBy'> & Partial<MemberDocument>,
-  action: 'caricato' | 'firmato',
 ): OasiDatabase {
   const previous = db.documents.find((d) => d.memberId === memberId && d.typeId === typeId && d.current)
   const now = new Date().toISOString()
@@ -145,7 +162,7 @@ function newVersion(
     replacesId: previous?.id,
     current: true,
     uploadedAt: now,
-    history: [...(previous ? [{ action: 'sostituito' as const, at: now, by: data.uploadedBy, note: `Sostituisce la versione ${previous.version}` }] : []), { action, at: now, by: data.uploadedBy }],
+    history: [...(previous ? [{ action: 'sostituito' as const, at: now, by: data.uploadedBy, note: `Sostituisce la versione ${previous.version}` }] : []), { action: 'caricato' as const, at: now, by: data.uploadedBy }],
   }
   return { ...db, documents: [doc, ...db.documents.map((d) => (d.id === previous?.id ? { ...d, current: false } : d))] }
 }
@@ -541,7 +558,6 @@ export class LocalRepository implements OasiRepository {
   saveDocumentType: OasiRepository['saveDocumentType'] = (type) =>
     this.commit((db) => {
       if (!type.name.trim()) throw new Error('Il nome della tipologia è obbligatorio')
-      if (type.signatureMode === 'elettronica' && !type.templateText?.trim()) throw new Error('Per la firma elettronica serve il testo da firmare')
       const exists = db.documentTypes.some((t) => t.id === type.id)
       return { ...db, documentTypes: exists ? db.documentTypes.map((t) => (t.id === type.id ? type : t)) : [...db.documentTypes, type] }
     })
@@ -561,10 +577,10 @@ export class LocalRepository implements OasiRepository {
         fileType: input.fileType,
         fileSize: input.fileSize,
         fileData: input.fileData,
-        signature: input.signedUpload ? { method: 'caricamento_firmato', signedAt: new Date().toISOString(), signerName: studentName(db, input.memberId) } : undefined,
+        signedByHand: input.signedUpload || type.signatureMode === 'caricamento_firmato',
         uploadedBy: input.uploadedBy,
         expiresOn,
-      }, 'caricato')
+      })
       return withNotifications(next, [{
         kind: 'documento',
         title: 'Documento da verificare',
@@ -572,21 +588,6 @@ export class LocalRepository implements OasiRepository {
         to: ['admin'],
         link: { admin: `/admin/archivio?stato=in_verifica` },
       }])
-    })
-
-  signDocument: OasiRepository['signDocument'] = (memberId, typeId, signerName) =>
-    this.commit((db) => {
-      const type = db.documentTypes.find((t) => t.id === typeId && t.active)
-      if (!type || type.signatureMode !== 'elettronica' || !type.templateText) throw new Error('Questo documento non si firma nell’app')
-      const expected = studentName(db, memberId)
-      if (signerName.trim().toLowerCase() !== expected.toLowerCase()) throw new Error(`Per firmare scrivi il tuo nome completo: ${expected}`)
-      const today = todayISO()
-      return newVersion(db, memberId, typeId, {
-        status: 'approvato',
-        signature: { method: 'elettronica', signedAt: new Date().toISOString(), signerName: expected },
-        uploadedBy: memberId,
-        expiresOn: type.validityMonths ? addMonths(today, type.validityMonths) : undefined,
-      }, 'firmato')
     })
 
   reviewDocument: OasiRepository['reviewDocument'] = (documentId, decision, note) =>

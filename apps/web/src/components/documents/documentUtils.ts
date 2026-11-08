@@ -18,7 +18,6 @@ export const fmtDay = (iso?: string) => (iso ? formatDate(iso.slice(0, 10), { ye
 
 export const ACTION_LABEL: Record<MemberDocument['history'][number]['action'], string> = {
   caricato: 'Caricato',
-  firmato: 'Firmato elettronicamente',
   approvato: 'Approvato',
   rifiutato: 'Rifiutato',
   sostituzione_richiesta: 'Sostituzione richiesta',

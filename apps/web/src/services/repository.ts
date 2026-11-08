@@ -85,8 +85,6 @@ export interface OasiRepository {
   saveDocumentType(type: DocumentType): Promise<void>
   /** Caricamento (o sostituzione) di un file: crea una nuova versione in verifica */
   uploadDocument(input: DocumentUpload): Promise<void>
-  /** Firma elettronica nell'app: il nome deve coincidere con quello del profilo */
-  signDocument(memberId: string, typeId: string, signerName: string): Promise<void>
   reviewDocument(documentId: string, decision: DocumentDecision, note: string): Promise<void>
   saveSharedDocument(doc: SharedDocument): Promise<void>
   deleteSharedDocument(id: string): Promise<void>

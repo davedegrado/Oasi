@@ -9,7 +9,7 @@ export function StudentDocuments() {
   return (
     <div className="animate-fade-up space-y-5">
       <BackButton fallback="/allieva/profilo" />
-      <PageHeader eyebrow="Profilo" title="I miei documenti" description="Carica i documenti richiesti, firma le liberatorie e controlla scadenze e verifiche." />
+      <PageHeader eyebrow="Profilo" title="I miei documenti" description="Carica i documenti richiesti (i moduli già firmati a mano) e controlla scadenze e verifiche." />
       <div className="grid gap-5 lg:grid-cols-[3fr_2fr]">
         <MemberDocumentsPanel memberId={student.id} mode="allieva" />
         <SharedDocumentsCard audience="allieve" />

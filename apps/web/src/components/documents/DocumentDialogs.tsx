@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Download, FileCheck2, FileText, History, PenLine, RefreshCcw, Upload, X } from 'lucide-react'
+import { Download, FileCheck2, FileText, History, RefreshCcw, Upload, X } from 'lucide-react'
 import { Dialog } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Field, Input, Textarea } from '@/components/ui/input'
@@ -9,7 +9,6 @@ import { formatBytes, type MemberDocumentRow } from '@/services/documents'
 import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from '@/services/localRepository'
 import type { DocumentDecision } from '@/services/repository'
 import { DOCUMENT_CATEGORY_LABEL } from '@/lib/labels'
-import { fullName } from '@/lib/utils'
 import { DocumentStateBadge } from './DocumentBits'
 import { ACTION_LABEL, actorName, fmtDay, openDocumentFile, readFileAsDataUrl } from './documentUtils'
 
@@ -19,7 +18,7 @@ export function UploadDocumentDialog({ row, memberId, uploadedBy, onClose }: { r
   const repo = useRepository()
   const { toast } = useToast()
   const [file, setFile] = useState<File | null>(null)
-  const [signed, setSigned] = useState(row.type.signatureMode === 'caricamento_firmato')
+  const [signed, setSigned] = useState(false)
   const [expires, setExpires] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -29,7 +28,7 @@ export function UploadDocumentDialog({ row, memberId, uploadedBy, onClose }: { r
     if (!file) return setError('Scegli un file da caricare')
     if (file.size > MAX_DOCUMENT_BYTES) return setError('Il file supera i 4 MB consentiti')
     if (!ALLOWED_DOCUMENT_TYPES.includes(file.type)) return setError('Formato non ammesso: carica un PDF o un’immagine (JPG, PNG)')
-    if (type.signatureMode === 'caricamento_firmato' && !signed) return setError('Conferma che il documento è firmato')
+    if (type.signatureMode === 'caricamento_firmato' && !signed) return setError('Il modulo va caricato firmato a mano: conferma la firma')
     setBusy(true)
     try {
       const fileData = await readFileAsDataUrl(file)
@@ -83,7 +82,7 @@ export function UploadDocumentDialog({ row, memberId, uploadedBy, onClose }: { r
         {type.signatureMode === 'caricamento_firmato' && (
           <label className="flex items-start gap-2.5 text-sm text-ink-soft">
             <input type="checkbox" className="mt-0.5 size-4 accent-rosa-intenso" checked={signed} onChange={(e) => setSigned(e.target.checked)} />
-            Il documento caricato è già firmato a mano (firma su carta, poi scansione o foto).
+            Confermo che il documento è firmato a mano (scansione o foto del modulo firmato).
           </label>
         )}
         {(type.validityMonths || type.category === 'certificato_medico') && (
@@ -92,58 +91,6 @@ export function UploadDocumentDialog({ row, memberId, uploadedBy, onClose }: { r
           </Field>
         )}
         {row.doc && <p className="text-xs text-ink-muted">La versione attuale resta nello storico: nessun documento viene cancellato.</p>}
-        {error && <p className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
-      </div>
-    </Dialog>
-  )
-}
-
-export function SignDocumentDialog({ row, memberId, onClose }: { row: MemberDocumentRow; memberId: string; onClose: () => void }) {
-  const db = useDatabase()
-  const repo = useRepository()
-  const { toast } = useToast()
-  const student = db.students.find((s) => s.id === memberId)
-  const [name, setName] = useState('')
-  const [accepted, setAccepted] = useState(false)
-  const [error, setError] = useState('')
-
-  const submit = async () => {
-    if (!accepted) return setError('Conferma di aver letto il documento')
-    try {
-      await repo.signDocument(memberId, row.type.id, name)
-      toast('Documento firmato')
-      onClose()
-    } catch (e) {
-      setError(errorText(e))
-    }
-  }
-
-  return (
-    <Dialog
-      open
-      onOpenChange={(o) => !o && onClose()}
-      title={`Firma: ${row.type.name}`}
-      description="Firma elettronica semplice: vengono registrati nome, data e ora della firma."
-      footer={
-        <>
-          <Button variant="outline" onClick={onClose}>
-            Annulla
-          </Button>
-          <Button onClick={submit} disabled={!name.trim()}>
-            <PenLine /> Firma
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        <div className="max-h-56 overflow-y-auto rounded-2xl bg-cipria-50 p-4 text-sm leading-relaxed whitespace-pre-line text-ink-soft">{row.type.templateText}</div>
-        <label className="flex items-start gap-2.5 text-sm text-ink-soft">
-          <input type="checkbox" className="mt-0.5 size-4 accent-rosa-intenso" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
-          Ho letto e accetto il contenuto del documento.
-        </label>
-        <Field label="Scrivi il tuo nome e cognome per firmare" htmlFor="sign-name" hint={student ? `Deve coincidere con il profilo: ${fullName(student)}` : undefined}>
-          <Input id="sign-name" value={name} autoComplete="name" onChange={(e) => setName(e.target.value)} />
-        </Field>
         {error && <p className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
       </div>
     </Dialog>
@@ -186,12 +133,10 @@ export function DocumentDetailDialog({ row, mode, onClose, onReplace }: { row: M
             <dd className="font-semibold">{actorName(db, doc.memberId)}</dd>
             <dt className="text-ink-muted">Caricato il</dt>
             <dd>{fmtDay(doc.uploadedAt)} da {actorName(db, doc.uploadedBy)}</dd>
-            {doc.signature && (
+            {doc.signedByHand && (
               <>
                 <dt className="text-ink-muted">Firma</dt>
-                <dd>
-                  {doc.signature.method === 'elettronica' ? 'Elettronica nell’app' : 'Documento già firmato'} · {doc.signature.signerName}, {fmtDay(doc.signature.signedAt)}
-                </dd>
+                <dd>Modulo firmato a mano</dd>
               </>
             )}
             {doc.expiresOn && (
@@ -220,13 +165,6 @@ export function DocumentDetailDialog({ row, mode, onClose, onReplace }: { row: M
             <Download /> Apri {doc.fileName} {doc.fileSize ? `(${formatBytes(doc.fileSize)})` : ''}
           </Button>
         )}
-        {doc && !doc.fileData && doc.signature?.method === 'elettronica' && type.templateText && (
-          <details className="rounded-2xl bg-white p-3 text-sm text-ink-soft ring-1 ring-line/70">
-            <summary className="cursor-pointer font-semibold text-ink">Testo firmato</summary>
-            <p className="mt-2 whitespace-pre-line">{type.templateText}</p>
-          </details>
-        )}
-
         {mode === 'admin' && doc?.current && doc.status !== 'rifiutato' && (
           <div className="space-y-3 rounded-2xl border border-line/70 p-3">
             <p className="flex items-center gap-2 text-sm font-bold">
@@ -252,9 +190,9 @@ export function DocumentDetailDialog({ row, mode, onClose, onReplace }: { row: M
         )}
         {error && <p className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
 
-        {mode === 'allieva' && onReplace && state !== 'in_verifica' && (state !== 'approvato' || type.signatureMode !== 'elettronica') && (
+        {mode === 'allieva' && onReplace && state !== 'in_verifica' && (
           <Button className="w-full" variant={state === 'approvato' ? 'outline' : 'primary'} onClick={onReplace}>
-            {type.signatureMode === 'elettronica' ? <PenLine /> : <Upload />} {doc ? 'Carica una nuova versione' : type.signatureMode === 'elettronica' ? 'Firma ora' : 'Carica'}
+            <Upload /> {doc ? 'Carica una nuova versione' : 'Carica'}
           </Button>
         )}
 

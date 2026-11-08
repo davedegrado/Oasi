@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronRight, FileSignature, FileText, Lock, PenLine, ShieldCheck, Upload } from 'lucide-react'
+import { ChevronRight, FileSignature, FileText, Lock, ShieldCheck, Upload } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 import { documentSummary, memberDocuments, needsAction, type MemberDocumentRow } from '@/services/documents'
 import { DocumentStateBadge } from './DocumentBits'
 import { fmtDay } from './documentUtils'
-import { DocumentDetailDialog, SignDocumentDialog, UploadDocumentDialog } from './DocumentDialogs'
+import { DocumentDetailDialog, UploadDocumentDialog } from './DocumentDialogs'
 
 type Mode = 'allieva' | 'admin'
 
@@ -23,7 +23,6 @@ export function MemberDocumentsPanel({ memberId, mode }: { memberId: string; mod
   const rows = memberDocuments(db, memberId)
   const summary = documentSummary(rows)
   const [upload, setUpload] = useState<MemberDocumentRow | null>(null)
-  const [sign, setSign] = useState<MemberDocumentRow | null>(null)
   const [detail, setDetail] = useState<MemberDocumentRow | null>(null)
   const current = detail ? memberDocuments(db, memberId).find((r) => r.type.id === detail.type.id) ?? null : null
 
@@ -53,7 +52,6 @@ export function MemberDocumentsPanel({ memberId, mode }: { memberId: string; mod
         <ul className="space-y-2.5">
           {rows.map((row) => {
             const { type, doc, state } = row
-            const canSign = type.signatureMode === 'elettronica' && mode === 'allieva'
             const action = needsAction(state)
             return (
               <li key={type.id} className={cn('rounded-2xl border p-3', action && mode === 'allieva' ? 'border-warn/40 bg-warn-soft/40' : 'border-line/70 bg-white')}>
@@ -68,29 +66,23 @@ export function MemberDocumentsPanel({ memberId, mode }: { memberId: string; mod
                       {DOCUMENT_CATEGORY_LABEL[type.category]}
                       {doc && ` · v${doc.version} del ${fmtDay(doc.uploadedAt)}`}
                       {doc?.expiresOn && ` · scade il ${fmtDay(doc.expiresOn)}`}
-                      {doc?.signature && ` · ${doc.signature.method === 'elettronica' ? 'firmato nell’app' : 'caricato già firmato'}`}
+                      {doc?.signedByHand && ' · firmato a mano'}
                     </p>
                     {doc?.reviewNote && (state === 'da_sostituire' || state === 'rifiutato') && <p className="mt-1.5 rounded-xl bg-white/80 px-2.5 py-1.5 text-sm text-ink-soft">“{doc.reviewNote}”</p>}
                   </button>
                   <div className="flex shrink-0 flex-col items-end gap-2">
                     <DocumentStateBadge state={state} />
                     {mode === 'allieva' && state !== 'approvato' && state !== 'in_verifica' && (
-                      canSign ? (
-                        <Button size="sm" onClick={() => setSign(row)}>
-                          <PenLine /> Firma
-                        </Button>
-                      ) : (
-                        <Button size="sm" variant={state === 'mancante' ? 'primary' : 'outline'} onClick={() => setUpload(row)}>
-                          <Upload /> {doc ? 'Sostituisci' : 'Carica'}
-                        </Button>
-                      )
+                      <Button size="sm" variant={state === 'mancante' ? 'primary' : 'outline'} onClick={() => setUpload(row)}>
+                        <Upload /> {doc ? 'Sostituisci' : 'Carica'}
+                      </Button>
                     )}
                     {mode === 'admin' && doc?.status === 'in_verifica' && (
                       <Button size="sm" onClick={() => setDetail(row)}>
                         Verifica <ChevronRight />
                       </Button>
                     )}
-                    {mode === 'admin' && !doc && type.signatureMode !== 'elettronica' && (
+                    {mode === 'admin' && !doc && (
                       <Button size="sm" variant="outline" onClick={() => setUpload(row)}>
                         <Upload /> Carica
                       </Button>
@@ -104,12 +96,11 @@ export function MemberDocumentsPanel({ memberId, mode }: { memberId: string; mod
         </ul>
         {mode === 'allieva' && (
           <p className="mt-4 flex items-start gap-2 text-xs text-ink-muted">
-            <FileSignature className="mt-0.5 size-3.5 shrink-0" />I documenti sono visibili solo a te e alla segreteria. Il certificato medico è un dato riservato e non è accessibile alle insegnanti.
+            <FileSignature className="mt-0.5 size-3.5 shrink-0" />I moduli si firmano a mano e si caricano come scansione o foto. I documenti sono visibili solo a te e alla segreteria. Il certificato medico è un dato riservato e non è accessibile alle insegnanti.
           </p>
         )}
       </CardContent>
       {upload && <UploadDocumentDialog row={upload} memberId={memberId} uploadedBy={mode === 'admin' ? 'admin' : memberId} onClose={() => setUpload(null)} />}
-      {sign && <SignDocumentDialog row={sign} memberId={memberId} onClose={() => setSign(null)} />}
       {current && (
         <DocumentDetailDialog
           row={current}
@@ -117,8 +108,7 @@ export function MemberDocumentsPanel({ memberId, mode }: { memberId: string; mod
           onClose={() => setDetail(null)}
           onReplace={() => {
             setDetail(null)
-            if (current.type.signatureMode === 'elettronica' && mode === 'allieva') setSign(current)
-            else setUpload(current)
+            setUpload(current)
           }}
         />
       )}

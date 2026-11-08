@@ -264,7 +264,8 @@ export interface DemoPersona {
 // ── Archivio documentale ───────────────────────────────────────────
 export type DocumentCategory = 'personale' | 'iscrizione' | 'liberatoria' | 'consenso' | 'certificato_medico' | 'altro'
 export type DocumentStatus = 'in_verifica' | 'approvato' | 'rifiutato' | 'da_sostituire'
-export type SignatureMode = 'nessuna' | 'caricamento_firmato' | 'elettronica'
+/** Nella piattaforma non si firma: 'caricamento_firmato' = modulo da caricare già firmato a mano */
+export type SignatureMode = 'nessuna' | 'caricamento_firmato'
 
 /** Tipologia di documento richiesta dalla palestra */
 export interface DocumentType {
@@ -274,8 +275,6 @@ export interface DocumentType {
   description: string
   required: boolean
   signatureMode: SignatureMode
-  /** Testo da firmare elettronicamente nell'app */
-  templateText?: string
   validityMonths?: number
   /** Dati sanitari: solo amministrazione e interessata */
   sensitive: boolean
@@ -283,7 +282,7 @@ export interface DocumentType {
 }
 
 export interface DocumentEvent {
-  action: 'caricato' | 'firmato' | 'approvato' | 'rifiutato' | 'sostituzione_richiesta' | 'sostituito'
+  action: 'caricato' | 'approvato' | 'rifiutato' | 'sostituzione_richiesta' | 'sostituito'
   at: string
   by: string
   note?: string
@@ -307,7 +306,8 @@ export interface MemberDocument {
   fileSize?: number
   /** Demo: file salvato nel browser come data URL */
   fileData?: string
-  signature?: { method: 'caricamento_firmato' | 'elettronica'; signedAt: string; signerName: string }
+  /** Il file caricato è un modulo firmato a mano */
+  signedByHand?: boolean
   uploadedAt: string
   uploadedBy: string
   expiresOn?: string

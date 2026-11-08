@@ -29,7 +29,6 @@ public static class DocumentEndpoints
         public string Description { get; init; } = "";
         public bool IsRequired { get; init; }
         public string SignatureMode { get; init; } = "none";
-        public string? TemplateText { get; init; }
         public short? ValidityMonths { get; init; }
         public bool IsSensitive { get; init; }
         public bool IsActive { get; init; }
@@ -50,8 +49,6 @@ public static class DocumentEndpoints
         public string? ContentType { get; init; }
         public long? Bytes { get; init; }
         public string? SignatureMethod { get; init; }
-        public DateTime? SignedAt { get; init; }
-        public string? SignerName { get; init; }
         public DateTime UploadedAt { get; init; }
         public string? ExpiresOn { get; init; }
         public bool IsExpired { get; init; }
@@ -60,13 +57,12 @@ public static class DocumentEndpoints
         public DateTime? ReviewedAt { get; init; }
     }
 
-    public sealed record TypeInput(string Name, string Category, string? Description, bool? IsRequired, string? SignatureMode, string? TemplateText, short? ValidityMonths, bool? IsSensitive, bool? IsActive);
-    public sealed record SignInput(Guid TypeId, Guid? MemberId, string SignerName, bool Accept);
+    public sealed record TypeInput(string Name, string Category, string? Description, bool? IsRequired, string? SignatureMode, short? ValidityMonths, bool? IsSensitive, bool? IsActive);
     public sealed record ReviewInput(string Action, string? Note);
 
     private const string SelectDocuments = @"
         select d.id, d.member_id, m.first_name || ' ' || m.last_name as member_name, d.type_id, t.name as type_name, t.category,
-               d.version, d.replaces_document_id, d.status, d.file_name, d.content_type, d.bytes, d.signature_method, d.signed_at, d.signer_name,
+               d.version, d.replaces_document_id, d.status, d.file_name, d.content_type, d.bytes, d.signature_method,
                d.uploaded_at, to_char(d.expires_on, 'YYYY-MM-DD') as expires_on,
                coalesce(d.expires_on < current_date, false) as is_expired,
                coalesce(d.expires_on between current_date and current_date + 30, false) as expires_soon,
@@ -89,9 +85,9 @@ public static class DocumentEndpoints
             ValidateType(input);
             var m = ctx.Member();
             var id = await db.InTenant(m.TenantId, m.UserId, (c, tx) => c.ExecuteScalarAsync<Guid>(@"
-                insert into app.document_types (tenant_id, name, category, description, is_required, signature_mode, template_text, validity_months, is_sensitive)
+                insert into app.document_types (tenant_id, name, category, description, is_required, signature_mode, validity_months, is_sensitive)
                 values (app.current_tenant(), @Name, @Category, coalesce(@Description, ''), coalesce(@IsRequired, false), coalesce(@SignatureMode, 'none'),
-                        @TemplateText, @ValidityMonths, coalesce(@IsSensitive, @Category = 'medical')) returning id", input, tx));
+                        @ValidityMonths, coalesce(@IsSensitive, @Category = 'medical')) returning id", input, tx));
             return Results.Created($"/v1/document-types/{id}", new { id });
         }).RequireMember(Roles.Admin);
 
@@ -101,9 +97,9 @@ public static class DocumentEndpoints
             var m = ctx.Member();
             var n = await db.InTenant(m.TenantId, m.UserId, (c, tx) => c.ExecuteAsync(@"
                 update app.document_types set name = @Name, category = @Category, description = coalesce(@Description, ''), is_required = coalesce(@IsRequired, false),
-                  signature_mode = coalesce(@SignatureMode, 'none'), template_text = @TemplateText, validity_months = @ValidityMonths,
+                  signature_mode = coalesce(@SignatureMode, 'none'), validity_months = @ValidityMonths,
                   is_sensitive = coalesce(@IsSensitive, @Category = 'medical'), is_active = coalesce(@IsActive, true)
-                where id = @id", new { id, input.Name, input.Category, input.Description, input.IsRequired, input.SignatureMode, input.TemplateText, input.ValidityMonths, input.IsSensitive, input.IsActive }, tx));
+                where id = @id", new { id, input.Name, input.Category, input.Description, input.IsRequired, input.SignatureMode, input.ValidityMonths, input.IsSensitive, input.IsActive }, tx));
             return n == 0 ? Results.NotFound() : Results.NoContent();
         }).RequireMember(Roles.Admin);
 
@@ -187,35 +183,6 @@ public static class DocumentEndpoints
                 }, "uploaded", status: "pending_review");
             });
             return Results.Created($"/v1/documents/{id}", new { id, status = "pending_review" });
-        }).RequireMember();
-
-        // Firma elettronica semplice di un modulo della palestra direttamente nella piattaforma
-        docs.MapPost("/documents/sign", async (HttpContext ctx, Db db, SignInput input) =>
-        {
-            if (!input.Accept) throw ApiException.Invalid("Per firmare devi confermare di aver letto e accettato il documento.");
-            var m = ctx.Member();
-            var memberId = input.MemberId ?? m.MemberId;
-            var id = await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
-            {
-                await Relations.EnsureCanActFor(c, tx, m, memberId, "consents");
-                var type = await c.QuerySingleOrDefaultAsync<DocumentTypeDto>("select * from app.document_types where id = @TypeId and is_active", new { input.TypeId }, tx)
-                    ?? throw ApiException.Invalid("Tipologia di documento non disponibile.");
-                if (type.SignatureMode != "electronic" || string.IsNullOrWhiteSpace(type.TemplateText))
-                    throw ApiException.Conflict("not_signable", "Questo documento va caricato, non firmato nell'app.");
-                // Chi firma: l'interessata stessa oppure il genitore (il nome deve corrispondere al suo profilo)
-                var signer = await c.QuerySingleAsync<(string First, string Last)>("select first_name, last_name from app.members where id = @id", new { id = m.MemberId }, tx);
-                if (!string.Equals(Normalize(input.SignerName), Normalize($"{signer.First} {signer.Last}"), StringComparison.Ordinal))
-                    throw ApiException.Invalid("Scrivi il tuo nome e cognome esattamente come nel profilo per firmare.");
-                var signedAt = DateTime.UtcNow;
-                var evidence = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{type.TemplateText}\n{input.SignerName}\n{m.UserId}\n{signedAt:O}"))).ToLowerInvariant();
-                DateOnly? expires = type.ValidityMonths is { } months ? DateOnly.FromDateTime(DateTime.Today).AddMonths(months) : null;
-                return await InsertVersion(c, tx, m, memberId, input.TypeId, new
-                {
-                    file_path = (string?)null, file_name = (string?)null, content_type = (string?)null, bytes = (long?)null, sha = evidence,
-                    signature_method = "electronic", expires = expires?.ToString("yyyy-MM-dd"),
-                }, "signed", status: "approved", signedAt: signedAt, signerName: input.SignerName.Trim());
-            });
-            return Results.Created($"/v1/documents/{id}", new { id, status = "approved" });
         }).RequireMember();
 
         // Dettaglio con storico delle verifiche e delle modifiche
@@ -332,7 +299,7 @@ public static class DocumentEndpoints
     /// e viene collegata, così il documento aggiornato resta sullo stesso profilo.
     /// </summary>
     private static async Task<Guid> InsertVersion(IDbConnection c, IDbTransaction tx, Member actor, Guid memberId, Guid typeId, dynamic f,
-        string action, string status, DateTime? signedAt = null, string? signerName = null)
+        string action, string status)
     {
         var previous = await c.QuerySingleOrDefaultAsync<(Guid Id, short Version)?>(
             "select id, version from app.documents where member_id = @memberId and type_id = @typeId and is_current for update", new { memberId, typeId }, tx);
@@ -343,14 +310,14 @@ public static class DocumentEndpoints
         }
         var id = await c.ExecuteScalarAsync<Guid>(@"
             insert into app.documents (tenant_id, member_id, type_id, version, replaces_document_id, status, file_path, file_name, content_type, bytes, file_sha256,
-                                       signature_method, signed_at, signed_by, signer_name, uploaded_by, expires_on)
+                                       signature_method, uploaded_by, expires_on)
             values (app.current_tenant(), @memberId, @typeId, @version, @replaces, @status, @file_path, @file_name, @content_type, @bytes, @sha,
-                    @signature_method, @signedAt, @signedBy, @signerName, @user, @expires::date) returning id",
+                    @signature_method, @user, @expires::date) returning id",
             new
             {
                 memberId, typeId, version = (short)((previous?.Version ?? 0) + 1), replaces = previous?.Id, status,
                 file_path = (string?)f.file_path, file_name = (string?)f.file_name, content_type = (string?)f.content_type, bytes = (long?)f.bytes, sha = (string)f.sha,
-                signature_method = (string?)f.signature_method, signedAt, signedBy = signedAt is null ? (Guid?)null : actor.UserId, signerName,
+                signature_method = (string?)f.signature_method,
                 user = actor.UserId, expires = (string?)f.expires,
             }, tx);
         await c.ExecuteAsync("insert into app.document_events (tenant_id, document_id, action, actor_user) values (app.current_tenant(), @id, @action, @user)", new { id, action, user = actor.UserId }, tx);
@@ -378,8 +345,8 @@ public static class DocumentEndpoints
     {
         if (string.IsNullOrWhiteSpace(i.Name)) throw ApiException.Invalid("Inserisci il nome della tipologia.");
         if (!Categories.Contains(i.Category)) throw ApiException.Invalid("Categoria non valida.");
-        if (i.SignatureMode is not (null or "none" or "upload_signed" or "electronic")) throw ApiException.Invalid("Modalità di firma non valida.");
-        if (i.SignatureMode == "electronic" && string.IsNullOrWhiteSpace(i.TemplateText)) throw ApiException.Invalid("Per la firma elettronica serve il testo del documento.");
+        // Nessuna firma nella piattaforma: "upload_signed" indica un modulo da caricare già firmato a mano
+        if (i.SignatureMode is not (null or "none" or "upload_signed")) throw ApiException.Invalid("Modalità non valida: i documenti si caricano già firmati a mano.");
     }
 
     private static string SafeFileName(string name)
@@ -389,5 +356,4 @@ public static class DocumentEndpoints
         return n.Length > 80 ? n[^80..] : n.Length == 0 ? "documento" : n;
     }
 
-    private static string Normalize(string s) => System.Text.RegularExpressions.Regex.Replace(s.Trim().ToLowerInvariant(), "\\s+", " ");
 }

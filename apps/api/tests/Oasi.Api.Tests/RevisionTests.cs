@@ -25,11 +25,11 @@ public sealed class RevisionTests(ApiFixture api)
         return form;
     }
 
-    private async Task<Guid> CreateType(string name, string category, bool required = true, string signature = "none", string? template = null, short? validity = null)
+    private async Task<Guid> CreateType(string name, string category, bool required = true, string signature = "none", short? validity = null)
     {
         var res = await api.For(Seed.OasiHost, Seed.OasiAdmin).PostAsJsonAsync("/v1/document-types", new
         {
-            name = $"Test · {name}", category, isRequired = required, signatureMode = signature, templateText = template, validityMonths = validity,
+            name = $"Test · {name}", category, isRequired = required, signatureMode = signature, validityMonths = validity,
         });
         Assert.Equal(HttpStatusCode.Created, res.StatusCode);
         return (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
@@ -105,20 +105,21 @@ public sealed class RevisionTests(ApiFixture api)
     }
 
     [Fact]
-    public async Task Firma_elettronica_distinta_dal_caricamento_di_un_documento_firmato()
+    public async Task Moduli_firmati_a_mano_si_caricano_come_file_e_non_si_firmano_nell_app()
     {
-        var type = await CreateType("Liberatoria attività aeree", "waiver", signature: "electronic", template: "Dichiaro di essere idonea alla pratica delle discipline aeree…");
+        var type = await CreateType("Liberatoria attività aeree", "waiver", signature: "upload_signed");
         var martina = api.For(Seed.OasiHost, Martina);
-        // Il nome deve corrispondere al profilo
-        Assert.Equal(HttpStatusCode.BadRequest, (await martina.PostAsJsonAsync("/v1/documents/sign", new { typeId = type, signerName = "Qualcun Altro", accept = true })).StatusCode);
-        var res = await martina.PostAsJsonAsync("/v1/documents/sign", new { typeId = type, signerName = "Martina Conti", accept = true });
+        // Il modulo firmato a mano si carica come file: risulta "caricato firmato" e va in verifica
+        var res = await martina.PostAsync("/v1/documents", Upload(type, "liberatoria-firmata.pdf", "%PDF-1.4 liberatoria firmata"));
         Assert.Equal(HttpStatusCode.Created, res.StatusCode);
         var id = (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
-        Assert.Equal("electronic", await api.Scalar<string>("select signature_method from app.documents where id = @id", new { id }));
-        Assert.True(await api.Scalar<bool>("select signed_at is not null and file_sha256 is not null and file_path is null from app.documents where id = @id", new { id }));
-        // Un modulo da caricare non si può firmare nell'app
-        var uploadType = await CreateType("Documento d'identità", "personal");
-        Assert.Equal(HttpStatusCode.Conflict, (await martina.PostAsJsonAsync("/v1/documents/sign", new { typeId = uploadType, signerName = "Martina Conti", accept = true })).StatusCode);
+        Assert.Equal("upload_signed", await api.Scalar<string>("select signature_method from app.documents where id = @id", new { id }));
+        Assert.Equal("pending_review", await api.Scalar<string>("select status from app.documents where id = @id", new { id }));
+        // Nessuna firma nella piattaforma: niente endpoint di firma, né tipologie "elettroniche", né documenti senza file
+        var sign = await martina.PostAsJsonAsync("/v1/documents/sign", new { typeId = type, signerName = "Martina Conti", accept = true });
+        Assert.Contains(sign.StatusCode, new[] { HttpStatusCode.NotFound, HttpStatusCode.MethodNotAllowed });
+        Assert.Equal(HttpStatusCode.BadRequest, (await api.For(Seed.OasiHost, Seed.OasiAdmin).PostAsJsonAsync("/v1/document-types", new { name = "Test · Firma digitale", category = "waiver", signatureMode = "electronic" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await martina.PostAsync("/v1/documents", new MultipartFormDataContent { { new StringContent(type.ToString()), "typeId" } })).StatusCode);
     }
 
     [Fact]
