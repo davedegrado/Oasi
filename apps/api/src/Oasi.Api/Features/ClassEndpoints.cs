@@ -54,6 +54,7 @@ public static class ClassEndpoints
             var m = ctx.Member();
             var id = await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
             {
+                await EnsureActiveDiscipline(c, tx, input.DisciplineId);
                 var newId = await c.ExecuteScalarAsync<Guid>(@"
                     insert into app.classes (tenant_id, name, discipline_id, level_id, room_id, age_min, age_max, capacity, weekday, start_time, end_time, description)
                     values (app.current_tenant(), @Name, @DisciplineId, @LevelId, @RoomId, @AgeMin, @AgeMax, @Capacity, @Weekday, @StartTime::time, @EndTime::time, coalesce(@Description, ''))
@@ -65,6 +66,7 @@ public static class ClassEndpoints
                     select app.current_tenant(), @newId, d::date, @StartTime::time, @EndTime::time
                     from generate_series(current_date, current_date + 55, interval '1 day') d
                     where extract(isodow from d) = @Weekday", new { newId, input.StartTime, input.EndTime, input.Weekday }, tx);
+                await ClosureEndpoints.ApplyAllClosures(c, tx, newId);
                 return newId;
             });
             return Results.Created($"/v1/classes/{id}", new { id });
@@ -76,6 +78,9 @@ public static class ClassEndpoints
             var m = ctx.Member();
             await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
             {
+                var currentDiscipline = await c.ExecuteScalarAsync<Guid?>("select discipline_id from app.classes where id = @id", new { id }, tx)
+                    ?? throw ApiException.NotFound("Classe");
+                if (currentDiscipline != input.DisciplineId) await EnsureActiveDiscipline(c, tx, input.DisciplineId);
                 var enrolled = await c.ExecuteScalarAsync<int>("select count(*) from app.enrollments where class_id = @id and status = 'approved'", new { id }, tx);
                 if (input.Capacity < enrolled) throw ApiException.Conflict("capacity_below_enrolled", $"La classe ha già {enrolled} iscritte.");
                 var n = await c.ExecuteAsync(@"
@@ -91,6 +96,13 @@ public static class ClassEndpoints
             });
             return Results.NoContent();
         }).RequireMember(Roles.Admin);
+    }
+
+    private static async Task EnsureActiveDiscipline(System.Data.IDbConnection c, System.Data.IDbTransaction tx, Guid disciplineId)
+    {
+        var active = await c.ExecuteScalarAsync<bool?>("select is_active from app.disciplines where id = @disciplineId", new { disciplineId }, tx)
+            ?? throw ApiException.Invalid("Disciplina inesistente.");
+        if (!active) throw ApiException.Conflict("discipline_inactive", "La disciplina è disattivata: riattivala per creare nuove classi.");
     }
 
     private static void Validate(ClassInput i)

@@ -19,6 +19,9 @@ builder.Services.AddSingleton<Db>();
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient<IEmailSender, ResendEmailSender>();
 builder.Services.AddSingleton<DomainAllowList>();
+// File: Supabase Storage in produzione, disco locale in sviluppo e test
+if (!string.IsNullOrEmpty(config["Storage:SupabaseUrl"])) builder.Services.AddHttpClient<IFileStorage, SupabaseFileStorage>();
+else builder.Services.AddSingleton<IFileStorage, LocalFileStorage>();
 
 // ── Autenticazione: token emessi da Supabase Auth ──
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options =>
@@ -78,6 +81,10 @@ FigureEndpoints.Map(app);
 EventEndpoints.Map(app);
 InvitationEndpoints.Map(app);
 PlatformEndpoints.Map(app);
+DisciplineEndpoints.Map(app);
+ClosureEndpoints.Map(app);
+DocumentEndpoints.Map(app);
+NotificationEndpoints.Map(app);
 
 app.Run();
 

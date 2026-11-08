@@ -68,6 +68,8 @@ public static class CalendarEndpoints
             {
                 var lesson = await LoadLesson(c, tx, id);
                 await Relations.EnsureCanManageClass(c, tx, m, lesson.ClassId);
+                var inClosure = await c.ExecuteScalarAsync<bool>("select closure_id is not null from app.lessons where id = @id", new { id }, tx);
+                if (inClosure) throw ApiException.Conflict("lesson_in_closure", "La palestra è chiusa in quella data: modifica la chiusura dalla sezione Gestione.");
                 if (input.Status == "rescheduled")
                 {
                     if (!TimeOnly.TryParse(input.StartTime, out var s) || !TimeOnly.TryParse(input.EndTime, out var e) || e <= s)

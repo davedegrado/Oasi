@@ -25,6 +25,15 @@ insert into app.classes (tenant_id, id, name, discipline_id, capacity, weekday, 
 insert into app.members (tenant_id, id, user_id, first_name, last_name) values ('bbbbbbbb-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0003-000000000002', 'cccccccc-0000-0000-0000-000000000003', 'Bea', 'B');
 insert into app.memberships (tenant_id, user_id, member_id, roles) values ('bbbbbbbb-0000-0000-0000-000000000002', 'cccccccc-0000-0000-0000-000000000003', 'bbbbbbbb-0000-0000-0003-000000000002', '{student}');
 
+-- Documenti di prova: un tipo e un documento per palestra
+set local app.tenant_id = 'aaaaaaaa-0000-0000-0000-000000000001';
+insert into app.document_types (tenant_id, id, name, category) values ('aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0004-000000000001', 'Certificato medico', 'medical');
+insert into app.documents (tenant_id, member_id, type_id, file_path, file_name, content_type, bytes)
+  values ('aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0003-000000000001', 'aaaaaaaa-0000-0000-0004-000000000001',
+          'tenants/aaaaaaaa-0000-0000-0000-000000000001/documents/a.pdf', 'a.pdf', 'application/pdf', 10);
+set local app.tenant_id = 'bbbbbbbb-0000-0000-0000-000000000002';
+insert into app.document_types (tenant_id, id, name, category) values ('bbbbbbbb-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0004-000000000002', 'Liberatoria', 'waiver');
+
 create temporary table results (name text, ok boolean, detail text) on commit drop;
 grant insert, select on results to oasi_api;
 
@@ -74,6 +83,38 @@ insert into results select '9. appartenenze altrui non visibili', count(*) = 0, 
 with u as (update app.memberships set roles = '{admin}' returning 1)
 insert into results select '10. escalation di ruolo in altro tenant: 0 righe', count(*) = 0, count(*)::text from u;
 
+-- 12. Documenti: dal tenant B non si vedono quelli di A
+set local app.tenant_id = 'bbbbbbbb-0000-0000-0000-000000000002';
+insert into results select '12. documenti di altri tenant invisibili', count(*) = 0, count(*)::text from app.documents;
+
+-- 13. Un percorso file di un altro tenant viene rifiutato dal database
+do $$ begin
+  insert into app.documents (tenant_id, member_id, type_id, file_path, file_name, content_type, bytes)
+    values ('bbbbbbbb-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0003-000000000002', 'bbbbbbbb-0000-0000-0004-000000000002',
+            'tenants/aaaaaaaa-0000-0000-0000-000000000001/documents/rubato.pdf', 'x.pdf', 'application/pdf', 1);
+  insert into results values ('13. file di un altro tenant rifiutato', false, 'inserito!');
+exception when check_violation then
+  insert into results values ('13. file di un altro tenant rifiutato', true, 'check_violation');
+end $$;
+
+-- 14. Un documento non può usare la tipologia di un altro tenant
+do $$ begin
+  insert into app.documents (tenant_id, member_id, type_id, file_path, file_name, content_type, bytes)
+    values ('bbbbbbbb-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0003-000000000002', 'aaaaaaaa-0000-0000-0004-000000000001',
+            'tenants/bbbbbbbb-0000-0000-0000-000000000002/documents/b.pdf', 'b.pdf', 'application/pdf', 1);
+  insert into results values ('14. tipologia di un altro tenant rifiutata', false, 'inserito!');
+exception when foreign_key_violation then
+  insert into results values ('14. tipologia di un altro tenant rifiutata', true, 'foreign_key_violation');
+end $$;
+
+-- 15. Lo storico dei documenti non è modificabile dall'API
+do $$ begin
+  delete from app.document_events;
+  insert into results values ('15. storico documenti non cancellabile', false, 'cancellato!');
+exception when insufficient_privilege then
+  insert into results values ('15. storico documenti non cancellabile', true, 'insufficient_privilege');
+end $$;
+
 -- 11. Il ruolo API non può disattivare la RLS
 do $$ begin
   execute 'alter table app.classes disable row level security';
@@ -85,7 +126,7 @@ end $$;
 reset role;
 \set QUIET off
 \pset footer off
-select case when ok then 'OK  ' else 'FAIL' end as esito, name as test, detail from results order by name;
+select case when ok then 'OK  ' else 'FAIL' end as esito, name as test, detail from results order by split_part(name, '.', 1)::int;
 do $$ begin
   if exists (select 1 from results where not ok) then raise exception 'Test di isolamento falliti'; end if;
 end $$;

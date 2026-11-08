@@ -22,7 +22,7 @@ public static class PublicConfigEndpoints
             var cfg = await LoadConfig(db, tenant);
             var modules = await ModuleCatalog.EnabledModules(ctx.RequestServices, tenant.Id);
             var (disciplines, levels) = await db.InTenant(tenant.Id, null, async (c, tx) => (
-                (await c.QueryAsync<DisciplineDto>("select id, slug, name, color, icon, apparatus, has_figure_archive from app.disciplines order by position, name", transaction: tx)).ToList(),
+                (await c.QueryAsync<DisciplineDto>("select id, slug, name, color, icon, apparatus, has_figure_archive from app.disciplines where is_active order by position, name", transaction: tx)).ToList(),
                 (await c.QueryAsync<LevelDto>("select id, name, rank from app.levels order by rank", transaction: tx)).ToList()));
             ctx.Response.Headers.CacheControl = "public, max-age=60";
             return Results.Ok(new
