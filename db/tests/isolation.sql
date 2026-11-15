@@ -115,6 +115,53 @@ exception when insufficient_privilege then
   insert into results values ('15. storico documenti non cancellabile', true, 'insufficient_privilege');
 end $$;
 
+-- 16. Tutte le tabelle dello schema app (comprese quelle nuove) hanno RLS forzata e la policy di isolamento
+do $$
+declare missing text;
+begin
+  select string_agg(c.relname, ', ') into missing
+  from pg_class c join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'app' and c.relkind = 'r'
+    and (not c.relrowsecurity or not c.relforcerowsecurity
+         or not exists (select 1 from pg_policies p where p.schemaname = 'app' and p.tablename = c.relname and p.policyname = 'tenant_isolation'));
+  insert into results values ('16. RLS forzata su tutte le tabelle app', missing is null, coalesce(missing, 'tutte protette'));
+end $$;
+
+-- 17. Piani, quote e stagioni di un tenant non sono visibili dall'altro
+do $$
+declare n int;
+begin
+  perform set_config('app.tenant_id', 'aaaaaaaa-0000-0000-0000-000000000001', true);
+  insert into app.seasons (tenant_id, id, name, start_date, end_date) values ('aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0005-000000000001', 'Stagione A', '2026-09-01', '2027-06-30');
+  insert into app.fee_plans (tenant_id, id, name, kind, amount_cents) values ('aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0006-000000000001', 'Piano A', 'subscription', 1000);
+  insert into app.member_charges (tenant_id, member_id, description, amount_cents, due_on) values ('aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0003-000000000001', 'Quota A', 1000, '2026-10-01');
+  perform set_config('app.tenant_id', 'bbbbbbbb-0000-0000-0000-000000000002', true);
+  select (select count(*) from app.seasons) + (select count(*) from app.fee_plans) + (select count(*) from app.member_charges) into n;
+  insert into results values ('17. piani, quote e stagioni isolati', n = 0, n || ' righe visibili');
+end $$;
+
+-- 18. Un piano acquistato non può riferirsi al piano di un altro tenant
+do $$ begin
+  perform set_config('app.tenant_id', 'bbbbbbbb-0000-0000-0000-000000000002', true);
+  insert into app.member_plans (tenant_id, member_id, plan_id, valid_from, valid_until)
+    values ('bbbbbbbb-0000-0000-0000-000000000002', 'bbbbbbbb-0000-0000-0003-000000000002', 'aaaaaaaa-0000-0000-0006-000000000001', '2026-09-01', '2027-06-30');
+  insert into results values ('18. piano di un altro tenant rifiutato', false, 'inserito!');
+exception when foreign_key_violation then
+  insert into results values ('18. piano di un altro tenant rifiutato', true, 'foreign_key_violation');
+end $$;
+
+-- 19. Le impostazioni (fuso orario, soglie) sono quelle del tenant corrente
+do $$
+declare a text; b text;
+begin
+  perform set_config('app.tenant_id', 'aaaaaaaa-0000-0000-0000-000000000001', true);
+  insert into app.tenant_settings (tenant_id, settings) values ('aaaaaaaa-0000-0000-0000-000000000001', '{"timezone":"America/New_York","booking":{"cancelHoursBefore":12}}');
+  a := app.tenant_timezone() || '/' || (app.settings() -> 'booking' ->> 'cancelHoursBefore');
+  perform set_config('app.tenant_id', 'bbbbbbbb-0000-0000-0000-000000000002', true);
+  b := app.tenant_timezone() || '/' || (app.settings() -> 'booking' ->> 'cancelHoursBefore');
+  insert into results values ('19. impostazioni distinte per tenant', a = 'America/New_York/12' and b = 'Europe/Rome/6', a || ' · ' || b);
+end $$;
+
 -- 11. Il ruolo API non può disattivare la RLS
 do $$ begin
   execute 'alter table app.classes disable row level security';

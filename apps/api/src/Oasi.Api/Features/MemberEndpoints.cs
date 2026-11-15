@@ -90,8 +90,8 @@ public static class MemberEndpoints
                 }
                 var row = await c.QuerySingleOrDefaultAsync<MemberRow>(SelectMembers + " where mb.id = @id", new { id, full = own }, tx) ?? throw ApiException.NotFound("Persona");
                 // Dati amministrativi (tessera, validità): solo amministrazione, interessato e genitore
-                var admin = own ? await c.QuerySingleOrDefaultAsync(@"select membership_status, card_number, to_char(card_expires_on, 'YYYY-MM-DD') as card_expires_on,
-                    coalesce(card_expires_on >= app.tenant_today(), false) as card_valid from app.member_admin where member_id = @id", new { id }, tx) : null;
+                var admin = own ? DynamicRows.Camel((object?)await c.QuerySingleOrDefaultAsync(@"select membership_status, card_number, to_char(card_expires_on, 'YYYY-MM-DD') as card_expires_on,
+                    coalesce(card_expires_on >= app.tenant_today(), false) as card_valid from app.member_admin where member_id = @id", new { id }, tx)) : null;
                 return new { member = row, administrative = admin };
             });
         }).RequireMember();

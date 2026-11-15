@@ -155,13 +155,13 @@ public static class PlanEndpoints
                 var subject = memberId ?? (m.IsAdmin ? (Guid?)null : m.MemberId);
                 if (subject is { } s && s != m.MemberId) await Relations.EnsureCanActFor(c, tx, m, s, "view");
                 await ExpirePlans(c, tx);
-                return await c.QueryAsync(@"
+                return (await c.QueryAsync(@"
                     select mp.id, mp.member_id, mb.first_name || ' ' || mb.last_name as member_name, mp.plan_id, p.name as plan_name, p.kind, p.category,
                            mp.payment_mode, mp.status, to_char(mp.valid_from, 'YYYY-MM-DD') as valid_from, to_char(mp.valid_until, 'YYYY-MM-DD') as valid_until,
                            mp.weekly_frequency, mp.entries_total, mp.entries_used, mp.entries_total - mp.entries_used as entries_left, mp.note,
                            coalesce((select array_agg(e.class_id) from app.enrollments e where e.member_plan_id = mp.id and e.status = 'approved'), '{}') as class_ids
                     from app.member_plans mp join app.fee_plans p on p.id = mp.plan_id join app.members mb on mb.id = mp.member_id
-                    where (@subject::uuid is null or mp.member_id = @subject) order by mp.valid_until desc limit 500", new { subject }, tx);
+                    where (@subject::uuid is null or mp.member_id = @subject) order by mp.valid_until desc limit 500", new { subject }, tx)).Camel();
             });
         }).RequireMember();
 
@@ -286,7 +286,7 @@ public static class PlanEndpoints
             {
                 var owner = await c.ExecuteScalarAsync<Guid?>("select member_id from app.member_charges where id = @id", new { id }, tx) ?? throw ApiException.NotFound("Quota");
                 if (owner != m.MemberId) await Relations.EnsureCanActFor(c, tx, m, owner, "view");
-                return await c.QueryAsync("select id, amount_cents, to_char(paid_on, 'YYYY-MM-DD') as paid_on, method, note, recorded_at from app.member_payments where charge_id = @id order by paid_on", new { id }, tx);
+                return (await c.QueryAsync("select id, amount_cents, to_char(paid_on, 'YYYY-MM-DD') as paid_on, method, note, recorded_at from app.member_payments where charge_id = @id order by paid_on", new { id }, tx)).Camel();
             });
         }).RequireMember();
 
@@ -336,14 +336,14 @@ public static class PlanEndpoints
             return await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
             {
                 var rows = (await c.QueryAsync<ChargeRow>(SelectCharges + " where ch.status <> 'cancelled'", transaction: tx)).ToList();
-                var missingDocs = await c.QueryAsync(@"
+                var missingDocs = (await c.QueryAsync(@"
                     select mb.id as member_id, mb.first_name || ' ' || mb.last_name as member_name, t.id as type_id, t.name as type_name
                     from app.members mb
                     join app.document_types t on t.is_active and app.document_required(mb.id, t.audience, t.is_required, t.required_for_competitive)
                     where not exists (select 1 from app.documents d where d.member_id = mb.id and d.type_id = t.id and d.is_current
                         and d.status in ('pending_review', 'approved') and (d.expires_on is null or d.expires_on >= app.tenant_today()))
-                    order by member_name, type_name limit 500", transaction: tx);
-                var season = await c.QuerySingleOrDefaultAsync("select id, name, to_char(end_date, 'YYYY-MM-DD') as end_date, (end_date - app.tenant_today()) as days_left from app.seasons where status = 'active'", transaction: tx);
+                    order by member_name, type_name limit 500", transaction: tx)).Camel();
+                var season = DynamicRows.Camel((object?)await c.QuerySingleOrDefaultAsync("select id, name, to_char(end_date, 'YYYY-MM-DD') as end_date, (end_date - app.tenant_today()) as days_left from app.seasons where status = 'active'", transaction: tx));
                 var nextSeason = await c.ExecuteScalarAsync<bool>("select exists(select 1 from app.seasons s where s.status = 'draft' and s.start_date > app.tenant_today())", transaction: tx);
                 return new
                 {
@@ -359,7 +359,7 @@ public static class PlanEndpoints
                     missingDocuments = missingDocs,
                     season,
                     // Promemoria annuale: la stagione attiva sta per finire (o manca) e la prossima non è ancora configurata
-                    seasonSetupNeeded = !nextSeason && (season is null || (int)season.days_left <= 90),
+                    seasonSetupNeeded = !nextSeason && (season is null || Convert.ToInt32(season["daysLeft"]) <= 90),
                 };
             });
         }).RequireAuthorization().RequireModule("payments").RequireMember(Roles.Admin);
@@ -372,8 +372,8 @@ public static class PlanEndpoints
             {
                 if (memberId != m.MemberId) await Relations.EnsureCanActFor(c, tx, m, memberId, "view");
                 var rows = (await c.QueryAsync<ChargeRow>(SelectCharges + " where ch.member_id = @memberId order by ch.due_on", new { memberId }, tx)).ToList();
-                var payments = await c.QueryAsync(@"select p.id, p.charge_id, p.amount_cents, to_char(p.paid_on, 'YYYY-MM-DD') as paid_on, p.method, p.note
-                    from app.member_payments p join app.member_charges ch on ch.id = p.charge_id where ch.member_id = @memberId order by p.paid_on desc", new { memberId }, tx);
+                var payments = (await c.QueryAsync(@"select p.id, p.charge_id, p.amount_cents, to_char(p.paid_on, 'YYYY-MM-DD') as paid_on, p.method, p.note
+                    from app.member_payments p join app.member_charges ch on ch.id = p.charge_id where ch.member_id = @memberId order by p.paid_on desc", new { memberId }, tx)).Camel();
                 var active = rows.Where(r => r.State != "cancelled").ToList();
                 return new
                 {

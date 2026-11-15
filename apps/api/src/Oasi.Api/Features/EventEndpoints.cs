@@ -130,7 +130,7 @@ public static class EventEndpoints
                 select t.id, t.position, t.title, t.artist, t.group_label, t.class_id, cl.name as class_name
                 from app.event_tracks t left join app.classes cl on cl.id = t.class_id
                 join app.events e on e.id = t.event_id
-                where t.event_id = @id and (e.is_published or @staff) order by t.position, t.created_at", new { id, staff = m.IsAdmin || m.IsTeacher }, tx));
+                where t.event_id = @id and (e.is_published or @staff) order by t.position, t.created_at", new { id, staff = m.IsAdmin || m.IsTeacher }, tx).ContinueWith(t => t.Result.Camel()));
         }).RequireMember();
 
         g.MapPost("/{id:guid}/tracks", async (HttpContext ctx, Db db, Guid id, TrackInput input) =>

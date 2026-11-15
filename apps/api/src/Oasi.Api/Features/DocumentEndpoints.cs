@@ -145,10 +145,10 @@ public static class DocumentEndpoints
                       select 1 from app.documents d where d.member_id = @memberId and d.type_id = t.id and d.is_current
                         and d.status in ('pending_review', 'approved') and (d.expires_on is null or d.expires_on >= app.tenant_today()))
                     order by t.name", new { memberId }, tx)).ToList();
-                var requests = await c.QueryAsync(@"
+                var requests = (await c.QueryAsync(@"
                     select r.id, r.type_id, t.name as type_name, to_char(r.due_on, 'YYYY-MM-DD') as due_on, r.note, r.requested_at
                     from app.document_requests r join app.document_types t on t.id = r.type_id
-                    where r.member_id = @memberId and r.status = 'open' order by r.due_on nulls last", new { memberId }, tx);
+                    where r.member_id = @memberId and r.status = 'open' order by r.due_on nulls last", new { memberId }, tx)).Camel();
                 return new
                 {
                     documents = current,
@@ -321,13 +321,13 @@ public static class DocumentEndpoints
             {
                 var subject = memberId ?? (m.IsAdmin ? (Guid?)null : m.MemberId);
                 if (subject is { } s && s != m.MemberId) await Relations.EnsureCanActFor(c, tx, m, s, "view");
-                return await c.QueryAsync(@"
+                return (await c.QueryAsync(@"
                     select r.id, r.member_id, mb.first_name || ' ' || mb.last_name as member_name, r.type_id, t.name as type_name,
                            to_char(r.due_on, 'YYYY-MM-DD') as due_on, r.note, r.status, r.document_id, r.requested_at,
                            (r.status = 'open' and r.due_on < app.tenant_today()) as is_overdue
                     from app.document_requests r join app.document_types t on t.id = r.type_id join app.members mb on mb.id = r.member_id
                     where (@subject::uuid is null or r.member_id = @subject) and (@status::text is null or r.status = @status)
-                    order by r.status, r.due_on nulls last limit 500", new { subject, status }, tx);
+                    order by r.status, r.due_on nulls last limit 500", new { subject, status }, tx)).Camel();
             });
         }).RequireMember();
 
