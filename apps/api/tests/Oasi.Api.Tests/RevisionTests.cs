@@ -187,8 +187,10 @@ public sealed class RevisionTests(ApiFixture api)
         var martina = api.For(Seed.OasiHost, Martina);
         var lesson = (await martina.GetFromJsonAsync<JsonElement[]>($"/v1/lessons?from={InDays(1)}&to={InDays(21)}"))!.First(l => l.GetProperty("status").GetString() == "scheduled");
         var date = lesson.GetProperty("date").GetString()!;
-        // Sofia ha chiesto di recuperare proprio in quella lezione
-        var makeup = await api.For(Seed.OasiHost, Seed.Sofia).PostAsJsonAsync("/v1/makeups", new { targetLessonId = lesson.GetProperty("id").GetGuid() });
+        // Sara (Cerchio Intermedio) ha annunciato un'assenza e ha chiesto di recuperare proprio in quella lezione
+        var sara = api.For(Seed.OasiHost, ApiFixture.Id("user:stu-sara"));
+        await Seed.DeclareAbsence(api, sara, Seed.ClassCerchioInt, notOn: date);
+        var makeup = await sara.PostAsJsonAsync("/v1/makeups", new { targetLessonId = lesson.GetProperty("id").GetGuid() });
         Assert.Equal(HttpStatusCode.Created, makeup.StatusCode);
         var makeupId = (await makeup.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
 
@@ -213,10 +215,11 @@ public sealed class RevisionTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.Conflict, (await api.For(Seed.OasiHost, Seed.Sofia).PostAsJsonAsync("/v1/makeups", new { targetLessonId = id })).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await api.For(Seed.OasiHost, Seed.Elena).PutAsJsonAsync($"/v1/lessons/{id}", new { status = "scheduled" })).StatusCode);
 
-        // Il recupero fissato in quel giorno è annullato e Sofia viene avvisata
+        // Il recupero fissato in quel giorno è annullato, Sara viene avvisata e il suo diritto torna disponibile
         Assert.Equal("cancelled", await api.Scalar<string>("select status from app.makeup_requests where id = @makeupId", new { makeupId }));
-        var sofiaNotes = await api.For(Seed.OasiHost, Seed.Sofia).GetFromJsonAsync<JsonElement[]>("/v1/notifications");
-        Assert.Contains(sofiaNotes!, n => n.GetProperty("title").GetString() == "Recupero annullato");
+        var saraNotes = await sara.GetFromJsonAsync<JsonElement[]>("/v1/notifications");
+        Assert.Contains(saraNotes!, n => n.GetProperty("title").GetString() == "Prenotazione annullata");
+        Assert.Equal("available", await api.Scalar<string>("select k.status from app.makeup_credits k join app.makeup_requests r on r.credit_id = k.id where r.id = @makeupId", new { makeupId }));
 
         // Le persone interessate ricevono la comunicazione
         var notes = await martina.GetFromJsonAsync<JsonElement[]>("/v1/notifications");

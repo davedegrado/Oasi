@@ -53,6 +53,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
     else throw new InvalidOperationException("Configura Auth:SupabaseUrl oppure Auth:JwtSecret.");
 });
 builder.Services.AddAuthorization();
+builder.Services.AddHostedService<Oasi.Api.Jobs.MaintenanceWorker>();
 
 // ── CORS: solo domini registrati delle palestre (+ origini di sviluppo) ──
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
@@ -85,6 +86,11 @@ DisciplineEndpoints.Map(app);
 ClosureEndpoints.Map(app);
 DocumentEndpoints.Map(app);
 NotificationEndpoints.Map(app);
+SettingsEndpoints.Map(app);
+MemberEndpoints.Map(app);
+SeasonEndpoints.Map(app);
+PlanEndpoints.Map(app);
+BookingEndpoints.Map(app);
 
 app.Run();
 

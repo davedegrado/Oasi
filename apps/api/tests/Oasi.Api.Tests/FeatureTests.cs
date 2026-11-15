@@ -105,21 +105,28 @@ public sealed class FeatureTests(ApiFixture api)
     public async Task Recupero_approvato_compare_nel_calendario_e_nell_elenco_della_lezione()
     {
         var sofia = api.For(Seed.OasiHost, Seed.Sofia); // iscritta solo a Cerchio Base
-        var elena = api.For(Seed.OasiHost, Seed.Elena);
-        var target = await NextLesson(elena, Seed.ClassTessutiInt, "&scope=teaching");
+        var admin = api.For(Seed.OasiHost, Seed.OasiAdmin);
+        // Senza un'assenza valida non c'è alcun diritto di recupero
+        var target = await NextLesson(admin, Seed.ClassTessutiBase, "&scope=all");
         var targetId = target.GetProperty("id").GetGuid();
+        var noCredit = await sofia.PostAsJsonAsync("/v1/makeups", new { targetLessonId = targetId });
+        Assert.Equal(HttpStatusCode.Conflict, noCredit.StatusCode);
+        Assert.Equal("no_makeup_credit", (await noCredit.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("type").GetString());
+
+        // Sofia annuncia per tempo l'assenza a una sua lezione: nasce il diritto
+        await Seed.DeclareAbsence(api, sofia, Seed.ClassCerchioBase);
 
         var req = await sofia.PostAsJsonAsync("/v1/makeups", new { targetLessonId = targetId, note = "Recupero della lezione persa" });
         Assert.Equal(HttpStatusCode.Created, req.StatusCode);
         var id = (await req.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
 
-        Assert.Equal(HttpStatusCode.OK, (await elena.PostAsJsonAsync($"/v1/makeups/{id}/decision", new { approve = true })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await admin.PostAsJsonAsync($"/v1/makeups/{id}/decision", new { approve = true })).StatusCode);
 
         var lessons = await sofia.GetFromJsonAsync<JsonElement[]>($"/v1/lessons?from={InDays(1)}&to={InDays(30)}");
         var mine = lessons!.Single(l => l.GetProperty("id").GetGuid() == targetId);
         Assert.True(mine.GetProperty("isMakeup").GetBoolean());
 
-        var roster = await elena.GetFromJsonAsync<JsonElement[]>($"/v1/lessons/{targetId}/roster");
+        var roster = await admin.GetFromJsonAsync<JsonElement[]>($"/v1/lessons/{targetId}/roster");
         Assert.Contains(roster!, r => r.GetProperty("memberId").GetGuid() == ApiFixture.Id("oasi:member:stu-sofia") && r.GetProperty("isMakeup").GetBoolean());
     }
 

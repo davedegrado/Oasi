@@ -41,13 +41,15 @@ public static class EnrollmentEndpoints
             var id = await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
             {
                 await Relations.EnsureCanActFor(c, tx, m, subject, "enroll");
-                var cls = await c.QuerySingleOrDefaultAsync<(bool IsActive, int? AgeMin, int? AgeMax)?>(
-                    "select is_active, age_min::int, age_max::int from app.classes where id = @ClassId", new { input.ClassId }, tx)
+                var cls = await c.QuerySingleOrDefaultAsync<(bool IsActive, short? AgeMin, short? AgeMax, int Capacity, int Enrolled)?>(@"
+                    select is_active, age_min, age_max, capacity::int,
+                           (select count(*)::int from app.enrollments x where x.class_id = c.id and x.status = 'approved')
+                    from app.classes c where id = @ClassId", new { input.ClassId }, tx)
                     ?? throw ApiException.NotFound("Classe");
                 if (!cls.IsActive) throw ApiException.Conflict("class_inactive", "La classe non accetta iscrizioni.");
-                var age = await c.ExecuteScalarAsync<int?>("select extract(year from age(birth_date))::int from app.members where id = @subject", new { subject }, tx);
-                if (age is not null && ((cls.AgeMin is { } min && age < min) || (cls.AgeMax is { } max && age > max)))
-                    throw ApiException.Conflict("age_out_of_range", "L'età non rientra nella fascia prevista dalla classe.");
+                // Classe piena: la richiesta viene bloccata subito (il controllo definitivo, con blocco, è all'approvazione)
+                if (cls.Enrolled >= cls.Capacity) throw ApiException.Conflict("class_full", "La classe ha raggiunto la capienza massima.");
+                await LessonRules.EnsureAge(c, tx, subject, cls.AgeMin, cls.AgeMax);
                 return await c.ExecuteScalarAsync<Guid>(@"
                     insert into app.enrollments (tenant_id, class_id, member_id, status, requested_by, note)
                     values (app.current_tenant(), @ClassId, @subject, 'requested', @user, @Note) returning id",
@@ -61,17 +63,19 @@ public static class EnrollmentEndpoints
             var m = ctx.Member();
             var status = await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
             {
-                var e = await c.QuerySingleOrDefaultAsync<(Guid ClassId, string Status)?>(
-                    "select class_id, status from app.enrollments where id = @id for update", new { id }, tx) ?? throw ApiException.NotFound("Richiesta");
+                var e = await c.QuerySingleOrDefaultAsync<(Guid ClassId, string Status, Guid MemberId)?>(
+                    "select class_id, status, member_id from app.enrollments where id = @id for update", new { id }, tx) ?? throw ApiException.NotFound("Richiesta");
                 await Relations.EnsureCanManageClass(c, tx, m, e.ClassId);
                 if (e.Status != "requested") throw ApiException.Conflict("already_decided", "La richiesta è già stata gestita.");
                 if (input.Approve)
                 {
                     // Blocca la classe per evitare di superare la capienza con approvazioni concorrenti
-                    var (capacity, enrolled) = await c.QuerySingleAsync<(int, int)>(@"
-                        select c.capacity, (select count(*)::int from app.enrollments x where x.class_id = c.id and x.status = 'approved')
-                        from app.classes c where c.id = @classId for update", new { classId = e.ClassId }, tx);
+                    var (capacity, competitiveLevel) = await c.QuerySingleAsync<(int, string)>(
+                        "select capacity::int, competitive_level from app.classes where id = @classId for update", new { classId = e.ClassId }, tx);
+                    var enrolled = await c.ExecuteScalarAsync<int>("select count(*) from app.enrollments where class_id = @classId and status = 'approved'", new { classId = e.ClassId }, tx);
                     if (enrolled >= capacity) throw ApiException.Conflict("class_full", "La classe ha raggiunto la capienza massima.");
+                    // Classe agonistica o preagonistica: serve il certificato approvato e valido
+                    await Competitive.EnsureCertificateForClass(c, tx, e.MemberId, competitiveLevel);
                 }
                 var next = input.Approve ? "approved" : "rejected";
                 await c.ExecuteAsync("update app.enrollments set status = @next, decided_by = @user, decided_at = now(), note = coalesce(@Note, note) where id = @id",

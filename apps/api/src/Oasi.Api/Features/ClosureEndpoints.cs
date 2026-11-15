@@ -90,11 +90,13 @@ public static class ClosureEndpoints
         app.MapGet("/v1/calendar", async (HttpContext ctx, Db db, string? from, string? to) =>
         {
             var m = ctx.Member();
-            var start = DateOnly.TryParse(from, out var f) ? f : DateOnly.FromDateTime(DateTime.Now);
+            return await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
+            {
+            var start = DateOnly.TryParse(from, out var f) ? f : DateOnly.FromDateTime(await c.ExecuteScalarAsync<DateTime>("select app.tenant_today()::timestamp", transaction: tx));
             var end = DateOnly.TryParse(to, out var t) ? t : start.AddDays(41);
             if (end < start || end.DayNumber - start.DayNumber > 62) throw ApiException.Invalid("Intervallo di date non valido (massimo 62 giorni).");
             var range = new { from = start.ToString("yyyy-MM-dd"), to = end.ToString("yyyy-MM-dd") };
-            return await db.InTenant(m.TenantId, m.UserId, async (c, tx) => new
+            return new
             {
                 lessons = await c.QueryAsync(@"
                     select l.id, l.class_id, c.name as class_name, c.discipline_id, to_char(l.date, 'YYYY-MM-DD') as date,
@@ -105,6 +107,7 @@ public static class ClosureEndpoints
                 events = await c.QueryAsync(@"
                     select id, type, title, to_char(date, 'YYYY-MM-DD') as date, to_char(start_time, 'HH24:MI') as start_time
                     from app.events where date between @from::date and @to::date order by date", range, tx),
+            };
             });
         }).RequireAuthorization().RequireModule("calendar").RequireMember(Roles.Admin);
     }
@@ -136,11 +139,33 @@ public static class ClosureEndpoints
             from app.lessons l
             where l.id = r.target_lesson_id and l.closure_id = @closureId and r.status in ('requested', 'approved')
             returning r.member_id", new { closureId, actor }, tx);
+        // I diritti impegnati in quei recuperi tornano disponibili; una lezione chiusa non genera recuperi
+        await c.ExecuteAsync(@"
+            update app.makeup_credits k set status = 'available'
+            from app.makeup_requests r join app.lessons l on l.id = r.target_lesson_id
+            where r.credit_id = k.id and l.closure_id = @closureId and r.status = 'cancelled' and k.status in ('reserved', 'used')", new { closureId }, tx);
+        await c.ExecuteAsync(@"
+            update app.makeup_credits k set status = 'cancelled'
+            from app.lessons l where l.id = k.source_lesson_id and l.closure_id = @closureId and k.status = 'available'", new { closureId }, tx);
+        // Le prenotazioni di lezioni singole in quei giorni vengono annullate senza consumare ingressi
+        var booked = await c.QueryAsync<(Guid MemberId, Guid? PlanId, bool Consumed, Guid? ChargeId)>(@"
+            update app.lesson_bookings b set status = 'cancelled', cancelled_at = now(), entry_consumed = false, note = trim(b.note || ' [Annullata: palestra chiusa]')
+            from app.lessons l, (select id, member_plan_id, entry_consumed, charge_id from app.lesson_bookings) prev
+            where l.id = b.lesson_id and prev.id = b.id and l.closure_id = @closureId and b.status = 'booked'
+            returning b.member_id, prev.member_plan_id, prev.entry_consumed, prev.charge_id", new { closureId }, tx);
+        foreach (var b in booked)
+        {
+            if (b.Consumed && b.PlanId is not null)
+                await c.ExecuteAsync("update app.member_plans set entries_used = greatest(entries_used - 1, 0) where id = @id", new { id = b.PlanId }, tx);
+            if (b.ChargeId is not null)
+                await c.ExecuteAsync("update app.member_charges set status = 'cancelled' where id = @id and status = 'open'", new { id = b.ChargeId }, tx);
+        }
+        members = members.Concat(booked.Select(b => b.MemberId));
         foreach (var memberId in members.Distinct())
         {
             var users = await Notifier.UsersOfMember(c, tx, memberId);
-            await Notifier.ToUsers(c, tx, users, "schedule_changes", "Recupero annullato",
-                "La lezione scelta per il recupero cade in un giorno di chiusura: richiedine un'altra.", actor);
+            await Notifier.ToUsers(c, tx, users, "schedule_changes", "Prenotazione annullata",
+                "La lezione scelta cade in un giorno di chiusura: scegline un'altra.", actor, link: "/calendario");
         }
     }
 

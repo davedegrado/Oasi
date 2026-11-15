@@ -48,6 +48,7 @@ public sealed class ApiFixture : WebApplicationFactory<Program>, IAsyncLifetime
             ["ConnectionStrings:Oasi"] = $"Host={PgHost};Port={PgPort};Database={Database};Username=oasi_api;Password=oasi_api_local",
             ["Auth:JwtSecret"] = JwtSecret,
             ["Auth:SupabaseUrl"] = null,
+            ["Jobs:Enabled"] = "false",
         }));
     }
 
@@ -130,4 +131,27 @@ public static class Seed
     public static readonly Guid ClassTessutiInt = ApiFixture.Id("oasi:class:cls-tessuti-int");
     public static readonly Guid ClassCerchioBase = ApiFixture.Id("oasi:class:cls-cerchio-base");
     public static readonly Guid ProvaClass = ApiFixture.Id("prova:class:pole-base");
+    public static readonly Guid ClassTessutiBase = ApiFixture.Id("oasi:class:cls-tessuti-base");
+    public static readonly Guid ClassTessutiAdv = ApiFixture.Id("oasi:class:cls-avanzato");
+    public static readonly Guid ClassCerchioAdv = ApiFixture.Id("oasi:class:cls-cerchio-avz");
+
+    /// <summary>
+    /// L'allieva annuncia per tempo l'assenza a una lezione futura della propria classe
+    /// (almeno due giorni dopo, quindi entro la soglia di disdetta): ne nasce un diritto di recupero.
+    /// Restituisce l'id della lezione.
+    /// </summary>
+    public static async Task<Guid> DeclareAbsence(ApiFixture api, HttpClient student, Guid classId, string? notOn = null, int fromDays = 2)
+    {
+        var from = DateTime.Now.AddDays(fromDays).ToString("yyyy-MM-dd");
+        var to = DateTime.Now.AddDays(fromDays + 40).ToString("yyyy-MM-dd");
+        var lessons = await System.Net.Http.Json.HttpClientJsonExtensions.GetFromJsonAsync<System.Text.Json.JsonElement[]>(student, $"/v1/lessons?from={from}&to={to}");
+        foreach (var l in lessons!.Where(l => l.GetProperty("classId").GetGuid() == classId && l.GetProperty("status").GetString() == "scheduled"
+                     && l.GetProperty("date").GetString() != notOn && l.GetProperty("declared").ValueKind == System.Text.Json.JsonValueKind.Null))
+        {
+            var id = l.GetProperty("id").GetGuid();
+            var res = await System.Net.Http.Json.HttpClientJsonExtensions.PutAsJsonAsync(student, $"/v1/lessons/{id}/declaration", new { declared = "absent" });
+            if (res.IsSuccessStatusCode) return id;
+        }
+        throw new InvalidOperationException("Nessuna lezione futura su cui annunciare un'assenza");
+    }
 }
