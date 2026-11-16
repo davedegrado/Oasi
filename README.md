@@ -5,9 +5,11 @@ Piattaforma per palestre di danza aerea, scuole di danza e studi sportivi: un un
 | Cartella | Contenuto | Stato |
 | --- | --- | --- |
 | [`apps/web`](apps/web) | Web App / PWA React + TypeScript + Vite + Tailwind | Completa in modalità demo; white-label da configurazione; collegamento alle API in corso |
-| [`apps/api`](apps/api) | API ASP.NET Core (.NET 10) multi-tenant | Core, calendario, presenze, iscrizioni, recuperi, figure, progressi, eventi, inviti, Super Admin — 24 test |
+| [`apps/api`](apps/api) | API ASP.NET Core (.NET 10) multi-tenant | Core, calendario, presenze, iscrizioni, recuperi con diritto residuo, lezioni singole, stagioni, piani e pagamenti registrati, agonismo, documenti, eventi, Super Admin — 46 test |
 | [`db`](db) | Migrazioni PostgreSQL/Supabase con Row Level Security, seed, test di isolamento | Pronto |
 | `native` | App iOS/Android con Capacitor | Da fare (fase 7 del piano) |
+
+Stato del lavoro, verifiche e decisioni aperte: [`docs/STATO-SAAS.md`](docs/STATO-SAAS.md).
 
 Documenti di progetto (claude.ai): analisi dello stato iniziale e architettura con piano di migrazione.
 

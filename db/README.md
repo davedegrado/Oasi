@@ -5,6 +5,7 @@ Schema PostgreSQL multi-tenant della piattaforma (compatibile con Supabase).
 | Cartella | Contenuto |
 | --- | --- |
 | `migrations/` | Migrazioni SQL in ordine numerico. Si applicano così come sono a Supabase (SQL editor o `supabase db push`). |
+| `seed/0110_…` | Configurazione iniziale di Oasi per la stagione 2026/27 (stagione, periodi, chiusure, piani, soglie): **dati del tenant**, scritti a mano, modificabili dall'amministrazione. |
 | `seed/` | Dati dimostrativi **generati** da `apps/web/scripts/export-demo-seed.ts` (`npm run seed:export`): tenant Oasi Metropolitana e tenant di prova Studio Prova. Tutti marcati `is_demo`. |
 | `tests/isolation.sql` | Controlli di isolamento tra tenant eseguiti con il ruolo dell'API. |
 | `local/` | Solo sviluppo: stub dello schema `auth` di Supabase, utenti demo e script di reset. |
@@ -21,7 +22,7 @@ Schema PostgreSQL multi-tenant della piattaforma (compatibile con Supabase).
 ```bash
 # PostgreSQL 16 in ascolto (es. PGHOST=/tmp PGPORT=5433)
 db/local/reset.sh --seed                      # ricrea il database "oasi" con migrazioni e seed
-psql -d oasi -f db/tests/isolation.sql        # 11 controlli di isolamento
+psql -d oasi -f db/tests/isolation.sql        # 19 controlli di isolamento
 ```
 
 ## Su Supabase
