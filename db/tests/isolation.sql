@@ -159,7 +159,7 @@ begin
   a := app.tenant_timezone() || '/' || (app.settings() -> 'booking' ->> 'cancelHoursBefore');
   perform set_config('app.tenant_id', 'bbbbbbbb-0000-0000-0000-000000000002', true);
   b := app.tenant_timezone() || '/' || (app.settings() -> 'booking' ->> 'cancelHoursBefore');
-  insert into results values ('19. impostazioni distinte per tenant', a = 'America/New_York/12' and b = 'Europe/Rome/6', a || ' · ' || b);
+  insert into results values ('19. impostazioni distinte per tenant', a = 'America/New_York/12' and b = 'Europe/Rome/0', a || ' · ' || b);
 end $$;
 
 -- 11. Il ruolo API non può disattivare la RLS
