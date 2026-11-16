@@ -27,7 +27,11 @@ interface WeekCalendarProps {
   renderDayHeader?: (date: string) => React.ReactNode
 }
 
-/** Calendario con vista settimanale e giornaliera */
+/**
+ * Calendario: si apre sulla settimana. La barra dei giorni è l'unico punto in cui
+ * compaiono i giorni: sotto, su telefono, ci sono solo le lezioni del giorno scelto;
+ * su schermi larghi la griglia settimanale ha le proprie intestazioni e la barra non serve.
+ */
 export function WeekCalendar({ lessons, onLessonClick, canClick, renderAside, renderFooter, renderBadges, initialView = 'settimana', markDay, renderDayHeader }: WeekCalendarProps) {
   const db = useDatabase()
   const disciplines = useDisciplines()
@@ -141,9 +145,9 @@ export function WeekCalendar({ lessons, onLessonClick, canClick, renderAside, re
         </div>
       )}
 
-      {/* Striscia giorni */}
+      {/* Barra dei giorni: sempre nella vista giorno; nella vista settimana solo su telefono */}
       {view !== 'mese' && (
-      <div className="mb-5 grid grid-cols-7 gap-1.5 rounded-3xl bg-white p-1.5 shadow-soft sm:gap-2 sm:p-2">
+      <div className={cn('mb-5 grid grid-cols-7 gap-1.5 rounded-3xl bg-white p-1.5 shadow-soft sm:gap-2 sm:p-2', view === 'settimana' && 'md:hidden')}>
         {days.map((d) => {
           const items = byDay.get(d) ?? []
           const active = d === selected
@@ -152,15 +156,13 @@ export function WeekCalendar({ lessons, onLessonClick, canClick, renderAside, re
             <button
               key={d}
               type="button"
-              onClick={() => {
-                setSelected(d)
-                setView('giorno')
-              }}
+              onClick={() => setSelected(d)}
+              aria-pressed={active}
               className={cn(
                 'flex flex-col items-center gap-1 rounded-2xl py-2 transition',
-                active && view === 'giorno' ? 'bg-ink text-white' : isToday ? 'bg-cipria text-ink' : 'text-ink-soft hover:bg-cipria-50',
+                active ? 'bg-ink text-white' : isToday ? 'bg-cipria text-ink' : 'text-ink-soft hover:bg-cipria-50',
               )}
-              aria-label={formatDate(d, { weekday: true })}
+              aria-label={`${formatDate(d, { weekday: true })}: ${items.length} lezioni`}
             >
               <span className="text-[11px] font-semibold uppercase opacity-75">{formatDayShort(d)}</span>
               <span className="font-display text-lg leading-none font-bold">{dayNumber(d)}</span>
@@ -197,22 +199,16 @@ export function WeekCalendar({ lessons, onLessonClick, canClick, renderAside, re
         </div>
       ) : (
         <>
-          {/* Mobile: elenco per giorno */}
-          <div className="space-y-5 md:hidden">
-            {days.filter((d) => byDay.get(d)?.length).length === 0 && <p className="rounded-3xl bg-white p-6 text-center text-sm text-ink-muted">Nessuna lezione in questa settimana.</p>}
-            {days
-              .filter((d) => byDay.get(d)?.length)
-              .map((d) => (
-                <div key={d}>
-                  <p className={cn('mb-2 text-sm font-bold first-letter:uppercase', d === today ? 'text-rosa-intenso' : 'text-ink-soft')}>
-                    {d === today ? 'Oggi · ' : ''}
-                    {formatDate(d, { weekday: true })}
-                  </p>
-                  <div className="space-y-2.5">
-                    {byDay.get(d)!.map(card)}
-                  </div>
-                </div>
-              ))}
+          {/* Telefono: le lezioni del giorno scelto nella barra (i giorni non vengono ripetuti) */}
+          <div className="space-y-2.5 md:hidden">
+            {renderDayHeader?.(selected)}
+            {dayLessons.length === 0 ? (
+              <p className="rounded-3xl bg-white p-6 text-center text-sm text-ink-muted">
+                {days.some((d) => byDay.get(d)?.length) ? 'Nessuna lezione in questo giorno.' : 'Nessuna lezione in questa settimana.'}
+              </p>
+            ) : (
+              dayLessons.map(card)
+            )}
           </div>
           {/* Tablet/desktop: griglia settimanale */}
           <div className="hidden grid-cols-7 gap-2 md:grid">
@@ -221,6 +217,8 @@ export function WeekCalendar({ lessons, onLessonClick, canClick, renderAside, re
                 <p className={cn('mb-2 px-1 text-xs font-bold uppercase', d === today ? 'text-rosa-intenso' : 'text-ink-muted')}>
                   {formatDayShort(d)} {dayNumber(d)}
                 </p>
+                {markDay?.(d).closed && <p className="mb-2 rounded-xl bg-danger-soft px-2 py-1 text-[11px] font-bold text-danger">Chiusura</p>}
+                {markDay?.(d).event && <p className="mb-2 rounded-xl bg-cipria px-2 py-1 text-[11px] font-bold text-rosa-intenso">Evento</p>}
                 <div className="space-y-2">
                   {(byDay.get(d) ?? []).map((l) => {
                     const cls = findClass(db, l.classId)
@@ -258,21 +256,20 @@ export function WeekCalendar({ lessons, onLessonClick, canClick, renderAside, re
         </>
       )}
 
-      <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-xs text-ink-muted">
-        {disciplines.list
-          .filter((d) => lessons.some((l) => findClass(db, l.classId)?.discipline === d.id))
-          .map((d) => (
-            <span key={d.id} className="flex items-center gap-1.5">
-              <span className="size-2.5 rounded-full" style={{ background: d.color }} /> {d.name}
-            </span>
-          ))}
-        <span className="flex items-center gap-1.5">
-          <span className="size-2.5 rounded-full bg-warn" /> Orario variato
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="size-2.5 rounded-full bg-danger" /> Annullata
-        </span>
-      </div>
+      {/* Legenda solo se serve a distinguere più discipline: stati e orari sono già scritti sulle lezioni */}
+      {(() => {
+        const used = disciplines.list.filter((d) => lessons.some((l) => findClass(db, l.classId)?.discipline === d.id))
+        if (used.length < 2) return null
+        return (
+          <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-xs text-ink-muted">
+            {used.map((d) => (
+              <span key={d.id} className="flex items-center gap-1.5">
+                <span className="size-2.5 rounded-full" style={{ background: d.color }} /> {d.name}
+              </span>
+            ))}
+          </div>
+        )
+      })()}
     </div>
   )
 }

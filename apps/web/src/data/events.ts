@@ -143,7 +143,9 @@ export const demoAssociation: AssociationInfo = {
   rooms: ['Sala Luna', 'Sala Seta'],
   settings: {
     maxStudentsPerClass: 8,
-    absenceNoticeHours: 12,
+    absenceNoticeHours: 6,
+    bookingNoticeHours: 48,
+    makeupLowerLevelAllowed: true,
     remindersEnabled: true,
     progressVisibleToTeachers: true,
     trialLessonEnabled: true,

@@ -11,6 +11,7 @@ import { DeclarationToggle } from '@/components/lessons/DeclarationToggle'
 import { buttonVariants } from '@/components/ui/button-variants'
 import { useDatabase } from '@/hooks/useDatabase'
 import { useCurrentStudent } from '@/hooks/useDemo'
+import { NextEventBanner } from '@/components/events/NextEventBanner'
 import { findClass, findTeacher, lessonsForStudent, nextLesson, progressSummary, recentProgress, upcomingEvents } from '@/services/selectors'
 import { documentSummary, memberDocuments } from '@/services/documents'
 import { formatDate, greeting, relativeDayLabel, todayISO } from '@/lib/dates'
@@ -149,6 +150,8 @@ export function StudentHome() {
           </CardContent>
         </Card>
       </div>
+
+      <NextEventBanner to="/allieva/eventi" />
 
       {/* Comunicazioni */}
       <section>

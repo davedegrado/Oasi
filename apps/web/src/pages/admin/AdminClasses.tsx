@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Clock, MapPin, Pencil, Plus, Trash2, Users } from 'lucide-react'
-import type { ClassGroup, Discipline, Level } from '@/types'
+import type { ClassGroup, CompetitiveLevel, Discipline, Level } from '@/types'
 import { PageHeader } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -9,11 +9,12 @@ import { Field, Input, Select, Textarea } from '@/components/ui/input'
 import { Segmented } from '@/components/ui/segmented'
 import { ProgressBar } from '@/components/ui/progress'
 import { Avatar, AvatarStack } from '@/components/ui/avatar'
-import { DisciplineBadge, LevelBadge } from '@/components/common/badges'
+import { CompetitiveBadge, DisciplineBadge, LevelBadge } from '@/components/common/badges'
+import { Badge } from '@/components/ui/badge'
 import { RequestsPanel } from '@/components/requests/RequestsPanel'
 import { useDatabase, useRepository } from '@/hooks/useDatabase'
 import { useToast } from '@/hooks/useToast'
-import { classOccupancy, findStudent, findTeacher } from '@/services/selectors'
+import { classDisciplines, classOccupancy, findStudent, findTeacher, isCompetitive, isCompetitiveClass } from '@/services/selectors'
 import { weekdayName } from '@/lib/dates'
 import { LEVEL_LABEL, LEVELS } from '@/lib/labels'
 import { cn, fullName, uid } from '@/lib/utils'
@@ -42,7 +43,7 @@ export function AdminClasses() {
   const [editing, setEditing] = useState<{ cls: ClassGroup; isNew: boolean } | null>(null)
   const [viewing, setViewing] = useState<ClassGroup | null>(null)
   const [filter, setFilter] = useState<'tutte' | Discipline>('tutte')
-  const classes = db.classes.filter((c) => filter === 'tutte' || c.discipline === filter).sort((a, b) => a.weekday - b.weekday || a.startTime.localeCompare(b.startTime))
+  const classes = db.classes.filter((c) => filter === 'tutte' || classDisciplines(c).includes(filter)).sort((a, b) => a.weekday - b.weekday || a.startTime.localeCompare(b.startTime))
   const totalSeats = db.classes.reduce((s, c) => s + c.capacity, 0)
   const enrolled = db.classes.reduce((s, c) => s + c.studentIds.length, 0)
 
@@ -65,7 +66,7 @@ export function AdminClasses() {
         className="mb-5"
         value={filter}
         onChange={setFilter}
-        options={[{ value: 'tutte', label: 'Tutte' }, ...disciplines.list.filter((d) => d.isActive || db.classes.some((c) => c.discipline === d.id)).map((d) => ({ value: d.id, label: d.shortName }))]}
+        options={[{ value: 'tutte', label: 'Tutte' }, ...disciplines.list.filter((d) => d.isActive || db.classes.some((c) => classDisciplines(c).includes(d.id))).map((d) => ({ value: d.id, label: d.shortName }))]}
       />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {classes.map((c) => {
@@ -78,8 +79,11 @@ export function AdminClasses() {
               <CardContent className="flex flex-1 flex-col">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex flex-wrap gap-1.5">
-                    <DisciplineBadge discipline={c.discipline} />
+                    {classDisciplines(c).map((d) => (
+                      <DisciplineBadge key={d} discipline={d} />
+                    ))}
                     <LevelBadge level={c.level} />
+                    {isCompetitiveClass(c) && <Badge className="bg-ink text-white">{c.competitiveLevel === 'agonistica' ? 'Agonistica' : 'Preagonistica'}</Badge>}
                   </div>
                   <Button size="icon-sm" variant="ghost" aria-label={`Modifica ${c.name}`} onClick={() => setEditing({ cls: structuredClone(c), isNew: false })}>
                     <Pencil />
@@ -134,6 +138,7 @@ export function AdminClasses() {
                   <li key={s.id} className="flex items-center gap-3 py-2.5">
                     <Avatar person={s} size="sm" />
                     <span className="flex-1 text-sm font-semibold">{fullName(s)}</span>
+                    {isCompetitive(db, s.id) && <CompetitiveBadge />}
                     <LevelBadge level={s.level} />
                   </li>
                 ))}
@@ -211,7 +216,7 @@ function ClassDialog({ initial, isNew, onClose }: { initial: ClassGroup; isNew: 
           <Input id="c-name" value={cls.name} onChange={(e) => set('name', e.target.value)} placeholder="Es. Cerchio Open" />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Disciplina" htmlFor="c-disc">
+          <Field label="Disciplina principale" htmlFor="c-disc">
             <Select id="c-disc" value={cls.discipline} onChange={(e) => set('discipline', e.target.value as Discipline)}>
               {disciplines.list
                 .filter((d) => d.isActive || d.id === initial.discipline)
@@ -230,6 +235,38 @@ function ClassDialog({ initial, isNew, onClose }: { initial: ClassGroup; isNew: 
                   {LEVEL_LABEL[l]}
                 </option>
               ))}
+            </Select>
+          </Field>
+          <div className="col-span-2">
+            <p className="mb-1.5 text-sm font-semibold text-ink">Altre discipline della classe</p>
+            <div className="flex flex-wrap gap-2">
+              {disciplines.list
+                .filter((d) => d.id !== cls.discipline && (d.isActive || (initial.extraDisciplines ?? []).includes(d.id)))
+                .map((d) => {
+                  const on = (cls.extraDisciplines ?? []).includes(d.id)
+                  return (
+                    <button
+                      key={d.id}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => set('extraDisciplines', on ? (cls.extraDisciplines ?? []).filter((x) => x !== d.id) : [...(cls.extraDisciplines ?? []), d.id])}
+                      className={cn('rounded-full border px-3 py-1.5 text-sm font-semibold transition', on ? 'border-ink bg-ink text-white' : 'border-line bg-white text-ink-soft hover:bg-cipria-50')}
+                    >
+                      {d.name}
+                    </button>
+                  )
+                })}
+              {disciplines.list.filter((d) => d.id !== cls.discipline && d.isActive).length === 0 && (
+                <p className="text-xs text-ink-muted">Aggiungi altre discipline da Gestione → Discipline.</p>
+              )}
+            </div>
+            <p className="mt-1.5 text-xs text-ink-muted">Scegli una o più discipline dall’archivio della palestra, senza limite.</p>
+          </div>
+          <Field label="Classificazione" htmlFor="c-comp">
+            <Select id="c-comp" value={cls.competitiveLevel ?? 'nessuna'} onChange={(e) => set('competitiveLevel', e.target.value as CompetitiveLevel)}>
+              <option value="nessuna">Non agonistica</option>
+              <option value="preagonistica">Preagonistica</option>
+              <option value="agonistica">Agonistica</option>
             </Select>
           </Field>
           <Field label="Insegnante" htmlFor="c-teacher">

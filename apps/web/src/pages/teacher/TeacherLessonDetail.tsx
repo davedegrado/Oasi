@@ -10,12 +10,12 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog } from '@/components/ui/dialog'
 import { Field, Input, Textarea } from '@/components/ui/input'
 import { EmptyState } from '@/components/common/EmptyState'
-import { DisciplineBadge, LevelBadge, MembershipBadge } from '@/components/common/badges'
+import { CompetitiveBadge, DisciplineBadge, LevelBadge, MembershipBadge } from '@/components/common/badges'
 import { LessonStatusBadge } from '@/components/lessons/LessonCard'
 import { HoopArc } from '@/components/common/Decor'
 import { useDatabase, useRepository } from '@/hooks/useDatabase'
 import { useToast } from '@/hooks/useToast'
-import { declarationSummary, findClass, findTeacher, isLessonPast, lessonRoster } from '@/services/selectors'
+import { declarationSummary, findClass, findTeacher, isCompetitive, isLessonPast, lessonRoster } from '@/services/selectors'
 import { formatDate, relativeDayLabel } from '@/lib/dates'
 import { cn, fullName } from '@/lib/utils'
 
@@ -165,6 +165,7 @@ export function TeacherLessonDetail({ basePath = '/insegnante/lezioni', studentB
                         <p className="truncate font-semibold text-ink">{fullName(s)}</p>
                         <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                           {isMakeup ? <Badge tone="rosa">Recupero</Badge> : <LevelBadge level={s.level} />}
+                          {isCompetitive(db, s.id) && <CompetitiveBadge />}
                           {declared === 'assente' && <Badge tone="danger">Ha disdetto</Badge>}
                           {s.membership.status !== 'attiva' && <MembershipBadge status={s.membership.status} />}
                         </div>

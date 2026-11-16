@@ -32,7 +32,7 @@ export function AppShell({ role }: { role: Role }) {
   const { hasModule } = useTenant()
   const items = NAVIGATION[role].filter((i) => !i.module || hasModule(i.module))
   const bottomItems = items.filter((i) => !i.sidebarOnly)
-  const profileItem = items.find((i) => i.sidebarOnly)
+  const profileItem = items.find((i) => i.sidebarOnly && i.to.endsWith('/profilo'))
   const db = useDatabase()
   const requestCount = role === 'admin' ? pendingRequests(db, null).total : role === 'insegnante' && persona?.userId ? pendingRequests(db, persona.userId).total : 0
   const notificationsPath = `/${role}/notifiche`

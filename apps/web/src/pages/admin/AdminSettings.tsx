@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { ArrowRight, Building2, Database, Sparkles, Download, Mail, MapPin, Pencil, Phone, RotateCcw, Globe } from 'lucide-react'
+import { SharedDocumentsCard } from '@/components/documents/SharedDocumentsCard'
+import { Wallet, ArrowRight, Building2, Database, Sparkles, Download, Mail, MapPin, Pencil, Phone, RotateCcw, Globe } from 'lucide-react'
 import type { AssociationInfo } from '@/types'
 import { PageHeader } from '@/components/common/PageHeader'
 import { ClosuresManager } from '@/components/closures/ClosuresManager'
@@ -26,7 +27,9 @@ const SETTINGS_META: { key: keyof AssociationInfo['settings']; label: string; de
   { key: 'progressVisibleToTeachers', label: 'Progressi visibili alle insegnanti', description: 'Le insegnanti vedono stati e note delle allieve', type: 'toggle' },
   { key: 'trialLessonEnabled', label: 'Lezione di prova', description: 'Consente iscrizioni in stato “Lezione di prova”', type: 'toggle' },
   { key: 'maxStudentsPerClass', label: 'Capienza standard per classe', description: 'Valore predefinito per le nuove classi', type: 'number', suffix: 'allieve' },
-  { key: 'absenceNoticeHours', label: 'Preavviso assenze', description: 'Ore minime per comunicare un’assenza', type: 'number', suffix: 'ore' },
+  { key: 'absenceNoticeHours', label: 'Preavviso disdetta', description: 'Ore minime prima della lezione per disdire senza conseguenze', type: 'number', suffix: 'ore' },
+  { key: 'bookingNoticeHours', label: 'Preavviso prenotazione', description: 'Ore minime prima della lezione per prenotare una lezione singola', type: 'number', suffix: 'ore' },
+  { key: 'makeupLowerLevelAllowed', label: 'Recupero in livello inferiore', description: 'Consenti il recupero in classi di livello inferiore (mai superiore)', type: 'toggle' },
 ]
 
 type Section = 'calendario' | 'discipline' | 'didattica' | 'associazione'
@@ -128,6 +131,25 @@ export function AdminSettings() {
       {section === 'didattica' && <DidacticsCard />}
       {section === 'associazione' && (
       <>
+      {/* Regolamento e modulistica: consultabili da allieve e insegnanti, modificabili dall'amministrazione */}
+      <SharedDocumentsCard
+        audience="ogni"
+        action={
+          <Link to="/admin/archivio" className="text-sm font-semibold text-rosa-intenso">
+            Aggiorna il regolamento o aggiungi un documento →
+          </Link>
+        }
+      />
+      <Link to="/admin/quote" className="flex items-center gap-3 rounded-3xl border border-line/70 bg-white p-4 shadow-soft transition hover:shadow-float">
+        <span className="grid size-11 place-items-center rounded-2xl bg-cipria text-rosa-intenso">
+          <Wallet className="size-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-display font-bold text-ink">Piani, quote e pagamenti</span>
+          <span className="block text-sm text-ink-muted">Stagione {db.season.name}: listino, rate, pagamenti registrati e insoluti</span>
+        </span>
+        <ArrowRight className="size-5 text-rosa-intenso" />
+      </Link>
 
       <Card className="overflow-hidden">
         <div className="bg-gradient-to-r from-cipria to-cipria-50 p-5 sm:p-6">

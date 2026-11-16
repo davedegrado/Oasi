@@ -9,6 +9,8 @@ import { Avatar } from '@/components/ui/avatar'
 import { ProgressBar } from '@/components/ui/progress'
 import { EventCard } from '@/components/events/EventCard'
 import { useDatabase, useRepository } from '@/hooks/useDatabase'
+import { useDemo } from '@/hooks/useDemo'
+import { EventTracksButton } from '@/components/events/EventTracks'
 import { useToast } from '@/hooks/useToast'
 import { findStudent, pastEvents, upcomingEvents } from '@/services/selectors'
 import { getPhotoLibrary } from '@/services/media'
@@ -40,6 +42,10 @@ export function AdminEvents() {
   const { toast } = useToast()
   const [editing, setEditing] = useState<{ event: OasiEvent; isNew: boolean } | null>(null)
   const [participantsOf, setParticipantsOf] = useState<string | null>(null)
+  // Solo l'amministrazione crea e modifica gli eventi; gli insegnanti li consultano e indicano i brani delle proprie classi
+  const { persona } = useDemo()
+  const isAdmin = persona?.role === 'admin'
+  const editor = isAdmin ? 'admin' : (persona?.userId ?? undefined)
   const upcoming = upcomingEvents(db)
   const past = pastEvents(db)
   const viewing = db.events.find((e) => e.id === participantsOf)
@@ -49,9 +55,12 @@ export function AdminEvents() {
       <Button size="sm" variant="soft" onClick={() => setParticipantsOf(e.id)}>
         <Users /> Adesioni ({e.participantIds.length})
       </Button>
-      <Button size="sm" variant="outline" onClick={() => setEditing({ event: structuredClone(e), isNew: false })}>
-        <Pencil /> Modifica
-      </Button>
+      {isAdmin && (
+        <Button size="sm" variant="outline" onClick={() => setEditing({ event: structuredClone(e), isNew: false })}>
+          <Pencil /> Modifica
+        </Button>
+      )}
+      <EventTracksButton event={e} editor={editor} />
     </>
   )
 
@@ -60,11 +69,13 @@ export function AdminEvents() {
       <PageHeader
         eyebrow="Eventi"
         title="Spettacoli, stage e workshop"
-        description="Crea eventi, modificali e controlla le adesioni delle allieve."
+        description={isAdmin ? 'Crea eventi, modificali e controlla le adesioni delle allieve.' : 'Consulta gli eventi, le adesioni e indica i brani delle performance delle tue classi.'}
         actions={
-          <Button onClick={() => setEditing({ event: emptyEvent(), isNew: true })}>
-            <Plus /> Nuovo evento
-          </Button>
+          isAdmin ? (
+            <Button onClick={() => setEditing({ event: emptyEvent(), isNew: true })}>
+              <Plus /> Nuovo evento
+            </Button>
+          ) : undefined
         }
         className="mb-0"
       />
@@ -113,6 +124,7 @@ export function AdminEvents() {
                   <li key={s.id} className="flex items-center gap-3 py-2.5">
                     <Avatar person={s} size="sm" />
                     <span className="flex-1 text-sm font-semibold">{fullName(s)}</span>
+                    {isAdmin && (
                     <Button
                       size="icon-sm"
                       variant="ghost"
@@ -124,6 +136,7 @@ export function AdminEvents() {
                     >
                       <X />
                     </Button>
+                    )}
                   </li>
                 ))}
             </ul>
@@ -229,6 +242,10 @@ function EventDialog({ initial, isNew, onClose }: { initial: OasiEvent; isNew: b
             <Input id="e-deadline" type="date" value={event.signupDeadline ?? ''} max={event.date} onChange={(e) => set('signupDeadline', e.target.value || undefined)} />
           </Field>
         </div>
+        <label className="flex items-center gap-2.5 rounded-2xl bg-cipria-50 p-3 text-sm font-semibold text-ink">
+          <input type="checkbox" className="size-4 accent-[var(--color-rosa-intenso)]" checked={!!event.featured} onChange={(e) => set('featured', e.target.checked)} />
+          Evento principale: mostralo in evidenza nella home
+        </label>
         <Field label="Descrizione" htmlFor="e-desc">
           <Textarea id="e-desc" rows={3} value={event.description} onChange={(e) => set('description', e.target.value)} />
         </Field>

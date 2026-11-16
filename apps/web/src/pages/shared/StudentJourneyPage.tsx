@@ -6,6 +6,7 @@ import { FiguresByStatus, ProgressOverview } from '@/components/students/Progres
 import { AttendanceHistory } from '@/components/students/AttendanceHistory'
 import { GoalsCard } from '@/components/students/GoalsCard'
 import { AdminInfoCard } from '@/components/students/AdminInfoCard'
+import { AccountCard } from '@/components/students/AccountCard'
 import { MemberDocumentsPanel } from '@/components/documents/MemberDocumentsPanel'
 import { useDatabase } from '@/hooks/useDatabase'
 import { findStudent } from '@/services/selectors'
@@ -36,7 +37,8 @@ export function StudentJourneyPage({ backTo, backLabel, figureBase, showAdmin }:
         <div className="space-y-5">
           <GoalsCard student={student} />
           <FiguresByStatus studentId={student.id} status="riuscita" linkBase={figureBase} />
-          {showAdmin && <AdminInfoCard student={student} />}
+          {showAdmin && <AdminInfoCard student={student} editable />}
+          {showAdmin && <AccountCard studentId={student.id} />}
         </div>
         <AttendanceHistory studentId={student.id} />
       </div>

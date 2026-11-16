@@ -3,6 +3,8 @@ import { applyClosure, createSeedDatabase, DATABASE_VERSION } from '@/data/seed'
 import { addDays, formatDate, startOfWeek, todayISO } from '@/lib/dates'
 import { uid } from '@/lib/utils'
 import type { OasiRepository } from './repository'
+import { isCompetitiveClass, isLessonPast, lessonRoster, makeupCredits, makeupLevelAllowed } from './selectors'
+import { documentState } from './documents'
 
 const STORAGE_KEY = 'oasi-demo-db'
 
@@ -64,6 +66,21 @@ function migrateFrom6(db: OasiDatabase): OasiDatabase {
   }
 }
 
+/** v8 → v9: agonismo, classi con più discipline, brani degli eventi, soglie configurabili, piani e quote */
+function migrateFrom8(db: OasiDatabase): OasiDatabase {
+  const seed = createSeedDatabase()
+  return {
+    ...db,
+    version: DATABASE_VERSION,
+    association: { ...db.association, settings: { ...seed.association.settings, ...db.association.settings, absenceNoticeHours: seed.association.settings.absenceNoticeHours } },
+    documentTypes: [...db.documentTypes, ...seed.documentTypes.filter((t) => t.requiredForCompetitive && !db.documentTypes.some((x) => x.id === t.id))],
+    season: db.season ?? seed.season,
+    plans: db.plans ?? seed.plans,
+    memberPlans: db.memberPlans ?? seed.memberPlans,
+    charges: db.charges ?? seed.charges,
+  }
+}
+
 type LegacyDoc = OasiDatabase['documents'][number] & { signature?: { method: string } }
 
 /** v7 → v8: nessuna firma nell'app, i moduli si caricano firmati a mano */
@@ -86,11 +103,12 @@ function loadFromStorage(): OasiDatabase | null {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as OasiDatabase
-    if (parsed.version === 3) return migrateFrom7(migrateFrom6(migrateFrom5(migrateFrom4(migrateFrom3(parsed)))))
-    if (parsed.version === 4) return migrateFrom7(migrateFrom6(migrateFrom5(migrateFrom4(parsed))))
-    if (parsed.version === 5) return migrateFrom7(migrateFrom6(migrateFrom5(parsed)))
-    if (parsed.version === 6) return migrateFrom7(migrateFrom6(parsed))
-    if (parsed.version === 7) return migrateFrom7(parsed)
+    if (parsed.version === 3) return migrateFrom8(migrateFrom7(migrateFrom6(migrateFrom5(migrateFrom4(migrateFrom3(parsed))))))
+    if (parsed.version === 4) return migrateFrom8(migrateFrom7(migrateFrom6(migrateFrom5(migrateFrom4(parsed)))))
+    if (parsed.version === 5) return migrateFrom8(migrateFrom7(migrateFrom6(migrateFrom5(parsed))))
+    if (parsed.version === 6) return migrateFrom8(migrateFrom7(migrateFrom6(parsed)))
+    if (parsed.version === 7) return migrateFrom8(migrateFrom7(parsed))
+    if (parsed.version === 8) return migrateFrom8(parsed)
     if (parsed.version !== DATABASE_VERSION) return null
     return parsed
   } catch {
@@ -302,6 +320,12 @@ export class LocalRepository implements OasiRepository {
       if (open) return db
       const lesson = db.lessons.find((l) => l.id === targetLessonId)
       const cls = db.classes.find((c) => c.id === lesson?.classId)
+      // Stesse regole del backend: diritto residuo, livello non superiore, posti disponibili
+      if (makeupCredits(db, studentId).available <= 0) throw new Error('Non hai recuperi disponibili: un recupero nasce da un’assenza a una tua lezione.')
+      if (!lesson || !cls || lesson.status === 'annullata' || isLessonPast(lesson)) throw new Error('La lezione scelta non è disponibile per un recupero.')
+      if (!makeupLevelAllowed(db, studentId, cls)) throw new Error('Puoi recuperare solo in classi del tuo livello o, se consentito, di livello inferiore.')
+      const pending = db.makeupRequests.filter((r) => r.targetLessonId === targetLessonId && r.status === 'in_attesa').length
+      if (lessonRoster(db, lesson).length + pending >= cls.capacity) throw new Error('La lezione non ha più posti disponibili.')
       return withNotifications(
         {
           ...db,
@@ -316,6 +340,15 @@ export class LocalRepository implements OasiRepository {
     const cls = this.db.classes.find((c) => c.id === req?.classId)
     if (!req || !cls || req.status !== 'in_attesa') return Promise.resolve()
     if (approve && cls.studentIds.length >= cls.capacity) return Promise.reject(new Error('La classe ha raggiunto la capienza massima.'))
+    // Classe agonistica o preagonistica: serve il certificato agonistico approvato e valido
+    if (approve && isCompetitiveClass(cls)) {
+      const state = (id: string) => {
+        const doc = this.db.documents.find((d) => d.memberId === req.studentId && d.typeId === id && d.current)
+        return documentState(doc)
+      }
+      const missing = this.db.documentTypes.filter((t) => t.active && t.requiredForCompetitive && !['approvato', 'in_scadenza'].includes(state(t.id)))
+      if (missing.length > 0) return Promise.reject(new Error(`Per questa classe serve un documento approvato e valido: ${missing.map((t) => t.name).join(', ')}.`))
+    }
     return this.commit((db) => withNotifications({
       ...db,
       enrollmentRequests: db.enrollmentRequests.map((r) =>
@@ -630,6 +663,54 @@ export class LocalRepository implements OasiRepository {
 
   updateAssociation: OasiRepository['updateAssociation'] = (patch) =>
     this.commit((db) => ({ ...db, association: { ...db.association, ...patch } }))
+
+  savePlan: OasiRepository['savePlan'] = (plan) =>
+    this.commit((db) => ({ ...db, plans: db.plans.some((p) => p.id === plan.id) ? db.plans.map((p) => (p.id === plan.id ? plan : p)) : [...db.plans, plan] }))
+
+  assignPlan: OasiRepository['assignPlan'] = ({ studentId, planId, paymentMode, periodId, validFrom }) =>
+    this.commit((db) => {
+      const plan = db.plans.find((p) => p.id === planId)
+      if (!plan || !plan.active) throw new Error('Piano non disponibile.')
+      if (paymentMode === 'rate' && !plan.installments?.length) throw new Error('Questo piano non prevede il pagamento a rate.')
+      // Validità: periodo scelto → settimane dalla data d'inizio → date del piano → stagione
+      const period = db.season.periods.find((p) => p.id === periodId)
+      let from = validFrom ?? plan.validFrom ?? db.season.startDate
+      let until = plan.validUntil ?? db.season.endDate
+      let label = `Stagione ${db.season.name}`
+      if (plan.billing === 'periodico') {
+        if (!period) throw new Error('Scegli il periodo: il piano è periodico.')
+        from = period.startDate
+        until = period.endDate
+        label = period.name
+      } else if (plan.validityWeeks) {
+        from = validFrom ?? todayISO()
+        until = addDays(from, plan.validityWeeks * 7 - 1)
+        label = `${formatDate(from)} – ${formatDate(until)}`
+      }
+      const mp = { id: uid('mp'), studentId, planId, paymentMode, validFrom: from, validUntil: until, entriesTotal: plan.entries, entriesUsed: plan.entries ? 0 : undefined, createdAt: todayISO() }
+      const base = { studentId, memberPlanId: mp.id, kind: plan.kind === 'tessera' ? ('tessera' as const) : ('piano' as const), payments: [] }
+      const charges =
+        paymentMode === 'rate'
+          ? plan.installments!.map((i, n) => ({ ...base, id: uid('chg'), description: `${plan.name} · rata ${n + 1} di ${plan.installments!.length}`, installmentNo: n + 1, periodLabel: `${formatDate(i.coversFrom)} – ${formatDate(i.coversUntil)}`, amountCents: i.amountCents, dueOn: i.dueOn }))
+          : [{ ...base, id: uid('chg'), description: plan.name, periodLabel: label, amountCents: plan.amountCents, dueOn: from }]
+      return { ...db, memberPlans: [mp, ...db.memberPlans], charges: [...charges, ...db.charges] }
+    })
+
+  addCharge: OasiRepository['addCharge'] = (charge) =>
+    this.commit((db) => ({ ...db, charges: [{ ...charge, id: uid('chg'), payments: [] }, ...db.charges] }))
+
+  recordPayment: OasiRepository['recordPayment'] = (chargeId, payment) =>
+    this.commit((db) => {
+      const charge = db.charges.find((c) => c.id === chargeId)
+      if (!charge || charge.cancelled) throw new Error('Quota non disponibile.')
+      const residual = charge.amountCents - charge.payments.reduce((s, p) => s + p.amountCents, 0)
+      if (payment.amountCents <= 0) throw new Error('Importo non valido.')
+      if (payment.amountCents > residual) throw new Error(`Residuo da pagare: ${(residual / 100).toFixed(2)} €.`)
+      return { ...db, charges: db.charges.map((c) => (c.id === chargeId ? { ...c, payments: [...c.payments, { ...payment, id: uid('pay') }] } : c)) }
+    })
+
+  deletePayment: OasiRepository['deletePayment'] = (chargeId, paymentId) =>
+    this.commit((db) => ({ ...db, charges: db.charges.map((c) => (c.id === chargeId ? { ...c, payments: c.payments.filter((p) => p.id !== paymentId) } : c)) }))
 
   reset: OasiRepository['reset'] = () => this.commit(() => createSeedDatabase())
 }

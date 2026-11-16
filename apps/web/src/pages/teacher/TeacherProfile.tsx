@@ -10,6 +10,8 @@ import { useCurrentTeacher } from '@/hooks/useDemo'
 import { classOccupancy, studentsOfTeacher } from '@/services/selectors'
 import { weekdayName } from '@/lib/dates'
 import { fullName } from '@/lib/utils'
+import { MemberDocumentsPanel } from '@/components/documents/MemberDocumentsPanel'
+import { SharedDocumentsCard } from '@/components/documents/SharedDocumentsCard'
 
 export function TeacherProfile() {
   const db = useDatabase()
@@ -97,6 +99,9 @@ export function TeacherProfile() {
           </div>
         </CardContent>
       </Card>
+      {/* Documenti richiesti dall'amministrazione all'insegnante e regolamento della palestra */}
+      <MemberDocumentsPanel memberId={teacher.id} mode="allieva" />
+      <SharedDocumentsCard audience="insegnanti" />
     </div>
   )
 }

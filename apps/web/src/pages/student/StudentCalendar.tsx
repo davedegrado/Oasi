@@ -15,7 +15,7 @@ import { RequestStatusBadge } from '@/components/requests/RequestStatusBadge'
 import { useDatabase, useRepository } from '@/hooks/useDatabase'
 import { useCurrentStudent } from '@/hooks/useDemo'
 import { useToast } from '@/hooks/useToast'
-import { findClass, isLessonPast, isMakeupFor, lessonsForStudent, sortLessons } from '@/services/selectors'
+import { findClass, isLessonPast, isMakeupFor, lessonsForStudent, makeupCredits, makeupLevelAllowed, sortLessons } from '@/services/selectors'
 import { formatDate } from '@/lib/dates'
 
 export function StudentCalendar() {
@@ -32,14 +32,18 @@ export function StudentCalendar() {
   const myRequests = db.makeupRequests.filter((r) => r.studentId === student.id).slice(0, 6)
 
   // Si può chiedere un recupero su lezioni future di altre classi, non annullate e non già richieste
-  const canRequestMakeup = (l: Lesson) => !mineIds.has(l.id) && !isLessonPast(l) && l.status !== 'annullata' && !requested.has(l.id)
+  const credits = makeupCredits(db, student.id)
+  const canRequestMakeup = (l: Lesson) => {
+    const cls = findClass(db, l.classId)
+    return !mineIds.has(l.id) && !isLessonPast(l) && l.status !== 'annullata' && !requested.has(l.id) && credits.available > 0 && !!cls && makeupLevelAllowed(db, student.id, cls)
+  }
 
   return (
     <div className="animate-fade-up space-y-6">
       <PageHeader
         eyebrow="Calendario"
         title="Le tue lezioni"
-        description="Mese, settimana o giorno. Sei attesa a tutte le tue lezioni: se non puoi venire, disdici e la tua insegnante lo saprà subito."
+        description="Sei attesa a tutte le tue lezioni: se non puoi venire, disdici e la tua insegnante lo saprà subito."
         className="mb-0"
         actions={
           <Link to="/allieva/classi" className={buttonVariants({ variant: 'soft', size: 'sm' })}>
@@ -58,12 +62,13 @@ export function StudentCalendar() {
       {scope === 'tutte' && (
         <p className="flex items-start gap-2 rounded-3xl bg-cipria-50 p-4 text-sm text-ink-soft">
           <Info className="mt-0.5 size-4 shrink-0 text-rosa-intenso" />
-          Tocca una lezione di un’altra classe per chiedere un recupero. Va confermato dall’insegnante o dall’amministrazione.
+          {credits.available > 0
+            ? `Hai ${credits.available} ${credits.available === 1 ? 'recupero disponibile' : 'recuperi disponibili'}: tocca una lezione “Recuperabile” del tuo livello. Va confermato dall’insegnante o dall’amministrazione.`
+            : 'Non hai recuperi disponibili: un recupero nasce da un’assenza a una tua lezione.'}
         </p>
       )}
       <WeekCalendar
         lessons={lessons}
-        initialView="mese"
         onLessonClick={(l) => setMakeupFor(l)}
         canClick={scope === 'tutte' ? canRequestMakeup : () => false}
         renderFooter={(l) => (mineIds.has(l.id) ? <DeclarationToggle lesson={l} studentId={student.id} /> : undefined)}

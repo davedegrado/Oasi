@@ -1,6 +1,7 @@
 import type {
   DemoPersona,
   AttendanceMark,
+  Charge,
   ClassGroup,
   Discipline,
   Figure,
@@ -238,3 +239,78 @@ export function upcomingClosures(db: OasiDatabase) {
   const today = todayISO()
   return (db.closures ?? []).filter((c) => c.endDate >= today).sort((a, b) => a.startDate.localeCompare(b.startDate))
 }
+
+
+// ── Agonismo ────────────────────────────────────────────────────────
+/** Tutte le discipline di una classe: la principale più quelle aggiunte */
+export const classDisciplines = (c: ClassGroup): string[] => [c.discipline, ...(c.extraDisciplines ?? []).filter((d) => d !== c.discipline)]
+
+export const isCompetitiveClass = (c: ClassGroup | undefined) => !!c && (c.competitiveLevel ?? 'nessuna') !== 'nessuna'
+
+/** Agonista: per classificazione della persona oppure perché iscritta a una classe agonistica o preagonistica */
+export function isCompetitive(db: OasiDatabase, studentId: string): boolean {
+  const s = db.students.find((x) => x.id === studentId)
+  if (!s) return false
+  return !!s.competitive || db.classes.some((c) => isCompetitiveClass(c) && c.studentIds.includes(studentId))
+}
+
+// ── Diritti di recupero ─────────────────────────────────────────────
+const RANK: Record<string, number> = { base: 0, intermedio: 1, avanzato: 2 }
+
+/**
+ * Un diritto di recupero nasce da un'assenza a una lezione della propria classe
+ * (annunciata o registrata) e si consuma con una richiesta non rifiutata.
+ */
+export function makeupCredits(db: OasiDatabase, studentId: string) {
+  const own = new Set(db.classes.filter((c) => c.studentIds.includes(studentId)).map((c) => c.id))
+  const absences = db.lessons.filter(
+    (l) => own.has(l.classId) && l.status !== 'annullata' && (l.declarations?.[studentId] === 'assente' || l.attendance[studentId] === 'assente') && l.attendance[studentId] !== 'presente',
+  )
+  const requests = db.makeupRequests.filter((r) => r.studentId === studentId && r.status !== 'rifiutata')
+  const used = requests.filter((r) => r.status === 'approvata').length
+  const pending = requests.filter((r) => r.status === 'in_attesa').length
+  return { earned: absences.length, used, pending, available: Math.max(absences.length - used - pending, 0), absences }
+}
+
+/** Il recupero è ammesso in classi dello stesso livello o (se consentito) inferiore; mai superiore */
+export function makeupLevelAllowed(db: OasiDatabase, studentId: string, target: ClassGroup): boolean {
+  const own = db.classes.filter((c) => c.studentIds.includes(studentId))
+  if (own.length === 0) return false
+  const top = Math.max(...own.map((c) => RANK[c.level] ?? 0))
+  const wanted = RANK[target.level] ?? 0
+  if (wanted > top) return false
+  return wanted === top || (db.association.settings.makeupLowerLevelAllowed ?? true)
+}
+
+/** Evento principale per la home: quello in evidenza, altrimenti il prossimo saggio/spettacolo/gara, altrimenti il più vicino */
+export function nextMainEvent(db: OasiDatabase) {
+  const list = upcomingEvents(db)
+  return list.find((e) => e.featured) ?? list.find((e) => e.type === 'saggio' || e.type === 'spettacolo' || e.type === 'gara') ?? list[0]
+}
+
+// ── Quote e pagamenti ───────────────────────────────────────────────
+export type ChargeState = 'pagata' | 'parziale' | 'scaduta' | 'aperta' | 'annullata'
+
+export const chargePaid = (c: Charge) => c.payments.reduce((s, p) => s + p.amountCents, 0)
+
+export function chargeState(c: Charge, today: string): ChargeState {
+  if (c.cancelled) return 'annullata'
+  const paid = chargePaid(c)
+  if (paid >= c.amountCents) return 'pagata'
+  if (c.dueOn < today) return 'scaduta'
+  return paid > 0 ? 'parziale' : 'aperta'
+}
+
+/** Riepilogo economico di un'allieva (o di tutta la palestra se studentId è assente) */
+export function accountSummary(db: OasiDatabase, today: string, studentId?: string) {
+  const charges = db.charges.filter((c) => !c.cancelled && (!studentId || c.studentId === studentId))
+  const due = charges.reduce((s, c) => s + c.amountCents, 0)
+  const paid = charges.reduce((s, c) => s + chargePaid(c), 0)
+  const overdue = charges.filter((c) => chargeState(c, today) === 'scaduta')
+  return { charges, due, paid, residual: due - paid, overdue, overdueCents: overdue.reduce((s, c) => s + c.amountCents - chargePaid(c), 0) }
+}
+
+export const euro = (cents: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(cents / 100)
+
+/** Tipi di evento che prevedono un'esibizione: per questi si indicano i brani */
+export const isPerformance = (e: { type: string }) => e.type === 'gara' || e.type === 'saggio' || e.type === 'spettacolo'

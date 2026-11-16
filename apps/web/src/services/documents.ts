@@ -1,5 +1,6 @@
 import type { DocumentStatus, DocumentType, MemberDocument, OasiDatabase } from '@/types'
 import { addDays, todayISO } from '@/lib/dates'
+import { isCompetitive } from './selectors'
 
 /** Giorni di preavviso per i documenti in scadenza */
 export const EXPIRY_WARNING_DAYS = 30
@@ -30,8 +31,15 @@ export interface MemberDocumentRow {
 /** Situazione documentale di un profilo: una riga per tipologia attiva (o con documenti caricati) */
 export function memberDocuments(db: OasiDatabase, memberId: string, today = todayISO()): MemberDocumentRow[] {
   const mine = (db.documents ?? []).filter((d) => d.memberId === memberId)
+  const competitive = isCompetitive(db, memberId)
+  const who = db.teachers.some((t) => t.id === memberId) ? 'insegnanti' : 'allieve'
   return (db.documentTypes ?? [])
-    .filter((t) => t.active || mine.some((d) => d.typeId === t.id))
+    // Solo le tipologie destinate a questo profilo (allieve o insegnanti)
+    .filter((t) => (t.audience ?? 'allieve') === 'tutti' || (t.audience ?? 'allieve') === who || mine.some((d) => d.typeId === t.id))
+    // Le tipologie per soli agonisti non compaiono ai non agonisti (a meno che abbiano già caricato qualcosa)
+    .filter((t) => (t.active && (!t.requiredForCompetitive || t.required || competitive)) || mine.some((d) => d.typeId === t.id))
+    // "required" diventa l'obbligo effettivo per questa persona
+    .map((t) => ({ ...t, required: t.required || (!!t.requiredForCompetitive && competitive) }))
     .map((type) => {
       const versions = mine.filter((d) => d.typeId === type.id).sort((a, b) => b.version - a.version)
       const doc = versions.find((d) => d.current)

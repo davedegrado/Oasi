@@ -4,9 +4,20 @@ import { Card, CardContent } from '@/components/ui/card'
 import { MembershipBadge } from '@/components/common/badges'
 import { formatDate, todayISO, addDays } from '@/lib/dates'
 import { cn } from '@/lib/utils'
+import { useDatabase, useRepository } from '@/hooks/useDatabase'
+import { useToast } from '@/hooks/useToast'
+import { isCompetitive, isCompetitiveClass } from '@/services/selectors'
+import { memberDocuments } from '@/services/documents'
 
 /** Informazioni amministrative dimostrative (tessera, certificato, quota) */
-export function AdminInfoCard({ student }: { student: Student }) {
+export function AdminInfoCard({ student, editable = false }: { student: Student; editable?: boolean }) {
+  const db = useDatabase()
+  const repo = useRepository()
+  const { toast } = useToast()
+  const byClass = db.classes.some((c) => isCompetitiveClass(c) && c.studentIds.includes(student.id))
+  const competitive = isCompetitive(db, student.id)
+  const certificate = memberDocuments(db, student.id).find((r) => r.type.requiredForCompetitive)
+  const certificateOk = certificate?.state === 'approvato' || certificate?.state === 'in_scadenza'
   const m = student.membership
   const today = todayISO()
   const certMissing = !m.medicalCertificateExpiresAt
@@ -46,6 +57,31 @@ export function AdminInfoCard({ student }: { student: Student }) {
             </div>
           ))}
         </dl>
+        <div className="mt-4 rounded-2xl bg-cipria-50 p-3">
+          <label className="flex items-center gap-2.5 text-sm font-semibold text-ink">
+            <input
+              type="checkbox"
+              className="size-4 accent-[var(--color-rosa-intenso)]"
+              checked={competitive}
+              disabled={byClass || !editable}
+              onChange={async (e) => {
+                await repo.updateStudent(student.id, { competitive: e.target.checked })
+                toast(e.target.checked ? 'Impostata come agonista' : 'Impostata come non agonista')
+              }}
+            />
+            Agonista
+          </label>
+          <p className={cn('mt-1.5 text-xs', competitive && !certificateOk ? 'font-semibold text-danger' : 'text-ink-muted')}>
+            {byClass
+              ? 'È iscritta a una classe agonistica o preagonistica. '
+              : ''}
+            {!competitive
+              ? 'Il certificato agonistico non è richiesto ai non agonisti.'
+              : certificateOk
+                ? 'Certificato agonistico approvato e valido.'
+                : 'Certificato agonistico obbligatorio: mancante, scaduto o non ancora approvato.'}
+          </p>
+        </div>
         <p className="mt-4 text-xs text-ink-muted">Dati amministrativi dimostrativi: nessun pagamento reale è gestito dall’app.</p>
       </CardContent>
     </Card>

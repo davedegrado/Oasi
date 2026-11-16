@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Field, Select, Textarea } from '@/components/ui/input'
 import { useDatabase, useRepository } from '@/hooks/useDatabase'
 import { useToast } from '@/hooks/useToast'
-import { findClass, findTeacher, lessonRoster, lessonsForStudent } from '@/services/selectors'
+import { findClass, findTeacher, lessonRoster, lessonsForStudent, makeupCredits, makeupLevelAllowed } from '@/services/selectors'
 import { addDays, formatDate, todayISO } from '@/lib/dates'
 import { fullName } from '@/lib/utils'
 
@@ -26,10 +26,18 @@ export function MakeupDialog({ lesson, studentId, onClose }: { lesson: Lesson; s
   const [note, setNote] = useState('')
   const free = (cls?.capacity ?? 0) - lessonRoster(db, lesson).length
 
+  const credits = makeupCredits(db, studentId)
+  const levelOk = !!cls && makeupLevelAllowed(db, studentId, cls)
+  const [error, setError] = useState('')
+
   const send = async () => {
-    await repo.requestMakeup(studentId, lesson.id, missed || undefined, note.trim())
-    toast('Richiesta inviata: riceverai la conferma dall’insegnante')
-    onClose()
+    try {
+      await repo.requestMakeup(studentId, lesson.id, missed || undefined, note.trim())
+      toast('Richiesta inviata: riceverai la conferma dall’insegnante')
+      onClose()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Richiesta non inviata')
+    }
   }
 
   return (
@@ -43,13 +51,21 @@ export function MakeupDialog({ lesson, studentId, onClose }: { lesson: Lesson; s
           <Button variant="outline" onClick={onClose}>
             Annulla
           </Button>
-          <Button onClick={send} disabled={free <= 0}>
+          <Button onClick={send} disabled={free <= 0 || credits.available <= 0 || !levelOk}>
             <RefreshCcw /> Invia richiesta
           </Button>
         </>
       }
     >
       <div className="space-y-4">
+        {error && <p className="rounded-2xl bg-danger-soft p-3 text-sm text-danger">{error}</p>}
+        <p className={credits.available > 0 && levelOk ? 'rounded-2xl bg-ok-soft p-3 text-sm text-ink-soft' : 'rounded-2xl bg-warn-soft p-3 text-sm text-ink-soft'}>
+          {!levelOk
+            ? 'Puoi recuperare solo in classi del tuo livello o, se la palestra lo consente, di livello inferiore.'
+            : credits.available > 0
+              ? `Recuperi disponibili: ${credits.available} (su ${credits.earned} assenze; ${credits.used} utilizzati, ${credits.pending} in attesa).`
+              : 'Non hai recuperi disponibili: un recupero nasce da un’assenza a una tua lezione, annunciata o registrata.'}
+        </p>
         <div className="rounded-3xl bg-cipria-50 p-4">
           <p className="font-display text-lg font-bold">{cls?.name}</p>
           <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-soft first-letter:uppercase">

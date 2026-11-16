@@ -299,6 +299,13 @@ function TypeDialog({ type, onClose }: { type: DocumentType; onClose: () => void
             {CATEGORIES.map((c) => <option key={c} value={c}>{DOCUMENT_CATEGORY_LABEL[c]}</option>)}
           </Select>
         </Field>
+        <Field label="Richiesto a" htmlFor="dt-aud">
+          <Select id="dt-aud" value={form.audience ?? 'allieve'} onChange={(e) => set('audience', e.target.value as 'allieve' | 'insegnanti' | 'tutti')}>
+            <option value="allieve">Allieve</option>
+            <option value="insegnanti">Insegnanti</option>
+            <option value="tutti">Allieve e insegnanti</option>
+          </Select>
+        </Field>
         <Field label="Firma a mano" htmlFor="dt-sign">
           <Select id="dt-sign" value={form.signatureMode} onChange={(e) => set('signatureMode', e.target.value as DocumentType['signatureMode'])}>
             {(Object.keys(SIGNATURE_LABEL) as DocumentType['signatureMode'][]).map((s) => <option key={s} value={s}>{SIGNATURE_LABEL[s]}</option>)}
@@ -311,9 +318,9 @@ function TypeDialog({ type, onClose }: { type: DocumentType; onClose: () => void
           <Input id="dt-val" type="number" min={1} value={form.validityMonths ?? ''} onChange={(e) => set('validityMonths', e.target.value ? Number(e.target.value) : undefined)} />
         </Field>
         <div className="space-y-2 text-sm text-ink-soft">
-          {([['required', 'Obbligatorio per tutte le allieve'], ['sensitive', 'Dato riservato (es. sanitario)'], ['active', 'Attiva (richiesta alle allieve)']] as const).map(([k, label]) => (
+          {([['required', 'Obbligatorio per tutti i destinatari'], ['requiredForCompetitive', 'Obbligatorio solo per agoniste e classi agonistiche'], ['sensitive', 'Dato riservato (es. sanitario)'], ['active', 'Attiva (richiesta alle allieve)']] as const).map(([k, label]) => (
             <label key={k} className="flex items-center gap-2">
-              <input type="checkbox" className="size-4 accent-rosa-intenso" checked={form[k]} onChange={(e) => set(k, e.target.checked)} /> {label}
+              <input type="checkbox" className="size-4 accent-rosa-intenso" checked={!!form[k]} onChange={(e) => set(k, e.target.checked)} /> {label}
             </label>
           ))}
         </div>

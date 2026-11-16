@@ -7,6 +7,9 @@ import type {
   Teacher,
   AssociationInfo,
   AttendanceMark,
+  Charge,
+  FeePlan,
+  PaymentRecord,
   ClassGroup,
   Figure,
   FigureProgress,
@@ -91,6 +94,15 @@ export interface OasiRepository {
 
   // Associazione
   updateAssociation(patch: Partial<AssociationInfo>): Promise<void>
+
+  // Piani, quote e pagamenti (incassati fuori dall'app: qui si registrano soltanto)
+  savePlan(plan: FeePlan): Promise<void>
+  /** Assegna un piano: calcola la validità e genera le quote (unica soluzione o rate) */
+  assignPlan(input: { studentId: string; planId: string; paymentMode: 'unica' | 'rate'; periodId?: string; validFrom?: string }): Promise<void>
+  addCharge(charge: Omit<Charge, 'id' | 'payments'>): Promise<void>
+  /** Registra un pagamento ricevuto (anche parziale). Rifiuta importi oltre il residuo. */
+  recordPayment(chargeId: string, payment: Omit<PaymentRecord, 'id'>): Promise<void>
+  deletePayment(chargeId: string, paymentId: string): Promise<void>
 
   /** Ripristina i dati dimostrativi iniziali */
   reset(): Promise<void>

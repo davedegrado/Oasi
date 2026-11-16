@@ -6,9 +6,9 @@ import { useDatabase } from '@/hooks/useDatabase'
 import { fmtDay, openDocumentFile } from './documentUtils'
 
 /** Documenti messi a disposizione dalla palestra: regolamento, moduli da stampare */
-export function SharedDocumentsCard({ audience }: { audience: SharedDocument['audience'] }) {
+export function SharedDocumentsCard({ audience, action }: { audience: SharedDocument['audience'] | 'ogni'; action?: React.ReactNode }) {
   const db = useDatabase()
-  const docs = (db.sharedDocuments ?? []).filter((d) => d.audience === 'tutti' || d.audience === audience)
+  const docs = (db.sharedDocuments ?? []).filter((d) => audience === 'ogni' || d.audience === 'tutti' || d.audience === audience)
   if (!docs.length) return null
   return (
     <Card>
@@ -32,6 +32,7 @@ export function SharedDocumentsCard({ audience }: { audience: SharedDocument['au
             </li>
           ))}
         </ul>
+        {action && <div className="mt-3">{action}</div>}
       </CardContent>
     </Card>
   )

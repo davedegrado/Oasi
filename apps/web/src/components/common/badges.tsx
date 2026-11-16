@@ -66,3 +66,13 @@ export function DifficultyDots({ value, className, inverted }: { value: number; 
     </span>
   )
 }
+
+
+/** Badge AGONISTA: visibile ad amministrazione e insegnanti */
+export function CompetitiveBadge({ className }: { className?: string }) {
+  return (
+    <Badge className={cn('bg-ink tracking-wider text-white uppercase', className)}>
+      <Star /> Agonista
+    </Badge>
+  )
+}

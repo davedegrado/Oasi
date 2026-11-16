@@ -71,7 +71,7 @@ export function TeacherLessons() {
         />
       </div>
 
-      {tab === 'calendario' && <WeekCalendar lessons={all} onLessonClick={open} initialView="mese" />}
+      {tab === 'calendario' && <WeekCalendar lessons={all} onLessonClick={open} />}
       {tab === 'richieste' && <RequestsPanel teacherId={teacher.id} decidedBy={teacher.id} title="Iscrizioni e recuperi" />}
 
       {tab === 'prossime' && (

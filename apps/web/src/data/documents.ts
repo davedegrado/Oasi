@@ -14,6 +14,14 @@ export const demoDocumentTypes: DocumentType[] = [
     description: 'Certificato di idoneità all’attività sportiva non agonistica, valido 12 mesi. Visibile solo a te e alla segreteria.',
   },
   {
+    id: 'dt-agonistico', name: 'Certificato medico agonistico', category: 'certificato_medico', required: false, requiredForCompetitive: true, signatureMode: 'nessuna', validityMonths: 12, sensitive: true, active: true,
+    description: 'Certificato di idoneità all’attività sportiva agonistica. Richiesto solo agli agonisti e agli iscritti a classi agonistiche o preagonistiche.',
+  },
+  {
+    id: 'dt-insegnante-assicurazione', name: 'Polizza assicurativa insegnante', category: 'altro', required: true, audience: 'insegnanti', signatureMode: 'nessuna', validityMonths: 12, sensitive: false, active: true,
+    description: 'Copia della polizza in corso di validità: indica la data di scadenza quando la carichi.',
+  },
+  {
     id: 'dt-liberatoria', name: 'Liberatoria attività aeree', category: 'liberatoria', required: true, signatureMode: 'caricamento_firmato', sensitive: false, active: true,
     description: 'Presa visione dei rischi e del regolamento: scaricala dai documenti della palestra, firmala a mano e caricala.',
   },

@@ -19,8 +19,9 @@ import { buildDemoDocuments, buildSharedDocuments, demoDocumentTypes } from './d
 import { demoAnnouncementSeeds, demoAssociation, demoEventSeeds } from './events'
 import { demoFigureSeeds, photo } from './figures'
 import { demoStudentSeeds, demoTeachers } from './people'
+import { buildDemoAccounts, demoPlans, demoSeason } from './plans'
 
-export const DATABASE_VERSION = 8
+export const DATABASE_VERSION = 9
 
 /** Hash deterministico: la demo genera sempre gli stessi dati per lo stesso giorno */
 function hash(text: string): number {
@@ -284,5 +285,8 @@ export function createSeedDatabase(today: string = todayISO()): OasiDatabase {
     documentTypes: structuredClone(demoDocumentTypes),
     documents: buildDemoDocuments(today),
     sharedDocuments: buildSharedDocuments(today),
+    season: structuredClone(demoSeason),
+    plans: structuredClone(demoPlans),
+    ...buildDemoAccounts(students, today),
   }
 }

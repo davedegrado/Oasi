@@ -11,6 +11,7 @@ import {
   Sparkles,
   UserRound,
   Users,
+  Wallet,
   type LucideIcon,
 } from 'lucide-react'
 import type { Role } from '@/types'
@@ -53,6 +54,7 @@ export const NAVIGATION: Record<Role, NavItem[]> = {
     { to: '/admin/classi', label: 'Classi', icon: GraduationCap, module: 'classes', badge: 'requests' },
     { to: '/admin/archivio', label: 'Archivio', icon: FolderArchive, module: 'documents', badge: 'documents' },
     { to: '/admin/eventi', label: 'Eventi', icon: CalendarHeart, module: 'events' },
+    { to: '/admin/quote', label: 'Quote', icon: Wallet, module: 'payments', sidebarOnly: true },
     { to: '/admin/gestione', label: 'Gestione', icon: Settings2, also: ['/admin/figure'] },
   ],
 }

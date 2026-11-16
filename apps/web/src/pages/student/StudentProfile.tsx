@@ -8,6 +8,7 @@ import { StudentHeader } from '@/components/students/StudentHeader'
 import { GoalsCard } from '@/components/students/GoalsCard'
 import { AttendanceHistory } from '@/components/students/AttendanceHistory'
 import { AdminInfoCard } from '@/components/students/AdminInfoCard'
+import { AccountCard } from '@/components/students/AccountCard'
 import { useDatabase } from '@/hooks/useDatabase'
 import { useCurrentStudent } from '@/hooks/useDemo'
 import { progressSummary } from '@/services/selectors'
@@ -65,6 +66,7 @@ export function StudentProfile() {
             </CardContent>
           </Card>
           <AdminInfoCard student={student} />
+          <AccountCard studentId={student.id} />
         </div>
         <AttendanceHistory studentId={student.id} />
       </div>

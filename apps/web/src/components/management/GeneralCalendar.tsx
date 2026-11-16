@@ -24,7 +24,6 @@ export function GeneralCalendar() {
         <p className="mb-4 text-sm text-ink-muted">Tutte le lezioni, le chiusure e gli eventi. Ciò che cambi qui si riflette nei calendari di allieve e insegnanti.</p>
         <WeekCalendar
           lessons={db.lessons}
-          initialView="mese"
           markDay={(d) => ({ closed: closureOn(d).length > 0, event: eventsOn(d).length > 0 })}
           renderDayHeader={(d) => (
             <>

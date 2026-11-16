@@ -19,6 +19,9 @@ export interface DisciplineInfo {
 
 export type Level = 'base' | 'intermedio' | 'avanzato'
 
+/** Classificazione agonistica di una classe (configurabile dall'amministrazione) */
+export type CompetitiveLevel = 'nessuna' | 'preagonistica' | 'agonistica'
+
 /** Stati personali delle figure: "In apprendimento" è stato eliminato perché equivalente a "In progetto" */
 export type LearningStatus = 'da_imparare' | 'in_progetto' | 'riuscita'
 
@@ -66,6 +69,8 @@ export interface Student {
   joinedAt: string
   goals: string[]
   membership: Membership
+  /** Agonista per classificazione della persona (impostata dall'amministrazione) */
+  competitive?: boolean
 }
 
 export interface ClassGroup {
@@ -81,6 +86,9 @@ export interface ClassGroup {
   capacity: number
   studentIds: string[]
   description: string
+  /** Altre discipline della classe, scelte dall'archivio della palestra (oltre alla principale) */
+  extraDisciplines?: Discipline[]
+  competitiveLevel?: CompetitiveLevel
 }
 
 export interface Lesson {
@@ -145,6 +153,23 @@ export interface OasiEvent {
   participantIds: string[]
   /** Ultimo giorno utile per aderire (YYYY-MM-DD) */
   signupDeadline?: string
+  /** Evento principale mostrato in home */
+  featured?: boolean
+  /** Classi collegate all'evento */
+  classIds?: string[]
+  /** Brani delle performance: solo i nomi, nessun file audio */
+  tracks?: EventTrack[]
+}
+
+export interface EventTrack {
+  id: string
+  title: string
+  artist: string
+  /** Gruppo o performance a cui è associato il brano */
+  group: string
+  classId?: string
+  /** id dell'insegnante o 'admin' */
+  addedBy: string
 }
 
 export type EventType = 'workshop' | 'stage' | 'gara' | 'saggio' | 'spettacolo' | 'sociale'
@@ -198,6 +223,10 @@ export interface AssociationInfo {
   settings: {
     maxStudentsPerClass: number
     absenceNoticeHours: number
+    /** Ore minime di anticipo per prenotare una lezione singola (valore della struttura) */
+    bookingNoticeHours?: number
+    /** Un recupero in una classe di livello inferiore è consentito */
+    makeupLowerLevelAllowed?: boolean
     remindersEnabled: boolean
     progressVisibleToTeachers: boolean
     trialLessonEnabled: boolean
@@ -223,6 +252,100 @@ export interface OasiDatabase {
   documentTypes: DocumentType[]
   documents: MemberDocument[]
   sharedDocuments: SharedDocument[]
+  season: Season
+  plans: FeePlan[]
+  memberPlans: MemberPlan[]
+  charges: Charge[]
+}
+
+// ── Stagione, piani, quote e pagamenti registrati ──────────────────
+export interface SeasonPeriod {
+  id: string
+  name: string
+  startDate: string
+  endDate: string
+}
+
+/** Stagione della palestra: date, periodi; le precedenti restano nello storico */
+export interface Season {
+  id: string
+  name: string
+  startDate: string
+  endDate: string
+  periods: SeasonPeriod[]
+}
+
+export type PlanKind = 'abbonamento' | 'pacchetto' | 'lezione_singola' | 'semiprivata' | 'tessera'
+export type PlanBilling = 'annuale' | 'periodico' | 'mensile' | 'una_tantum'
+
+export interface PlanInstallment {
+  amountCents: number
+  dueOn: string
+  coversFrom: string
+  coversUntil: string
+}
+
+/** Piano configurato dalla palestra: nessuna formula commerciale è scritta nel codice */
+export interface FeePlan {
+  id: string
+  name: string
+  category: string
+  kind: PlanKind
+  billing: PlanBilling
+  /** Prezzo in unica soluzione, in centesimi */
+  amountCents: number
+  /** Rate: un modo di pagare lo stesso piano, non un piano separato */
+  installments?: PlanInstallment[]
+  weeklyFrequency?: number
+  /** Pacchetti: numero di ingressi */
+  entries?: number
+  /** Mensile: settimane consecutive di validità */
+  validityWeeks?: number
+  validFrom?: string
+  validUntil?: string
+  /** Ore minime di anticipo per prenotare (se diverso dal valore della palestra) */
+  bookingHoursBefore?: number
+  note?: string
+  active: boolean
+}
+
+export interface MemberPlan {
+  id: string
+  studentId: string
+  planId: string
+  paymentMode: 'unica' | 'rate'
+  validFrom: string
+  validUntil: string
+  entriesTotal?: number
+  entriesUsed?: number
+  createdAt: string
+}
+
+export type PaymentMethod = 'contanti' | 'bonifico' | 'pos' | 'altro'
+
+/** Pagamento ricevuto fuori dall'app e registrato dall'amministrazione */
+export interface PaymentRecord {
+  id: string
+  amountCents: number
+  paidOn: string
+  method: PaymentMethod
+  note: string
+}
+
+/** Quota dovuta: retta, rata, tessera, quota gara */
+export interface Charge {
+  id: string
+  studentId: string
+  memberPlanId?: string
+  /** Causale */
+  description: string
+  kind: 'piano' | 'tessera' | 'gara' | 'altro'
+  installmentNo?: number
+  periodLabel?: string
+  amountCents: number
+  dueOn: string
+  cancelled?: boolean
+  payments: PaymentRecord[]
 }
 
 export type ClosureKind = 'festivita' | 'sciopero' | 'chiusura'
@@ -279,6 +402,10 @@ export interface DocumentType {
   /** Dati sanitari: solo amministrazione e interessata */
   sensitive: boolean
   active: boolean
+  /** Obbligatorio solo per agonisti o iscritti a classi agonistiche/preagonistiche */
+  requiredForCompetitive?: boolean
+  /** A chi è richiesto (predefinito: allieve). Per gli insegnanti l'amministrazione decide quali e quanti documenti. */
+  audience?: 'allieve' | 'insegnanti' | 'tutti'
 }
 
 export interface DocumentEvent {
