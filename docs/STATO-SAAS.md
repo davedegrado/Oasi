@@ -11,7 +11,7 @@ Legenda: **API** = regola applicata dal backend con persistenza e autorizzazione
 | 1 | Un'app, un backend, un database, isolamento tra tenant | Sì | — | RLS forzata su tutte le tabelle `app.*` (controllo automatico nel test 16 di `db/tests/isolation.sql`), chiavi esterne composte con `tenant_id` |
 | 1 | Configurazioni per tenant senza eccezioni nel codice | Sì | Sì | Fuso orario, soglie, regole dei recuperi, agonismo, documenti: `GET/PUT /v1/settings` |
 | 2 | Calendario con vista iniziale settimanale, giorni non ripetuti | — | Sì | La barra dei giorni è l'unico punto in cui compaiono; legenda ridotta |
-| 2 | Tema per tenant | Già presente | Già presente | La palette di Oasi è la configurazione di quel tenant |
+| 2 | Palette bianco, nero, verde salvia e oro solo per Oasi | Sì | Sì | È la configurazione iniziale del tenant Oasi (`platform.branding` nel seed `0110`, `DEMO_TENANTS` nella demo). I valori predefiniti della piattaforma e gli altri tenant non cambiano. Nuovo colore facoltativo `accent` |
 | 3 | Genitore: solo i figli collegati | Sì | No | `GET /v1/members/children`; nella demo manca il ruolo genitore |
 | 3 | Agonista / non agonista, certificato obbligatorio solo quando previsto | Sì | Sì | Verificato lato server: l'iscrizione a una classe agonistica è bloccata senza certificato approvato e valido |
 | 3 | Badge AGONISTA per staff | Sì | Sì | `competitiveBadge` su persone ed elenchi di lezione |

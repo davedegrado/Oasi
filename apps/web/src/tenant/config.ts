@@ -69,11 +69,15 @@ export function applyTheme(config: TenantConfig) {
   const c = config.colors
   root.setProperty('--color-rosa-intenso', c.primary)
   root.setProperty('--color-cerchio', c.primary)
-  root.setProperty('--color-rosa', c.primaryMid)
+  // Dettagli e decorazioni: il colore d'accento del tenant, se configurato
+  root.setProperty('--color-rosa', c.accent ?? c.primaryMid)
+  root.setProperty('--color-accent', c.accent ?? c.primaryMid)
   root.setProperty('--color-cipria', c.primarySoft)
   root.setProperty('--color-cerchio-soft', c.primarySoft)
   root.setProperty('--color-rosa-scuro', c.primaryStrong)
-  root.setProperty('--color-cipria-50', c.background)
+  // Superfici tenui: mai identiche allo sfondo, anche quando lo sfondo del tenant è bianco
+  root.setProperty('--color-cipria-50', c.background.toUpperCase() === '#FFFFFF' ? `color-mix(in srgb, ${c.primarySoft} 35%, white)` : c.background)
+  root.setProperty('--color-page', c.background)
   root.setProperty('--color-cipria-100', `color-mix(in srgb, ${c.primarySoft} 45%, white)`)
   root.setProperty('--color-line', `color-mix(in srgb, ${c.primarySoft} 60%, #ebe6e8)`)
   root.setProperty('--color-ink', c.ink)

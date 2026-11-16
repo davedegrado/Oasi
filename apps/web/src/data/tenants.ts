@@ -6,7 +6,10 @@ const ALL_MODULES = [
   'payments', 'events', 'communications', 'notifications', 'figure_archive', 'progress', 'media', 'reports', 'administration', 'documents',
 ]
 
-/** Valori predefiniti della piattaforma: usati quando un tenant non configura un elemento */
+/**
+ * Valori predefiniti della piattaforma: usati quando un tenant non configura un elemento.
+ * Nessuna palestra è il tema universale: ogni tenant ha la propria palette.
+ */
 export const PLATFORM_DEFAULTS: Pick<TenantConfig, 'colors' | 'texts'> = {
   colors: {
     primary: '#D66A9B',
@@ -36,7 +39,18 @@ export const DEMO_TENANTS: TenantConfig[] = [
     shortName: 'Oasi',
     logoUrl: asset('images/logo-oasi.webp'),
     coverUrl: photo('cerchio-12'),
-    colors: PLATFORM_DEFAULTS.colors,
+    // Palette richiesta da Oasi Metropolitana: bianco, nero, verde salvia e oro.
+    // È la configurazione iniziale di QUESTO tenant (modificabile), non il tema della piattaforma.
+    colors: {
+      primary: '#667C5F', // verde salvia: azioni ed elementi attivi (testo bianco leggibile)
+      primaryMid: '#A9B8A0',
+      primarySoft: '#E6ECE1',
+      primaryStrong: '#4E6048',
+      background: '#FFFFFF', // bianco
+      ink: '#111111', // nero
+      themeColor: '#FFFFFF',
+      accent: '#B8963E', // oro: dettagli e decorazioni
+    },
     texts: {
       welcomeTitle: 'Benvenuta nella tua Oasi',
       welcomeEyebrow: 'Danza aerea · Modena',

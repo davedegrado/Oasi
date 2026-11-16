@@ -7,6 +7,8 @@ export interface TenantColors {
   background: string
   ink: string
   themeColor: string
+  /** Colore d'accento per dettagli e decorazioni (facoltativo: se manca si usa primaryMid) */
+  accent?: string
 }
 
 export interface TenantTexts {

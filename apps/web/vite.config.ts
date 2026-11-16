@@ -38,7 +38,7 @@ export default defineConfig(({ mode }) => {
         display: 'standalone',
         orientation: 'portrait',
         background_color: '#FFFFFF',
-        theme_color: '#E9A4C0',
+        theme_color: '#FFFFFF',
         categories: ['sports', 'health', 'lifestyle'],
         icons: [
           { src: `${p}icons/icon-192.png`, sizes: '192x192', type: 'image/png' },

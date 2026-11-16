@@ -322,7 +322,7 @@ function MembershipDialog({ student, onClose, onSave }: { student: Student; onCl
                 <label key={c.id} className={cn('flex cursor-pointer items-center gap-3 rounded-2xl border p-3 transition', checked ? 'border-rosa bg-cipria-50' : 'border-line', full && 'cursor-not-allowed opacity-50')}>
                   <input
                     type="checkbox"
-                    className="size-4 accent-[#D66A9B]"
+                    className="size-4 accent-rosa-intenso"
                     checked={checked}
                     disabled={full}
                     onChange={(e) => setClassIds(e.target.checked ? [...classIds, c.id] : classIds.filter((id) => id !== c.id))}

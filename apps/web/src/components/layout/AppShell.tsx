@@ -106,7 +106,7 @@ export function AppShell({ role }: { role: Role }) {
       </aside>
 
       {/* Barra superiore mobile/tablet */}
-      <header className="sticky top-0 z-30 border-b border-line/60 bg-cipria-50/85 pt-safe backdrop-blur-xl lg:hidden">
+      <header className="sticky top-0 z-30 border-b border-line/60 bg-page/85 pt-safe backdrop-blur-xl lg:hidden">
         <div className="mx-auto flex h-16 max-w-3xl items-center justify-between gap-3 px-4 sm:px-6">
           <NavLink to={items[0].to} aria-label="Home">
             <Logo />

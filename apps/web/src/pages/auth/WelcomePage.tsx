@@ -51,7 +51,7 @@ export function WelcomePage() {
   }
 
   return (
-    <div className="relative min-h-dvh overflow-hidden bg-cipria-50 lg:grid lg:grid-cols-[1.05fr_1fr]">
+    <div className="relative min-h-dvh overflow-hidden bg-page lg:grid lg:grid-cols-[1.05fr_1fr]">
       {/* Immagine */}
       <div className="relative h-[52dvh] min-h-[340px] overflow-hidden lg:sticky lg:top-0 lg:h-dvh">
         <img

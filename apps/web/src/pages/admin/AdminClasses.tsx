@@ -319,7 +319,7 @@ function ClassDialog({ initial, isNew, onClose }: { initial: ClassGroup; isNew: 
                 <label key={s.id} className={cn('flex cursor-pointer items-center gap-2.5 rounded-xl p-2 text-sm transition hover:bg-cipria-50', checked && 'bg-cipria-50', disabled && 'cursor-not-allowed opacity-40')}>
                   <input
                     type="checkbox"
-                    className="size-4 accent-[#D66A9B]"
+                    className="size-4 accent-rosa-intenso"
                     checked={checked}
                     disabled={disabled}
                     onChange={(e) => set('studentIds', e.target.checked ? [...cls.studentIds, s.id] : cls.studentIds.filter((id) => id !== s.id))}

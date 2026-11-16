@@ -137,3 +137,20 @@ begin
 end $$;
 
 commit;
+
+-- ════════════════════════════════════════════════════════════════════
+-- Identità visiva di Oasi Metropolitana: bianco, nero, verde salvia e oro.
+-- È la palette richiesta da QUESTO tenant e vale solo come sua configurazione
+-- iniziale (modificabile dal pannello): non è il tema della piattaforma né
+-- quello delle altre strutture.
+-- ════════════════════════════════════════════════════════════════════
+begin;
+update platform.branding b set colors = '{
+    "primary": "#667C5F", "primaryMid": "#A9B8A0", "primarySoft": "#E6ECE1", "primaryStrong": "#4E6048",
+    "background": "#FFFFFF", "ink": "#111111", "themeColor": "#FFFFFF", "accent": "#B8963E"
+  }'::jsonb, updated_at = now()
+from platform.tenants t where t.id = b.tenant_id and t.slug = 'oasi-metropolitana';
+-- Colori delle discipline (dati del tenant) coerenti con la palette
+update app.disciplines d set color = case d.slug when 'cerchio' then '#667C5F' when 'tessuti' then '#B8963E' else d.color end
+from platform.tenants t where t.id = d.tenant_id and t.slug = 'oasi-metropolitana' and d.slug in ('cerchio', 'tessuti');
+commit;

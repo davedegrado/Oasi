@@ -37,6 +37,6 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       </div>
     )
   }
-  if (!value) return <div className="min-h-dvh bg-cipria-50" aria-busy="true" />
+  if (!value) return <div className="min-h-dvh bg-page" aria-busy="true" />
   return <TenantContext.Provider value={value}>{children}</TenantContext.Provider>
 }
