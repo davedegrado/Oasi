@@ -15,7 +15,7 @@ import { RequestStatusBadge } from '@/components/requests/RequestStatusBadge'
 import { useDatabase, useRepository } from '@/hooks/useDatabase'
 import { useCurrentStudent } from '@/hooks/useDemo'
 import { useToast } from '@/hooks/useToast'
-import { findClass, isLessonPast, isMakeupFor, lessonsForStudent, makeupCredits, makeupLevelAllowed, sortLessons } from '@/services/selectors'
+import { findClass, isLessonPast, isMakeupFor, lessonsForStudent, makeupCredits, makeupLevelAllowed, singleLessonWindow, sortLessons } from '@/services/selectors'
 import { formatDate } from '@/lib/dates'
 
 export function StudentCalendar() {
@@ -37,6 +37,17 @@ export function StudentCalendar() {
     const cls = findClass(db, l.classId)
     return !mineIds.has(l.id) && !isLessonPast(l) && l.status !== 'annullata' && !requested.has(l.id) && credits.available > 0 && !!cls && makeupLevelAllowed(db, student.id, cls)
   }
+  // Lezione singola: altre classi, prenotabile quando si apre la finestra della palestra
+  const canBook = (l: Lesson) => !mineIds.has(l.id) && !isLessonPast(l) && l.status !== 'annullata' && singleLessonWindow(db, l).open
+  const isBooked = (l: Lesson) => !!l.bookings?.includes(student.id)
+  const cancelBooking = async (l: Lesson) => {
+    try {
+      const late = await repo.cancelSingleLesson(student.id, l.id)
+      toast(late ? 'Disdetta oltre il termine: la lezione resta da pagare' : 'Prenotazione disdetta', 'info')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Disdetta non riuscita', 'info')
+    }
+  }
 
   return (
     <div className="animate-fade-up space-y-6">
@@ -51,6 +62,20 @@ export function StudentCalendar() {
           </Link>
         }
       />
+      {/* Contatore dei recuperi: disponibili, utilizzati, in attesa */}
+      <div className="grid grid-cols-3 gap-2 rounded-3xl bg-white p-3 shadow-soft">
+        {[
+          { label: 'Disponibili', value: credits.available, tone: 'text-rosa-intenso' },
+          { label: 'Utilizzati', value: credits.used, tone: 'text-ink' },
+          { label: 'In attesa', value: credits.pending, tone: 'text-ink-soft' },
+        ].map((x) => (
+          <div key={x.label} className="text-center">
+            <p className={`font-display text-2xl font-extrabold ${x.tone}`}>{x.value}</p>
+            <p className="text-xs text-ink-muted">Recuperi {x.label.toLowerCase()}</p>
+          </div>
+        ))}
+        <p className="col-span-3 text-center text-xs text-ink-muted">Un recupero nasce da un’assenza a una tua lezione ({credits.earned} finora).</p>
+      </div>
       <Segmented
         value={scope}
         onChange={setScope}
@@ -64,16 +89,27 @@ export function StudentCalendar() {
           <Info className="mt-0.5 size-4 shrink-0 text-rosa-intenso" />
           {credits.available > 0
             ? `Hai ${credits.available} ${credits.available === 1 ? 'recupero disponibile' : 'recuperi disponibili'}: tocca una lezione “Recuperabile” del tuo livello. Va confermato dall’insegnante o dall’amministrazione.`
-            : 'Non hai recuperi disponibili: un recupero nasce da un’assenza a una tua lezione.'}
+            : 'Non hai recuperi disponibili: un recupero nasce da un’assenza a una tua lezione.'}{' '}
+          {`Le lezioni “Prenotabili” si prenotano come lezione singola a partire da ${db.association.settings.bookingOpensHours ?? 48} ore prima; disdetta libera fino a ${db.association.settings.absenceNoticeHours} ore prima.`}
         </p>
       )}
       <WeekCalendar
         lessons={lessons}
         onLessonClick={(l) => setMakeupFor(l)}
-        canClick={scope === 'tutte' ? canRequestMakeup : () => false}
-        renderFooter={(l) => (mineIds.has(l.id) ? <DeclarationToggle lesson={l} studentId={student.id} /> : undefined)}
+        canClick={scope === 'tutte' ? (l) => canRequestMakeup(l) || canBook(l) : () => false}
+        renderFooter={(l) =>
+          isBooked(l) && !isLessonPast(l) ? (
+            <Button size="sm" variant="ghost" onClick={() => cancelBooking(l)}>
+              <X /> Disdici la lezione singola
+            </Button>
+          ) : mineIds.has(l.id) ? (
+            <DeclarationToggle lesson={l} studentId={student.id} />
+          ) : undefined
+        }
         renderBadges={(l) =>
-          isMakeupFor(db, l.id, student.id) ? (
+          isBooked(l) ? (
+            <Badge tone="rosa">Lezione singola</Badge>
+          ) : isMakeupFor(db, l.id, student.id) ? (
             <Badge tone="rosa">
               <RefreshCcw /> Recupero
             </Badge>
@@ -81,6 +117,8 @@ export function StudentCalendar() {
             <Badge tone="warn">Recupero richiesto</Badge>
           ) : scope === 'tutte' && canRequestMakeup(l) ? (
             <Badge tone="neutral">Recuperabile</Badge>
+          ) : scope === 'tutte' && canBook(l) ? (
+            <Badge tone="neutral">Prenotabile</Badge>
           ) : null
         }
       />

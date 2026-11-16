@@ -33,6 +33,12 @@ export const demoEventSeeds: EventSeed[] = [
     image: photo('cerchio-20'),
     capacity: 30,
     participantIds: ['stu-giulia', 'stu-alice', 'stu-elisa', 'stu-camilla', 'stu-lucia', 'stu-martina', 'stu-sara'],
+    featured: true,
+    // Musica della performance (dati dimostrativi, solo titoli)
+    tracks: [
+      { id: 'trk-natale-1', title: 'Clair de lune', artist: 'Claude Debussy', group: 'Gruppo cerchio', classId: 'cls-cerchio-int', addedBy: 'admin' },
+      { id: 'trk-natale-2', title: 'Il lago dei cigni · Scena', artist: 'Pëtr Il’ič Čajkovskij', group: 'Gruppo tessuti', classId: 'cls-tessuti-int', addedBy: 'admin' },
+    ],
   },
   {
     id: 'evt-stage-tessuti',
@@ -144,7 +150,10 @@ export const demoAssociation: AssociationInfo = {
   settings: {
     maxStudentsPerClass: 8,
     absenceNoticeHours: 6,
-    bookingNoticeHours: 48,
+    bookingOpensHours: 48,
+    classCategories: ['Bambini/Ragazzi', 'Adulti/Ragazzi'],
+    maxDisciplines: 2,
+    paymentMethods: ['bonifico', 'contanti'],
     makeupLowerLevelAllowed: true,
     remindersEnabled: true,
     progressVisibleToTeachers: true,

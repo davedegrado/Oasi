@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog } from '@/components/ui/dialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/input'
 import { Segmented } from '@/components/ui/segmented'
+import { MemberDocumentsPanel } from '@/components/documents/MemberDocumentsPanel'
 import { Avatar } from '@/components/ui/avatar'
 import { DocumentStateBadge } from '@/components/documents/DocumentBits'
 import { fmtDay, openDocumentFile, readFileAsDataUrl, STATE_META } from '@/components/documents/documentUtils'
@@ -77,9 +78,10 @@ function DocumentsTab() {
     return db.documents
       .filter((d) => history || d.current)
       .map((d) => {
-        const student = db.students.find((s) => s.id === d.memberId)
+        // Documenti delle allieve e degli insegnanti: una sola riga per documento, letta dal profilo e dall'archivio
+        const student = db.students.find((s) => s.id === d.memberId) ?? db.teachers.find((t) => t.id === d.memberId)
         const type = db.documentTypes.find((t) => t.id === d.typeId)
-        return { d, student, type, state: (d.current ? documentState(d) : d.status) as DocumentState }
+        return { d, student, type, state: (d.current ? documentState(d, undefined, type) : d.status) as DocumentState }
       })
       .filter(({ d, student, type, state }) =>
         !!student && !!type &&
@@ -176,28 +178,34 @@ function MissingTab() {
   const repo = useRepository()
   const { toast } = useToast()
   const missing = missingDocuments(db)
-  if (!missing.length) return <EmptyState title="Tutto in regola" description="Nessuna allieva ha documenti obbligatori mancanti o scaduti." />
+  const [teacherDocs, setTeacherDocs] = useState<string | null>(null)
+  if (!missing.length) return <EmptyState title="Tutto in regola" description="Nessuna persona ha documenti obbligatori mancanti o scaduti." />
+  const isTeacher = (id: string) => db.teachers.some((t) => t.id === id)
 
   const remind = async () => {
     for (const { student, rows } of missing) {
-      await repo.notify({ kind: 'documento', title: 'Documenti da completare', body: `Mancano o sono scaduti: ${rows.map((r) => r.type.name).join(', ')}.`, to: [`student:${student.id}`], link: { allieva: '/allieva/documenti' } })
+      const teacher = isTeacher(student.id)
+      await repo.notify({ kind: 'documento', title: 'Documenti da completare', body: `Mancano o sono scaduti: ${rows.map((r) => r.type.name).join(', ')}.`, to: [teacher ? `teacher:${student.id}` : `student:${student.id}`], link: teacher ? { insegnante: '/insegnante/profilo' } : { allieva: '/allieva/documenti' } })
     }
-    toast(`Promemoria inviato a ${missing.length} allieve`)
+    toast(`Promemoria inviato a ${missing.length} persone`)
   }
 
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-ink-muted">{missing.length} allieve con documenti obbligatori mancanti o scaduti.</p>
+        <p className="text-sm text-ink-muted">{missing.length} persone con documenti obbligatori mancanti o scaduti.</p>
         <Button size="sm" variant="soft" onClick={remind}>Invia promemoria a tutte</Button>
       </div>
       <ul className="space-y-2">
-        {missing.map(({ student, rows }) => (
-          <li key={student.id}>
-            <Link to={`/admin/utenti/${student.id}#documenti`} className="flex items-center gap-3 rounded-2xl bg-white p-3 shadow-soft hover:ring-2 hover:ring-rosa/40">
+        {missing.map(({ student, rows }) => {
+          const inner = (
+            <>
               <Avatar person={student} size="sm" />
               <div className="min-w-0 flex-1">
-                <p className="font-semibold">{fullName(student)}</p>
+                <p className="font-semibold">
+                  {fullName(student)}
+                  {isTeacher(student.id) && <span className="ml-2 text-xs font-semibold text-ink-muted">Insegnante</span>}
+                </p>
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   {rows.map((r) => (
                     <Badge key={r.type.id} tone={r.state === 'scaduto' ? 'danger' : 'neutral'}>
@@ -206,10 +214,25 @@ function MissingTab() {
                   ))}
                 </div>
               </div>
-            </Link>
-          </li>
-        ))}
+            </>
+          )
+          const cls = 'flex w-full items-center gap-3 rounded-2xl bg-white p-3 text-left shadow-soft hover:ring-2 hover:ring-rosa/40'
+          return (
+            <li key={student.id}>
+              {isTeacher(student.id) ? (
+                <button type="button" className={cls} onClick={() => setTeacherDocs(student.id)}>{inner}</button>
+              ) : (
+                <Link to={`/admin/utenti/${student.id}#documenti`} className={cls}>{inner}</Link>
+              )}
+            </li>
+          )
+        })}
       </ul>
+      {teacherDocs && (
+        <Dialog open onOpenChange={(o) => !o && setTeacherDocs(null)} title={`Documenti di ${fullName(db.teachers.find((t) => t.id === teacherDocs)!)}`} description="Documenti mensili e richiesti all’insegnante: verifica, approva o chiedi una correzione.">
+          <MemberDocumentsPanel memberId={teacherDocs} mode="admin" />
+        </Dialog>
+      )}
     </>
   )
 }

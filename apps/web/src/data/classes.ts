@@ -3,35 +3,41 @@ import type { ClassGroup } from '@/types'
 /** Classi dimostrative. Gli iscritti vengono derivati da people.ts in seed.ts */
 export const demoClasses: Omit<ClassGroup, 'studentIds'>[] = [
   {
-    id: 'cls-cerchio-base', name: 'Cerchio Base', discipline: 'cerchio', level: 'base', teacherId: 'tch-chiara',
+    id: 'cls-cerchio-base', name: 'Cerchio Base', discipline: 'cerchio', level: 'base', teacherId: 'tch-chiara', category: 'Adulti/Ragazzi',
     weekday: 1, startTime: '18:30', endTime: '20:00', room: 'Sala Luna', capacity: 8,
     description: 'Primo approccio al cerchio aereo: salite, sedute, prime figure e condizionamento specifico.',
   },
   {
-    id: 'cls-tessuti-base', name: 'Tessuti Base', discipline: 'tessuti', level: 'base', teacherId: 'tch-elena',
+    id: 'cls-tessuti-base', name: 'Tessuti Base', discipline: 'tessuti', level: 'base', teacherId: 'tch-elena', category: 'Adulti/Ragazzi',
     weekday: 2, startTime: '19:00', endTime: '20:30', room: 'Sala Seta', capacity: 8,
     description: 'Chiavi di piede, arrampicate e prime inversioni a bassa quota, con grande attenzione alla sicurezza.',
   },
   {
-    id: 'cls-cerchio-int', name: 'Cerchio Intermedio', discipline: 'cerchio', level: 'intermedio', teacherId: 'tch-chiara',
+    id: 'cls-cerchio-int', name: 'Cerchio Intermedio', discipline: 'cerchio', level: 'intermedio', teacherId: 'tch-chiara', category: 'Adulti/Ragazzi',
     weekday: 3, startTime: '19:30', endTime: '21:00', room: 'Sala Luna', capacity: 8,
     description: 'Figure sopra e sotto la barra, transizioni e prime combinazioni coreografiche.',
   },
   {
-    id: 'cls-tessuti-int', name: 'Tessuti Intermedio', discipline: 'tessuti', level: 'intermedio', teacherId: 'tch-elena',
+    id: 'cls-tessuti-int', name: 'Tessuti Intermedio', discipline: 'tessuti', level: 'intermedio', teacherId: 'tch-elena', category: 'Adulti/Ragazzi',
     weekday: 4, startTime: '18:30', endTime: '20:00', room: 'Sala Seta', capacity: 8,
     description: 'Avvolgimenti complessi, figure in quota e preparazione alle prime cadute controllate.',
   },
   {
-    id: 'cls-avanzato', name: 'Tessuti Avanzato', discipline: 'tessuti', level: 'avanzato', teacherId: 'tch-valentina',
+    id: 'cls-avanzato', name: 'Tessuti Avanzato', discipline: 'tessuti', level: 'avanzato', teacherId: 'tch-valentina', category: 'Adulti/Ragazzi',
     weekday: 5, startTime: '19:00', endTime: '21:00', room: 'Sala Seta', capacity: 6,
     description: 'Cadute, sequenze coreografiche e lavoro artistico per gli spettacoli.',
   },
   {
-    id: 'cls-cerchio-avz', name: 'Cerchio Avanzato', discipline: 'cerchio', level: 'avanzato', teacherId: 'tch-valentina',
+    id: 'cls-cerchio-avz', name: 'Cerchio Avanzato', discipline: 'cerchio', level: 'avanzato', teacherId: 'tch-valentina', category: 'Adulti/Ragazzi',
     weekday: 6, startTime: '10:30', endTime: '12:00', room: 'Sala Luna', capacity: 6,
     description: 'Equilibri, figure di forza e lavoro dinamico con rotazione del cerchio. Gruppo agonistico: prepara le gare regionali.',
     // Dato dimostrativo: classe agonistica, così nella demo si vedono badge AGONISTA e obbligo del certificato
     competitiveLevel: 'agonistica',
+  },
+  {
+    // Area Bambini/Ragazzi: classe dimostrativa per i piani Baby/Teen
+    id: 'cls-babyteen', name: 'Baby/Teen Aerea', discipline: 'cerchio', extraDisciplines: ['tessuti'], level: 'base', teacherId: 'tch-chiara', category: 'Bambini/Ragazzi',
+    weekday: 6, startTime: '15:00', endTime: '16:00', room: 'Sala Luna', capacity: 10,
+    description: 'Cerchio e tessuti per bambine e ragazze dai 6 ai 14 anni: gioco, coordinazione e prime figure in sicurezza.',
   },
 ]

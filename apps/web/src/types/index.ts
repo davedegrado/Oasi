@@ -89,6 +89,8 @@ export interface ClassGroup {
   /** Altre discipline della classe, scelte dall'archivio della palestra (oltre alla principale) */
   extraDisciplines?: Discipline[]
   competitiveLevel?: CompetitiveLevel
+  /** Area della classe tra quelle configurate dalla palestra (es. Bambini/Ragazzi, Adulti/Ragazzi) */
+  category?: string
 }
 
 export interface Lesson {
@@ -107,6 +109,11 @@ export interface Lesson {
   declarations?: Record<string, AttendanceMark>
   /** Lezione annullata da una chiusura della sede */
   closureId?: string
+  /** Lezioni singole prenotate da allieve non iscritte alla classe */
+  bookings?: string[]
+  /** Insegnante che sostituisce quella della classe in questa lezione */
+  substituteTeacherId?: string
+  substitutionNote?: string
 }
 
 export interface FigureStep {
@@ -168,6 +175,11 @@ export interface EventTrack {
   /** Gruppo o performance a cui è associato il brano */
   group: string
   classId?: string
+  /** Collegamento al brano (https) */
+  url?: string
+  /** File audio caricato dall'amministrazione (demo: salvato nel browser) */
+  audio?: string
+  audioName?: string
   /** id dell'insegnante o 'admin' */
   addedBy: string
 }
@@ -223,8 +235,14 @@ export interface AssociationInfo {
   settings: {
     maxStudentsPerClass: number
     absenceNoticeHours: number
-    /** Ore minime di anticipo per prenotare una lezione singola (valore della struttura) */
-    bookingNoticeHours?: number
+    /** La prenotazione di una lezione singola si apre N ore prima dell'inizio (Oasi: 48) */
+    bookingOpensHours?: number
+    /** Aree in cui sono organizzate le classi (Oasi: Bambini/Ragazzi, Adulti/Ragazzi) */
+    classCategories?: string[]
+    /** Numero massimo di discipline per classe (Oasi: 2) */
+    maxDisciplines?: number
+    /** Metodi di pagamento accettati (Oasi: bonifico e contanti) */
+    paymentMethods?: PaymentMethod[]
     /** Un recupero in una classe di livello inferiore è consentito */
     makeupLowerLevelAllowed?: boolean
     remindersEnabled: boolean
@@ -346,6 +364,8 @@ export interface Charge {
   dueOn: string
   cancelled?: boolean
   payments: PaymentRecord[]
+  /** Lezione singola a cui si riferisce la quota */
+  lessonId?: string
 }
 
 export type ClosureKind = 'festivita' | 'sciopero' | 'chiusura'
@@ -406,6 +426,8 @@ export interface DocumentType {
   requiredForCompetitive?: boolean
   /** A chi è richiesto (predefinito: allieve). Per gli insegnanti l'amministrazione decide quali e quanti documenti. */
   audience?: 'allieve' | 'insegnanti' | 'tutti'
+  /** Documento da caricare a ogni periodo (es. ogni mese, entro l'ultimo giorno del mese) */
+  recurrence?: 'mensile'
 }
 
 export interface DocumentEvent {
@@ -441,6 +463,8 @@ export interface MemberDocument {
   reviewNote?: string
   reviewedAt?: string
   history: DocumentEvent[]
+  /** Periodo a cui si riferisce un documento ricorrente (es. "2026-11") */
+  periodKey?: string
 }
 
 /** Documenti messi a disposizione dalla palestra (regolamento, modulistica) */

@@ -26,8 +26,8 @@ const STATE: Record<ChargeState, { label: string; tone: 'ok' | 'warn' | 'danger'
 }
 const BILLING: Record<FeePlan['billing'], string> = { annuale: 'Annuale', periodico: 'Periodico', mensile: 'Mensile', una_tantum: 'Una tantum' }
 const METHODS: { value: PaymentMethod; label: string }[] = [
-  { value: 'contanti', label: 'Contanti' },
   { value: 'bonifico', label: 'Bonifico' },
+  { value: 'contanti', label: 'Contanti' },
   { value: 'pos', label: 'POS' },
   { value: 'altro', label: 'Altro' },
 ]
@@ -57,7 +57,7 @@ export function AdminFees() {
       <PageHeader
         eyebrow="Quote"
         title="Piani, quote e pagamenti"
-        description="I pagamenti si ricevono in segreteria o con bonifico: qui li registri e controlli scadenze e insoluti. L’app non incassa e non conserva dati bancari."
+        description="Pagamenti con bonifico e contanti: qui li registri e controlli scadenze e insoluti. L’app non conserva dati di pagamento sensibili."
         className="mb-0"
         actions={
           <Button onClick={() => setAssigning(true)}>
@@ -279,7 +279,9 @@ function PaymentDialog({ charge, onClose }: { charge: Charge; onClose: () => voi
   const residual = charge.amountCents - chargePaid(charge)
   const [amount, setAmount] = useState(String(residual / 100))
   const [paidOn, setPaidOn] = useState(today)
-  const [method, setMethod] = useState<PaymentMethod>('contanti')
+  // Metodi accettati dalla palestra (Oasi: bonifico e contanti)
+  const accepted = METHODS.filter((m) => (db.association.settings.paymentMethods ?? ['bonifico', 'contanti']).includes(m.value))
+  const [method, setMethod] = useState<PaymentMethod>(accepted[0]?.value ?? 'bonifico')
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
   const student = findStudent(db, charge.studentId)
@@ -353,7 +355,7 @@ function PaymentDialog({ charge, onClose }: { charge: Charge; onClose: () => voi
               </Field>
               <Field label="Modalità" htmlFor="pay-method">
                 <Select id="pay-method" value={method} onChange={(e) => setMethod(e.target.value as PaymentMethod)}>
-                  {METHODS.map((m) => (
+                  {accepted.map((m) => (
                     <option key={m.value} value={m.value}>
                       {m.label}
                     </option>

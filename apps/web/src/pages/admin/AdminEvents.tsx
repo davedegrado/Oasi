@@ -42,10 +42,10 @@ export function AdminEvents() {
   const { toast } = useToast()
   const [editing, setEditing] = useState<{ event: OasiEvent; isNew: boolean } | null>(null)
   const [participantsOf, setParticipantsOf] = useState<string | null>(null)
-  // Solo l'amministrazione crea e modifica gli eventi; gli insegnanti li consultano e indicano i brani delle proprie classi
+  // Solo l'amministrazione crea, modifica e gestisce gli eventi (anche la musica); gli insegnanti li consultano
   const { persona } = useDemo()
   const isAdmin = persona?.role === 'admin'
-  const editor = isAdmin ? 'admin' : (persona?.userId ?? undefined)
+  const editor = isAdmin ? ('admin' as const) : undefined
   const upcoming = upcomingEvents(db)
   const past = pastEvents(db)
   const viewing = db.events.find((e) => e.id === participantsOf)
@@ -69,7 +69,7 @@ export function AdminEvents() {
       <PageHeader
         eyebrow="Eventi"
         title="Spettacoli, stage e workshop"
-        description={isAdmin ? 'Crea eventi, modificali e controlla le adesioni delle allieve.' : 'Consulta gli eventi, le adesioni e indica i brani delle performance delle tue classi.'}
+        description={isAdmin ? 'Crea eventi, modificali e controlla le adesioni delle allieve.' : 'Consulta gli eventi, le adesioni, la musica e i partecipanti delle performance.'}
         actions={
           isAdmin ? (
             <Button onClick={() => setEditing({ event: emptyEvent(), isNew: true })}>

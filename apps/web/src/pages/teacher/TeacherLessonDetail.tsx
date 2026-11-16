@@ -8,13 +8,14 @@ import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Dialog } from '@/components/ui/dialog'
-import { Field, Input, Textarea } from '@/components/ui/input'
+import { Field, Input, Select, Textarea } from '@/components/ui/input'
 import { EmptyState } from '@/components/common/EmptyState'
 import { CompetitiveBadge, DisciplineBadge, LevelBadge, MembershipBadge } from '@/components/common/badges'
 import { LessonStatusBadge } from '@/components/lessons/LessonCard'
 import { HoopArc } from '@/components/common/Decor'
 import { useDatabase, useRepository } from '@/hooks/useDatabase'
 import { useToast } from '@/hooks/useToast'
+import { useDemo } from '@/hooks/useDemo'
 import { declarationSummary, findClass, findTeacher, isCompetitive, isLessonPast, lessonRoster } from '@/services/selectors'
 import { formatDate, relativeDayLabel } from '@/lib/dates'
 import { cn, fullName } from '@/lib/utils'
@@ -29,6 +30,9 @@ export function TeacherLessonDetail({ basePath = '/insegnante/lezioni', studentB
   const teacher = findTeacher(db, cls?.teacherId)
   const [statusDialog, setStatusDialog] = useState<LessonStatus | null>(null)
   const [form, setForm] = useState({ startTime: '', endTime: '', note: '' })
+  const { persona } = useDemo()
+  const [subDialog, setSubDialog] = useState(false)
+  const [sub, setSub] = useState({ teacherId: '', note: '' })
 
   if (!lesson || !cls) return <EmptyState title="Lezione non trovata" action={<Link to={basePath}>Torna alle lezioni</Link>} />
 
@@ -40,6 +44,18 @@ export function TeacherLessonDetail({ basePath = '/insegnante/lezioni', studentB
   const absent = marks.filter((m) => m === 'assente').length
   const cancelled = lesson.status === 'annullata'
   const past = isLessonPast(lesson)
+  const substitute = findTeacher(db, lesson.substituteTeacherId)
+  // Chi sostituisce compila presenze e note, ma non annulla né sposta la lezione
+  const isSubstituteView = persona?.role === 'insegnante' && persona.userId === lesson.substituteTeacherId
+  const saveSubstitute = async (teacherId: string | null) => {
+    try {
+      await repo.setSubstitute(lesson.id, teacherId, sub.note.trim())
+      toast(teacherId ? 'Sostituzione assegnata: insegnante e allieve sono avvisate' : 'Sostituzione annullata', teacherId ? undefined : 'info')
+      setSubDialog(false)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Operazione non riuscita', 'info')
+    }
+  }
 
   const mark = async (studentId: string, value: AttendanceMark) => {
     const current = lesson.attendance[studentId]
@@ -92,9 +108,27 @@ export function TeacherLessonDetail({ basePath = '/insegnante/lezioni', studentB
             </span>
             {teacher && <span>Insegnante: {fullName(teacher)}</span>}
           </div>
+          {substitute && (
+            <p className="mt-3 rounded-2xl bg-warn-soft p-3 text-sm text-ink-soft">
+              <b>Sostituzione:</b> la lezione la tiene {fullName(substitute)}
+              {lesson.substitutionNote ? ` · ${lesson.substitutionNote}` : ''}
+            </p>
+          )}
           {lesson.note && <p className={cn('mt-3 rounded-2xl p-3 text-sm', cancelled ? 'bg-danger-soft text-danger' : 'bg-warn-soft text-warn')}>{lesson.note}</p>}
-          {!past && (
+          {!past && !isSubstituteView && (
             <div className="mt-5 flex flex-wrap gap-2">
+              {!cancelled && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setSub({ teacherId: lesson.substituteTeacherId ?? '', note: lesson.substitutionNote ?? '' })
+                    setSubDialog(true)
+                  }}
+                >
+                  <Users /> {substitute ? 'Cambia sostituzione' : 'Assenza: assegna una sostituta'}
+                </Button>
+              )}
               {lesson.status !== 'regolare' && (
                 <Button
                   size="sm"
@@ -155,7 +189,7 @@ export function TeacherLessonDetail({ basePath = '/insegnante/lezioni', studentB
             </div>
             <p className="mb-3 text-xs text-ink-muted">Le allieve sono attese di default e possono disdire dall’app; i pulsanti a destra registrano la presenza effettiva.</p>
             <ul className="divide-y divide-line/70">
-              {roster.map(({ student: s, isMakeup, declared }) => {
+              {roster.map(({ student: s, isMakeup, isBooking, declared }) => {
                 const m = lesson.attendance[s.id]
                 return (
                   <li key={s.id} className="flex items-center gap-3 py-3">
@@ -164,7 +198,7 @@ export function TeacherLessonDetail({ basePath = '/insegnante/lezioni', studentB
                       <div className="min-w-0">
                         <p className="truncate font-semibold text-ink">{fullName(s)}</p>
                         <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                          {isMakeup ? <Badge tone="rosa">Recupero</Badge> : <LevelBadge level={s.level} />}
+                          {isMakeup ? <Badge tone="rosa">Recupero</Badge> : isBooking ? <Badge tone="rosa">Lezione singola</Badge> : <LevelBadge level={s.level} />}
                           {isCompetitive(db, s.id) && <CompetitiveBadge />}
                           {declared === 'assente' && <Badge tone="danger">Ha disdetto</Badge>}
                           {s.membership.status !== 'attiva' && <MembershipBadge status={s.membership.status} />}
@@ -229,6 +263,42 @@ export function TeacherLessonDetail({ basePath = '/insegnante/lezioni', studentB
           )}
           <Field label="Messaggio per le allieve" htmlFor="status-note">
             <Textarea id="status-note" rows={3} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder={statusDialog === 'annullata' ? 'Es. la lezione verrà recuperata sabato…' : 'Es. sala occupata fino alle 20…'} />
+          </Field>
+        </div>
+      </Dialog>
+      <Dialog
+        open={subDialog}
+        onOpenChange={setSubDialog}
+        title="Sostituzione"
+        description="In caso di assenza indica chi tiene la lezione: la vedrà nel suo calendario e potrà compilare le presenze. Le allieve vengono avvisate."
+        footer={
+          <>
+            {substitute && (
+              <Button variant="ghost" onClick={() => saveSubstitute(null)}>
+                Annulla la sostituzione
+              </Button>
+            )}
+            <Button onClick={() => saveSubstitute(sub.teacherId)} disabled={!sub.teacherId}>
+              Assegna
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Field label="Insegnante che sostituisce" htmlFor="sub-teacher">
+            <Select id="sub-teacher" value={sub.teacherId} onChange={(e) => setSub({ ...sub, teacherId: e.target.value })}>
+              <option value="">Scegli…</option>
+              {db.teachers
+                .filter((t) => t.id !== cls.teacherId)
+                .map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {fullName(t)}
+                  </option>
+                ))}
+            </Select>
+          </Field>
+          <Field label="Nota (facoltativa)" htmlFor="sub-note">
+            <Input id="sub-note" value={sub.note} onChange={(e) => setSub({ ...sub, note: e.target.value })} placeholder="Es. sono a una gara" />
           </Field>
         </div>
       </Dialog>

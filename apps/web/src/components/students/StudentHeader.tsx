@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom'
 import type { Student } from '@/types'
 import { Avatar } from '@/components/ui/avatar'
 import { CompetitiveBadge, DisciplineBadge, LevelBadge, MembershipBadge } from '@/components/common/badges'
-import { useDemo } from '@/hooks/useDemo'
 import { HoopArc } from '@/components/common/Decor'
 import { useDatabase } from '@/hooks/useDatabase'
 import { findClass, findTeacher, isCompetitive } from '@/services/selectors'
@@ -12,7 +11,6 @@ import { fullName } from '@/lib/utils'
 
 export function StudentHeader({ student, actions, classesLink }: { student: Student; actions?: ReactNode; classesLink?: string }) {
   const db = useDatabase()
-  const { persona } = useDemo()
   const classes = student.classIds.map((id) => findClass(db, id)).filter((c) => !!c)
   const teachers = [...new Set(classes.map((c) => c.teacherId))].map((id) => findTeacher(db, id)).filter((t) => !!t)
 
@@ -26,7 +24,8 @@ export function StudentHeader({ student, actions, classesLink }: { student: Stud
             <LevelBadge level={student.level} />
             <DisciplineBadge discipline={student.mainDiscipline} />
             <MembershipBadge status={student.membership.status} />
-            {persona?.role !== 'allieva' && isCompetitive(db, student.id) && <CompetitiveBadge />}
+            {/* Badge AGONISTA nel profilo, visibile anche all'atleta */}
+            {isCompetitive(db, student.id) && <CompetitiveBadge />}
           </div>
           <h1 className="mt-2 text-3xl font-extrabold text-ink">{fullName(student)}</h1>
           <p className="mt-1 text-sm text-ink-muted">

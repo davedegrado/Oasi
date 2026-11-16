@@ -49,7 +49,7 @@ export function lessonsForStudent(db: OasiDatabase, studentId: string): Lesson[]
   const student = findStudent(db, studentId)
   if (!student) return []
   const makeupIds = new Set(approvedMakeupLessonIds(db, studentId))
-  return sortLessons(db.lessons.filter((l) => student.classIds.includes(l.classId) || makeupIds.has(l.id)))
+  return sortLessons(db.lessons.filter((l) => student.classIds.includes(l.classId) || makeupIds.has(l.id) || !!l.bookings?.includes(studentId)))
 }
 
 export function approvedMakeupLessonIds(db: OasiDatabase, studentId: string): string[] {
@@ -63,6 +63,8 @@ export function isMakeupFor(db: OasiDatabase, lessonId: string, studentId: strin
 export interface RosterEntry {
   student: Student
   isMakeup: boolean
+  /** Lezione singola prenotata */
+  isBooking: boolean
   declared: AttendanceMark | null
   actual: AttendanceMark | null
 }
@@ -70,16 +72,18 @@ export interface RosterEntry {
 /** Elenco della lezione: iscritte alla classe + recuperi approvati */
 export function lessonRoster(db: OasiDatabase, lesson: Lesson): RosterEntry[] {
   const cls = findClass(db, lesson.classId)
-  const regular = (cls?.studentIds ?? []).map((id) => ({ id, isMakeup: false }))
+  const regular = (cls?.studentIds ?? []).map((id) => ({ id, isMakeup: false, isBooking: false }))
   const makeups = db.makeupRequests
     .filter((r) => r.targetLessonId === lesson.id && r.status === 'approvata')
-    .map((r) => ({ id: r.studentId, isMakeup: true }))
-  return [...regular, ...makeups]
-    .map(({ id, isMakeup }) => ({ student: findStudent(db, id), isMakeup }))
-    .filter((e): e is { student: Student; isMakeup: boolean } => !!e.student)
-    .map(({ student, isMakeup }) => ({
+    .map((r) => ({ id: r.studentId, isMakeup: true, isBooking: false }))
+  const bookings = (lesson.bookings ?? []).map((id) => ({ id, isMakeup: false, isBooking: true }))
+  return [...regular, ...makeups, ...bookings]
+    .map(({ id, isMakeup, isBooking }) => ({ student: findStudent(db, id), isMakeup, isBooking }))
+    .filter((e): e is { student: Student; isMakeup: boolean; isBooking: boolean } => !!e.student)
+    .map(({ student, isMakeup, isBooking }) => ({
       student,
       isMakeup,
+      isBooking,
       declared: lesson.declarations?.[student.id] ?? null,
       actual: lesson.attendance[student.id] ?? null,
     }))
@@ -96,9 +100,24 @@ export function pendingRequests(db: OasiDatabase, teacherId: string | null) {
   return { enrollments, makeups, total: enrollments.length + makeups.length }
 }
 
+/** Lezioni delle proprie classi più quelle in cui l'insegnante sostituisce una collega */
 export function lessonsForTeacher(db: OasiDatabase, teacherId: string): Lesson[] {
-  const classIds = db.classes.filter((c) => c.teacherId === teacherId).map((c) => c.id)
-  return lessonsForClasses(db, classIds)
+  const classIds = new Set(db.classes.filter((c) => c.teacherId === teacherId).map((c) => c.id))
+  return sortLessons(db.lessons.filter((l) => classIds.has(l.classId) || l.substituteTeacherId === teacherId))
+}
+
+/** Insegnante che tiene la lezione: chi sostituisce, altrimenti quella della classe */
+export function lessonTeacherId(db: OasiDatabase, lesson: Lesson): string | undefined {
+  return lesson.substituteTeacherId ?? findClass(db, lesson.classId)?.teacherId
+}
+
+/** La lezione si prenota come lezione singola? La prenotazione si apre N ore prima (impostazione della palestra) */
+export function singleLessonWindow(db: OasiDatabase, lesson: Lesson, now = new Date()) {
+  const opens = db.association.settings.bookingOpensHours
+  const start = new Date(`${lesson.date}T${lesson.startTime}:00`)
+  const hours = (start.getTime() - now.getTime()) / 3_600_000
+  const openAt = opens ? new Date(start.getTime() - opens * 3_600_000) : null
+  return { hours, open: hours > 0 && (opens === undefined || hours <= opens), openAt }
 }
 
 export function upcomingLessons(lessons: Lesson[], includeCancelled = true): Lesson[] {
@@ -314,3 +333,9 @@ export const euro = (cents: number) => new Intl.NumberFormat('it-IT', { style: '
 
 /** Tipi di evento che prevedono un'esibizione: per questi si indicano i brani */
 export const isPerformance = (e: { type: string }) => e.type === 'gara' || e.type === 'saggio' || e.type === 'spettacolo'
+
+/** Partecipanti di un evento: adesioni e allieve delle classi collegate */
+export function eventParticipants(db: OasiDatabase, event: { participantIds: string[]; classIds?: string[] }) {
+  const fromClasses = db.classes.filter((c) => event.classIds?.includes(c.id)).flatMap((c) => c.studentIds)
+  return [...new Set([...event.participantIds, ...fromClasses])].map((id) => findStudent(db, id)).filter((s): s is Student => !!s)
+}

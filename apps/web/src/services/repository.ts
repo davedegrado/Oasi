@@ -104,6 +104,14 @@ export interface OasiRepository {
   recordPayment(chargeId: string, payment: Omit<PaymentRecord, 'id'>): Promise<void>
   deletePayment(chargeId: string, paymentId: string): Promise<void>
 
+  // Lezioni singole: prenotabili a partire da N ore prima (impostazione della palestra), disdetta libera fino a M ore prima
+  bookSingleLesson(studentId: string, lessonId: string): Promise<void>
+  /** Restituisce true se la disdetta è tardiva (la quota resta dovuta) */
+  cancelSingleLesson(studentId: string, lessonId: string): Promise<boolean>
+
+  // Sostituzioni: l'insegnante della classe (o l'amministrazione) indica chi la sostituisce
+  setSubstitute(lessonId: string, teacherId: string | null, note: string): Promise<void>
+
   /** Ripristina i dati dimostrativi iniziali */
   reset(): Promise<void>
 }

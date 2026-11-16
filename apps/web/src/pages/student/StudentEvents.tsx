@@ -41,7 +41,7 @@ export function StudentEvents() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {shown.map((e) => (
-            <EventCard key={e.id} event={e} footer={<><EventSignupButton event={e} studentId={student.id} /><EventTracksButton event={e} /></>} />
+            <EventCard key={e.id} event={e} footer={<><EventSignupButton event={e} studentId={student.id} /><EventTracksButton event={e} viewerId={student.id} /></>} />
           ))}
         </div>
       )}

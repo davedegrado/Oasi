@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { useDatabase } from '@/hooks/useDatabase'
 import { DOCUMENT_CATEGORY_LABEL } from '@/lib/labels'
 import { cn } from '@/lib/utils'
-import { documentSummary, memberDocuments, needsAction, type MemberDocumentRow } from '@/services/documents'
+import { documentSummary, memberDocuments, needsAction, type MemberDocumentRow, periodDue } from '@/services/documents'
 import { DocumentStateBadge } from './DocumentBits'
 import { fmtDay } from './documentUtils'
 import { DocumentDetailDialog, UploadDocumentDialog } from './DocumentDialogs'
@@ -62,6 +62,9 @@ export function MemberDocumentsPanel({ memberId, mode }: { memberId: string; mod
                       {type.required && <span className="text-[11px] font-semibold text-rosa-intenso uppercase">obbligatorio</span>}
                       {type.sensitive && <Lock className="size-3.5 text-ink-muted" aria-label="Dato riservato" />}
                     </p>
+                    {type.recurrence === 'mensile' && (
+                      <p className="mt-0.5 text-xs font-semibold text-ink-soft">Ogni mese · questo mese entro il {fmtDay(periodDue())}</p>
+                    )}
                     <p className="mt-0.5 text-xs text-ink-muted">
                       {DOCUMENT_CATEGORY_LABEL[type.category]}
                       {doc && ` · v${doc.version} del ${fmtDay(doc.uploadedAt)}`}

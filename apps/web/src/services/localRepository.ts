@@ -3,7 +3,7 @@ import { applyClosure, createSeedDatabase, DATABASE_VERSION } from '@/data/seed'
 import { addDays, formatDate, startOfWeek, todayISO } from '@/lib/dates'
 import { uid } from '@/lib/utils'
 import type { OasiRepository } from './repository'
-import { isCompetitiveClass, isLessonPast, lessonRoster, makeupCredits, makeupLevelAllowed } from './selectors'
+import { isCompetitiveClass, isLessonPast, lessonRoster, makeupCredits, makeupLevelAllowed, singleLessonWindow } from './selectors'
 import { documentState } from './documents'
 
 const STORAGE_KEY = 'oasi-demo-db'
@@ -67,17 +67,48 @@ function migrateFrom6(db: OasiDatabase): OasiDatabase {
 }
 
 /** v8 → v9: agonismo, classi con più discipline, brani degli eventi, soglie configurabili, piani e quote */
+/** v10 → v11: prompt DY DYNAMITE (aree delle classi, due discipline, finestra di prenotazione, documenti mensili degli insegnanti) */
+function migrateFrom10(db: OasiDatabase): OasiDatabase {
+  const seed = createSeedDatabase()
+  const { bookingNoticeHours: _old, ...settings } = db.association.settings as typeof db.association.settings & { bookingNoticeHours?: number }
+  const kids = seed.classes.find((c) => c.id === 'cls-babyteen')
+  const monthly = seed.documentTypes.filter((t) => t.recurrence === 'mensile')
+  return {
+    ...db,
+    version: DATABASE_VERSION,
+    association: {
+      ...db.association,
+      settings: {
+        ...settings,
+        bookingOpensHours: seed.association.settings.bookingOpensHours,
+        classCategories: settings.classCategories ?? seed.association.settings.classCategories,
+        maxDisciplines: settings.maxDisciplines ?? seed.association.settings.maxDisciplines,
+        paymentMethods: settings.paymentMethods ?? seed.association.settings.paymentMethods,
+      },
+    },
+    classes: [
+      ...db.classes.map((c) => ({ ...c, category: c.category ?? 'Adulti/Ragazzi' })),
+      ...(kids && !db.classes.some((c) => c.id === kids.id) ? [kids] : []),
+    ],
+    lessons: kids && !db.classes.some((c) => c.id === kids.id) ? [...db.lessons, ...seed.lessons.filter((l) => l.classId === kids.id)] : db.lessons,
+    // La "polizza insegnante" non era richiesta dal prompt: sostituita dai due documenti mensili
+    documentTypes: [...db.documentTypes.filter((t) => t.id !== 'dt-insegnante-assicurazione'), ...monthly.filter((t) => !db.documentTypes.some((x) => x.id === t.id))],
+    documents: [...db.documents, ...seed.documents.filter((d) => monthly.some((t) => t.id === d.typeId) && !db.documents.some((x) => x.id === d.id))],
+    events: db.events.map((e) => (e.id === 'evt-natale' && !e.tracks ? { ...e, featured: e.featured ?? true, tracks: seed.events.find((x) => x.id === e.id)?.tracks } : e)),
+  }
+}
+
 /** v9 → v10: dati dimostrativi per l'agonismo (una classe agonistica, un certificato approvato) */
 function migrateFrom9(db: OasiDatabase): OasiDatabase {
   const seed = createSeedDatabase()
   const doc = seed.documents.find((d) => d.id === 'doc-elisa-agon')
-  return {
+  return migrateFrom10({
     ...db,
-    version: DATABASE_VERSION,
+    version: 10,
     // Solo se l'amministrazione non ha già scelto una classificazione
     classes: db.classes.map((c) => (c.id === 'cls-cerchio-avz' && c.competitiveLevel === undefined ? { ...c, competitiveLevel: 'agonistica' as const } : c)),
     documents: doc && !db.documents.some((d) => d.memberId === doc.memberId && d.typeId === doc.typeId) ? [...db.documents, doc] : db.documents,
-  }
+  })
 }
 
 function migrateFrom8(db: OasiDatabase): OasiDatabase {
@@ -123,6 +154,7 @@ function loadFromStorage(): OasiDatabase | null {
     if (parsed.version === 7) return migrateFrom8(migrateFrom7(parsed))
     if (parsed.version === 8) return migrateFrom8(parsed)
     if (parsed.version === 9) return migrateFrom9(parsed)
+    if (parsed.version === 10) return migrateFrom10(parsed)
     if (parsed.version !== DATABASE_VERSION) return null
     return parsed
   } catch {
@@ -163,9 +195,15 @@ function withNotifications(db: OasiDatabase, items: NewNotification[]): OasiData
 }
 
 const studentName = (db: OasiDatabase, id: string) => {
-  const s = db.students.find((x) => x.id === id)
-  return s ? `${s.firstName} ${s.lastName}` : 'Un’allieva'
+  const p = db.students.find((x) => x.id === id) ?? db.teachers.find((x) => x.id === id)
+  return p ? `${p.firstName} ${p.lastName}` : 'Un’allieva'
 }
+
+/** Destinatario e collegamento delle notifiche documentali: allieva o insegnante */
+const documentRecipient = (db: OasiDatabase, memberId: string) =>
+  db.teachers.some((t) => t.id === memberId)
+    ? { to: [`teacher:${memberId}`], link: { insegnante: '/insegnante/profilo' } }
+    : { to: [`student:${memberId}`], link: { allieva: '/allieva/documenti' } }
 
 export const MAX_DOCUMENT_BYTES = 4 * 1024 * 1024
 export const ALLOWED_DOCUMENT_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic']
@@ -358,7 +396,7 @@ export class LocalRepository implements OasiRepository {
     if (approve && isCompetitiveClass(cls)) {
       const state = (id: string) => {
         const doc = this.db.documents.find((d) => d.memberId === req.studentId && d.typeId === id && d.current)
-        return documentState(doc)
+        return documentState(doc, undefined, this.db.documentTypes.find((t) => t.id === id))
       }
       const missing = this.db.documentTypes.filter((t) => t.active && t.requiredForCompetitive && !['approvato', 'in_scadenza'].includes(state(t.id)))
       if (missing.length > 0) return Promise.reject(new Error(`Per questa classe serve un documento approvato e valido: ${missing.map((t) => t.name).join(', ')}.`))
@@ -613,7 +651,7 @@ export class LocalRepository implements OasiRepository {
     this.commit((db) => {
       const type = db.documentTypes.find((t) => t.id === input.typeId && t.active)
       if (!type) throw new Error('Tipologia di documento non disponibile')
-      if (!db.students.some((s) => s.id === input.memberId)) throw new Error('Profilo non trovato')
+      if (!db.students.some((s) => s.id === input.memberId) && !db.teachers.some((t) => t.id === input.memberId)) throw new Error('Profilo non trovato')
       if (input.fileSize > MAX_DOCUMENT_BYTES) throw new Error('Il file supera i 4 MB consentiti nella demo')
       if (!ALLOWED_DOCUMENT_TYPES.includes(input.fileType)) throw new Error('Formato non ammesso: carica un PDF o un’immagine')
       const today = todayISO()
@@ -627,6 +665,8 @@ export class LocalRepository implements OasiRepository {
         signedByHand: input.signedUpload || type.signatureMode === 'caricamento_firmato',
         uploadedBy: input.uploadedBy,
         expiresOn,
+        // Documento ricorrente: appartiene al mese in corso
+        periodKey: type.recurrence === 'mensile' ? today.slice(0, 7) : undefined,
       })
       return withNotifications(next, [{
         kind: 'documento',
@@ -658,8 +698,7 @@ export class LocalRepository implements OasiRepository {
         kind: 'documento',
         title: decision === 'approva' ? `Documento approvato: ${type?.name}` : `Documento da ricaricare: ${type?.name}`,
         body: decision === 'approva' ? 'La segreteria ha verificato il documento.' : note.trim(),
-        to: [`student:${doc.memberId}`],
-        link: { allieva: '/allieva/documenti' },
+        ...documentRecipient(db, doc.memberId),
       }])
     })
 
@@ -725,6 +764,57 @@ export class LocalRepository implements OasiRepository {
 
   deletePayment: OasiRepository['deletePayment'] = (chargeId, paymentId) =>
     this.commit((db) => ({ ...db, charges: db.charges.map((c) => (c.id === chargeId ? { ...c, payments: c.payments.filter((p) => p.id !== paymentId) } : c)) }))
+
+  bookSingleLesson: OasiRepository['bookSingleLesson'] = (studentId, lessonId) =>
+    this.commit((db) => {
+      const lesson = db.lessons.find((l) => l.id === lessonId)
+      const cls = db.classes.find((c) => c.id === lesson?.classId)
+      if (!lesson || !cls || lesson.status === 'annullata') throw new Error('La lezione non è prenotabile.')
+      if (cls.studentIds.includes(studentId) || lesson.bookings?.includes(studentId)) throw new Error('Sei già in questa lezione.')
+      const w = singleLessonWindow(db, lesson)
+      if (w.hours <= 0) throw new Error('La lezione è già iniziata.')
+      if (!w.open) throw new Error(`Le prenotazioni si aprono ${db.association.settings.bookingOpensHours} ore prima: dal ${formatDate(w.openAt!.toISOString().slice(0, 10))} alle ${w.openAt!.toTimeString().slice(0, 5)}.`)
+      if (lessonRoster(db, lesson).length >= cls.capacity) throw new Error('La lezione non ha più posti disponibili.')
+      const plan = db.plans.find((p) => p.kind === 'lezione_singola' && p.active)
+      if (!plan) throw new Error('La palestra non ha configurato la tariffa delle lezioni singole.')
+      const charge = { id: uid('chg'), studentId, description: `${plan.name} del ${formatDate(lesson.date)}`, kind: 'piano' as const, amountCents: plan.amountCents, dueOn: lesson.date, payments: [], lessonId }
+      return withNotifications(
+        { ...db, lessons: db.lessons.map((l) => (l.id === lessonId ? { ...l, bookings: [...(l.bookings ?? []), studentId] } : l)), charges: [charge, ...db.charges] },
+        [{ kind: 'recupero', title: 'Lezione singola prenotata', body: `${studentName(db, studentId)} ha prenotato ${cls.name}, ${formatDate(lesson.date, { weekday: true })} alle ${lesson.startTime}.`, to: [`teacher:${cls.teacherId}`, 'admin'], link: { insegnante: `/insegnante/lezioni/${lessonId}`, admin: '/admin/classi' } }],
+      )
+    })
+
+  cancelSingleLesson: OasiRepository['cancelSingleLesson'] = (studentId, lessonId) => {
+    const lesson = this.db.lessons.find((l) => l.id === lessonId)
+    if (!lesson?.bookings?.includes(studentId)) return Promise.reject(new Error('Prenotazione non trovata.'))
+    const w = singleLessonWindow(this.db, lesson)
+    if (w.hours <= 0) return Promise.reject(new Error('La lezione è già iniziata.'))
+    // Disdetta libera fino a N ore prima (Oasi: 6); dopo, la quota resta dovuta
+    const late = w.hours < this.db.association.settings.absenceNoticeHours
+    return this.commit((db) => ({
+      ...db,
+      lessons: db.lessons.map((l) => (l.id === lessonId ? { ...l, bookings: (l.bookings ?? []).filter((x) => x !== studentId) } : l)),
+      charges: late ? db.charges : db.charges.map((c) => (c.lessonId === lessonId && c.studentId === studentId ? { ...c, cancelled: true } : c)),
+    })).then(() => late)
+  }
+
+  setSubstitute: OasiRepository['setSubstitute'] = (lessonId, teacherId, note) =>
+    this.commit((db) => {
+      const lesson = db.lessons.find((l) => l.id === lessonId)
+      const cls = db.classes.find((c) => c.id === lesson?.classId)
+      if (!lesson || !cls) throw new Error('Lezione non trovata.')
+      if (teacherId === cls.teacherId) throw new Error('È già l’insegnante della classe.')
+      const sub = db.teachers.find((t) => t.id === teacherId)
+      const when = `${formatDate(lesson.date, { weekday: true })} alle ${lesson.startTime}`
+      const students = lessonRoster(db, lesson).map((r) => `student:${r.student.id}`)
+      return withNotifications(
+        { ...db, lessons: db.lessons.map((l) => (l.id === lessonId ? { ...l, substituteTeacherId: teacherId ?? undefined, substitutionNote: teacherId ? note || undefined : undefined } : l)) },
+        [
+          ...(sub ? [{ kind: 'variazione' as const, title: 'Ti è stata affidata una sostituzione', body: `${cls.name}, ${when}.${note ? ` ${note}` : ''}`, to: [`teacher:${sub.id}`], link: { insegnante: `/insegnante/lezioni/${lessonId}` } }] : []),
+          { kind: 'variazione', title: sub ? `Lezione con insegnante sostituta: ${cls.name}` : `Sostituzione annullata: ${cls.name}`, body: sub ? `${when} con ${sub.firstName} ${sub.lastName}.` : `${when} con la tua insegnante.`, to: students, link: { allieva: '/allieva/calendario' } },
+        ],
+      )
+    })
 
   reset: OasiRepository['reset'] = () => this.commit(() => createSeedDatabase())
 }

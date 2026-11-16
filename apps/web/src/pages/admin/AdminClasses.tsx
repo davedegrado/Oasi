@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Clock, MapPin, Pencil, Plus, Trash2, Users } from 'lucide-react'
 import type { ClassGroup, CompetitiveLevel, Discipline, Level } from '@/types'
-import { PageHeader } from '@/components/common/PageHeader'
+import { PageHeader, SectionTitle } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dialog } from '@/components/ui/dialog'
@@ -20,7 +20,9 @@ import { LEVEL_LABEL, LEVELS } from '@/lib/labels'
 import { cn, fullName, uid } from '@/lib/utils'
 import { useDisciplines } from '@/hooks/useDisciplines'
 
-function emptyClass(teacherId: string, room: string, discipline: string): ClassGroup {
+const OTHER_AREA = 'Senza area'
+
+function emptyClass(teacherId: string, room: string, discipline: string, category?: string): ClassGroup {
   return {
     id: uid('cls'),
     name: '',
@@ -34,6 +36,7 @@ function emptyClass(teacherId: string, room: string, discipline: string): ClassG
     capacity: 8,
     studentIds: [],
     description: '',
+    category,
   }
 }
 
@@ -47,29 +50,9 @@ export function AdminClasses() {
   const totalSeats = db.classes.reduce((s, c) => s + c.capacity, 0)
   const enrolled = db.classes.reduce((s, c) => s + c.studentIds.length, 0)
 
-  return (
-    <div className="animate-fade-up">
-      <PageHeader
-        eyebrow="Classi"
-        title="Corsi e disponibilità"
-        description={`${db.classes.length} classi · ${enrolled}/${totalSeats} posti occupati`}
-        actions={
-          <Button onClick={() => setEditing({ cls: emptyClass(db.teachers[0].id, db.association.rooms[0], disciplines.active[0]?.id ?? ''), isNew: true })}>
-            <Plus /> Nuova classe
-          </Button>
-        }
-      />
-      <div className="mb-6">
-        <RequestsPanel teacherId={null} decidedBy="admin" title="Richieste di iscrizione e recupero" hideWhenEmpty />
-      </div>
-      <Segmented
-        className="mb-5"
-        value={filter}
-        onChange={setFilter}
-        options={[{ value: 'tutte', label: 'Tutte' }, ...disciplines.list.filter((d) => d.isActive || db.classes.some((c) => classDisciplines(c).includes(d.id))).map((d) => ({ value: d.id, label: d.shortName }))]}
-      />
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {classes.map((c) => {
+  const categories = db.association.settings.classCategories ?? []
+  const areas = [...categories, OTHER_AREA]
+  const renderCard = (c: ClassGroup) => {
           const teacher = findTeacher(db, c.teacherId)
           const occ = classOccupancy(c)
           const students = c.studentIds.map((id) => findStudent(db, id)).filter((s) => !!s)
@@ -121,6 +104,44 @@ export function AdminClasses() {
               </CardContent>
             </Card>
           )
+  }
+
+  return (
+    <div className="animate-fade-up">
+      <PageHeader
+        eyebrow="Classi"
+        title="Corsi e disponibilità"
+        description={`${db.classes.length} classi · ${enrolled}/${totalSeats} posti occupati`}
+        actions={
+          <Button onClick={() => setEditing({ cls: emptyClass(db.teachers[0].id, db.association.rooms[0], disciplines.active[0]?.id ?? '', db.association.settings.classCategories?.[0]), isNew: true })}>
+            <Plus /> Nuova classe
+          </Button>
+        }
+      />
+      <div className="mb-6">
+        <RequestsPanel teacherId={null} decidedBy="admin" title="Richieste di iscrizione e recupero" hideWhenEmpty />
+      </div>
+      <Segmented
+        className="mb-5"
+        value={filter}
+        onChange={setFilter}
+        options={[{ value: 'tutte', label: 'Tutte' }, ...disciplines.list.filter((d) => d.isActive || db.classes.some((c) => classDisciplines(c).includes(d.id))).map((d) => ({ value: d.id, label: d.shortName }))]}
+      />
+      {/* Classi organizzate nelle aree della palestra (Oasi: Bambini/Ragazzi e Adulti/Ragazzi) */}
+      <div className="space-y-8">
+        {areas.map((area) => {
+          const list = classes.filter((c) => (area === OTHER_AREA ? !c.category || !categories.includes(c.category) : c.category === area))
+          if (area === OTHER_AREA && list.length === 0) return null
+          return (
+            <section key={area}>
+              <SectionTitle title={`${area} (${list.length})`} />
+              {list.length === 0 ? (
+                <p className="rounded-3xl bg-white p-5 text-sm text-ink-muted shadow-soft">Nessuna classe in quest’area.</p>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{list.map(renderCard)}</div>
+              )}
+            </section>
+          )
         })}
       </div>
 
@@ -158,6 +179,9 @@ function ClassDialog({ initial, isNew, onClose }: { initial: ClassGroup; isNew: 
   const { toast } = useToast()
   const [cls, setCls] = useState(initial)
   const [error, setError] = useState('')
+  // Limite della palestra (Oasi: due discipline in tutto, cioè la principale più una)
+  const maxDisciplines = db.association.settings.maxDisciplines
+  const maxExtra = maxDisciplines ? Math.max(maxDisciplines - 1, 0) : undefined
   const [confirmDelete, setConfirmDelete] = useState(false)
   const set = <K extends keyof ClassGroup>(k: K, v: ClassGroup[K]) => setCls((c) => ({ ...c, [k]: v }))
 
@@ -237,20 +261,34 @@ function ClassDialog({ initial, isNew, onClose }: { initial: ClassGroup; isNew: 
               ))}
             </Select>
           </Field>
+          {(db.association.settings.classCategories ?? []).length > 0 && (
+            <Field label="Area" htmlFor="c-area">
+              <Select id="c-area" value={cls.category ?? ''} onChange={(e) => set('category', e.target.value || undefined)}>
+                <option value="">Nessuna</option>
+                {(db.association.settings.classCategories ?? []).map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
           <div className="col-span-2">
-            <p className="mb-1.5 text-sm font-semibold text-ink">Altre discipline della classe</p>
+            <p className="mb-1.5 text-sm font-semibold text-ink">{maxExtra === 1 ? 'Seconda disciplina (facoltativa)' : 'Altre discipline della classe'}</p>
             <div className="flex flex-wrap gap-2">
               {disciplines.list
                 .filter((d) => d.id !== cls.discipline && (d.isActive || (initial.extraDisciplines ?? []).includes(d.id)))
                 .map((d) => {
                   const on = (cls.extraDisciplines ?? []).includes(d.id)
+                  const full = !on && maxExtra !== undefined && (cls.extraDisciplines ?? []).length >= maxExtra
                   return (
                     <button
                       key={d.id}
                       type="button"
                       aria-pressed={on}
-                      onClick={() => set('extraDisciplines', on ? (cls.extraDisciplines ?? []).filter((x) => x !== d.id) : [...(cls.extraDisciplines ?? []), d.id])}
-                      className={cn('rounded-full border px-3 py-1.5 text-sm font-semibold transition', on ? 'border-ink bg-ink text-white' : 'border-line bg-white text-ink-soft hover:bg-cipria-50')}
+                      disabled={full}
+                      onClick={() => set('extraDisciplines', on ? (cls.extraDisciplines ?? []).filter((x) => x !== d.id) : maxExtra === 1 ? [d.id] : [...(cls.extraDisciplines ?? []), d.id])}
+                      className={cn('rounded-full border px-3 py-1.5 text-sm font-semibold transition disabled:opacity-40', on ? 'border-ink bg-ink text-white' : 'border-line bg-white text-ink-soft hover:bg-cipria-50')}
                     >
                       {d.name}
                     </button>
@@ -260,7 +298,9 @@ function ClassDialog({ initial, isNew, onClose }: { initial: ClassGroup; isNew: 
                 <p className="text-xs text-ink-muted">Aggiungi altre discipline da Gestione → Discipline.</p>
               )}
             </div>
-            <p className="mt-1.5 text-xs text-ink-muted">Scegli una o più discipline dall’archivio della palestra, senza limite.</p>
+            <p className="mt-1.5 text-xs text-ink-muted">
+              {maxDisciplines ? `Fino a ${maxDisciplines} discipline in tutto, scelte dall’archivio della palestra.` : 'Scegli una o più discipline dall’archivio della palestra.'}
+            </p>
           </div>
           <Field label="Classificazione" htmlFor="c-comp">
             <Select id="c-comp" value={cls.competitiveLevel ?? 'nessuna'} onChange={(e) => set('competitiveLevel', e.target.value as CompetitiveLevel)}>

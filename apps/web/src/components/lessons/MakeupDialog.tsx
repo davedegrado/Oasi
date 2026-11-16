@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Field, Select, Textarea } from '@/components/ui/input'
 import { useDatabase, useRepository } from '@/hooks/useDatabase'
 import { useToast } from '@/hooks/useToast'
-import { findClass, findTeacher, lessonRoster, lessonsForStudent, makeupCredits, makeupLevelAllowed } from '@/services/selectors'
+import { euro, findClass, findTeacher, lessonRoster, lessonsForStudent, makeupCredits, makeupLevelAllowed, singleLessonWindow } from '@/services/selectors'
 import { addDays, formatDate, todayISO } from '@/lib/dates'
 import { fullName } from '@/lib/utils'
 
@@ -29,6 +29,18 @@ export function MakeupDialog({ lesson, studentId, onClose }: { lesson: Lesson; s
   const credits = makeupCredits(db, studentId)
   const levelOk = !!cls && makeupLevelAllowed(db, studentId, cls)
   const [error, setError] = useState('')
+  // Lezione singola: prenotabile a partire da N ore prima (Oasi: 48), a pagamento secondo il listino
+  const window = singleLessonWindow(db, lesson)
+  const single = db.plans.find((p) => p.kind === 'lezione_singola' && p.active)
+  const book = async () => {
+    try {
+      await repo.bookSingleLesson(studentId, lesson.id)
+      toast('Lezione singola prenotata')
+      onClose()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Prenotazione non riuscita')
+    }
+  }
 
   const send = async () => {
     try {
@@ -44,13 +56,18 @@ export function MakeupDialog({ lesson, studentId, onClose }: { lesson: Lesson; s
     <Dialog
       open
       onOpenChange={(o) => !o && onClose()}
-      title="Richiedi un recupero"
-      description="La richiesta deve essere approvata dall’insegnante della classe o dall’amministrazione."
+      title={credits.available > 0 ? 'Richiedi un recupero' : 'Recupero o lezione singola'}
+      description="Il recupero va approvato dall’insegnante o dall’amministrazione; la lezione singola si prenota subito."
       footer={
         <>
           <Button variant="outline" onClick={onClose}>
             Annulla
           </Button>
+          {single && (
+            <Button variant={credits.available > 0 ? 'outline' : 'primary'} onClick={book} disabled={!window.open || free <= 0}>
+              Prenota lezione singola · {euro(single.amountCents)}
+            </Button>
+          )}
           <Button onClick={send} disabled={free <= 0 || credits.available <= 0 || !levelOk}>
             <RefreshCcw /> Invia richiesta
           </Button>
@@ -59,6 +76,11 @@ export function MakeupDialog({ lesson, studentId, onClose }: { lesson: Lesson; s
     >
       <div className="space-y-4">
         {error && <p className="rounded-2xl bg-danger-soft p-3 text-sm text-danger">{error}</p>}
+        {single && !window.open && window.openAt && window.hours > 0 && (
+          <p className="rounded-2xl bg-cipria-50 p-3 text-sm text-ink-soft">
+            Come lezione singola si prenota a partire da {db.association.settings.bookingOpensHours} ore prima: dal {formatDate(window.openAt.toISOString().slice(0, 10))} alle {window.openAt.toTimeString().slice(0, 5)}.
+          </p>
+        )}
         <p className={credits.available > 0 && levelOk ? 'rounded-2xl bg-ok-soft p-3 text-sm text-ink-soft' : 'rounded-2xl bg-warn-soft p-3 text-sm text-ink-soft'}>
           {!levelOk
             ? 'Puoi recuperare solo in classi del tuo livello o, se la palestra lo consente, di livello inferiore.'

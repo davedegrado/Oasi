@@ -8,8 +8,10 @@ export const EXPIRY_WARNING_DAYS = 30
 /** Stato visibile: ai quattro stati di verifica si aggiungono mancante, scaduto e in scadenza */
 export type DocumentState = DocumentStatus | 'mancante' | 'scaduto' | 'in_scadenza'
 
-export function documentState(doc: MemberDocument | undefined, today = todayISO()): DocumentState {
+export function documentState(doc: MemberDocument | undefined, today = todayISO(), type?: DocumentType): DocumentState {
   if (!doc) return 'mancante'
+  // Documento ricorrente (es. mensile): vale solo per il proprio periodo
+  if (type?.recurrence === 'mensile' && doc.periodKey !== today.slice(0, 7)) return 'mancante'
   if (doc.status === 'approvato' && doc.expiresOn) {
     if (doc.expiresOn < today) return 'scaduto'
     if (doc.expiresOn <= addDays(today, EXPIRY_WARNING_DAYS)) return 'in_scadenza'
@@ -43,7 +45,7 @@ export function memberDocuments(db: OasiDatabase, memberId: string, today = toda
     .map((type) => {
       const versions = mine.filter((d) => d.typeId === type.id).sort((a, b) => b.version - a.version)
       const doc = versions.find((d) => d.current)
-      return { type, doc, state: documentState(doc, today), previous: versions.filter((d) => !d.current) }
+      return { type, doc, state: documentState(doc, today, type), previous: versions.filter((d) => !d.current) }
     })
     .sort((a, b) => Number(b.type.required) - Number(a.type.required) || a.type.name.localeCompare(b.type.name))
 }
@@ -59,10 +61,16 @@ export function documentSummary(rows: MemberDocumentRow[]) {
   }
 }
 
-/** Documenti obbligatori mancanti per ogni allieva attiva */
+/** Termine del periodo corrente di un documento ricorrente (mensile: ultimo giorno del mese) */
+export function periodDue(today = todayISO()): string {
+  const [y, m] = today.split('-').map(Number)
+  const last = new Date(y, m, 0).getDate()
+  return `${today.slice(0, 7)}-${String(last).padStart(2, '0')}`
+}
+
+/** Documenti obbligatori mancanti per ogni allieva attiva e per ogni insegnante */
 export function missingDocuments(db: OasiDatabase, today = todayISO()) {
-  return db.students
-    .filter((s) => s.membership.status !== 'sospesa')
+  return [...db.students.filter((s) => s.membership.status !== 'sospesa'), ...db.teachers]
     .map((s) => ({ student: s, rows: memberDocuments(db, s.id, today).filter((r) => r.type.required && (r.state === 'mancante' || r.state === 'scaduto')) }))
     .filter((x) => x.rows.length > 0)
 }

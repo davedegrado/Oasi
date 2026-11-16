@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { ListEditor } from '@/components/common/ListEditor'
 import { SharedDocumentsCard } from '@/components/documents/SharedDocumentsCard'
 import { Wallet, ArrowRight, Building2, Database, Sparkles, Download, Mail, MapPin, Pencil, Phone, RotateCcw, Globe } from 'lucide-react'
 import type { AssociationInfo } from '@/types'
@@ -28,9 +29,17 @@ const SETTINGS_META: { key: keyof AssociationInfo['settings']; label: string; de
   { key: 'trialLessonEnabled', label: 'Lezione di prova', description: 'Consente iscrizioni in stato “Lezione di prova”', type: 'toggle' },
   { key: 'maxStudentsPerClass', label: 'Capienza standard per classe', description: 'Valore predefinito per le nuove classi', type: 'number', suffix: 'allieve' },
   { key: 'absenceNoticeHours', label: 'Preavviso disdetta', description: 'Ore minime prima della lezione per disdire senza conseguenze', type: 'number', suffix: 'ore' },
-  { key: 'bookingNoticeHours', label: 'Preavviso prenotazione', description: 'Ore minime prima della lezione per prenotare una lezione singola', type: 'number', suffix: 'ore' },
+  { key: 'bookingOpensHours', label: 'Apertura prenotazioni', description: 'Le lezioni singole si possono prenotare a partire da queste ore prima dell’inizio', type: 'number', suffix: 'ore' },
+  { key: 'maxDisciplines', label: 'Discipline per classe', description: 'Numero massimo di discipline selezionabili per una classe', type: 'number', suffix: 'max' },
   { key: 'makeupLowerLevelAllowed', label: 'Recupero in livello inferiore', description: 'Consenti il recupero in classi di livello inferiore (mai superiore)', type: 'toggle' },
 ]
+
+const PAYMENT_METHODS = [
+  { value: 'bonifico', label: 'Bonifico' },
+  { value: 'contanti', label: 'Contanti' },
+  { value: 'pos', label: 'POS' },
+  { value: 'altro', label: 'Altro' },
+] as const
 
 type Section = 'calendario' | 'discipline' | 'didattica' | 'associazione'
 
@@ -89,7 +98,7 @@ export function AdminSettings() {
   const section = (params.get('sezione') as Section) || 'calendario'
   const a = db.association
 
-  const updateSetting = async (key: keyof AssociationInfo['settings'], value: boolean | number) => {
+  const updateSetting = async (key: keyof AssociationInfo['settings'], value: boolean | number | string[]) => {
     await repo.updateAssociation({ settings: { ...a.settings, [key]: value } })
     toast('Configurazione salvata')
   }
@@ -261,6 +270,45 @@ export function AdminSettings() {
               )
             })}
           </ul>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="space-y-5">
+          <div>
+            <h2 className="mb-1 text-base font-bold">Aree delle classi</h2>
+            <p className="mb-3 text-sm text-ink-muted">Le classi sono organizzate in queste aree (es. bambini/ragazzi e adulti/ragazzi). Puoi rinominarle o aggiungerne.</p>
+            <ListEditor
+              id="class-categories"
+              items={a.settings.classCategories ?? []}
+              onChange={(items) => updateSetting('classCategories', items)}
+              placeholder="Nuova area, es. Senior"
+            />
+          </div>
+          <div>
+            <h2 className="mb-1 text-base font-bold">Metodi di pagamento</h2>
+            <p className="mb-3 text-sm text-ink-muted">I pagamenti si ricevono fuori dall’app e qui si registrano. Altri metodi si possono abilitare in futuro.</p>
+            <div className="flex flex-wrap gap-2">
+              {PAYMENT_METHODS.map((m) => {
+                const current = a.settings.paymentMethods ?? ['bonifico', 'contanti']
+                const on = current.includes(m.value)
+                return (
+                  <button
+                    key={m.value}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => {
+                      const next = on ? current.filter((x) => x !== m.value) : [...current, m.value]
+                      if (next.length) updateSetting('paymentMethods', next)
+                    }}
+                    className={cn('rounded-full border px-3 py-1.5 text-sm font-semibold transition', on ? 'border-ink bg-ink text-white' : 'border-line bg-white text-ink-soft hover:bg-cipria-50')}
+                  >
+                    {m.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         </CardContent>
       </Card>
 

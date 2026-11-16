@@ -42,7 +42,8 @@ export function LessonCard({ lesson, showDate, onClick, aside, footer, badges, c
   const db = useDatabase()
   const disciplines = useDisciplines()
   const cls = findClass(db, lesson.classId)
-  const teacher = findTeacher(db, cls?.teacherId)
+  // In caso di sostituzione la lezione la tiene un'altra insegnante
+  const teacher = findTeacher(db, lesson.substituteTeacherId ?? cls?.teacherId)
   if (!cls) return null
   const cancelled = lesson.status === 'annullata'
   const Comp = onClick ? 'button' : 'div'
@@ -69,7 +70,10 @@ export function LessonCard({ lesson, showDate, onClick, aside, footer, badges, c
         <p className={cn('truncate font-display font-bold text-ink', cancelled && 'text-ink-muted')}>{cls.name}</p>
         {!compact && (
           <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-muted">
-            <span>{teacher ? fullName(teacher) : '—'}</span>
+            <span>
+              {teacher ? fullName(teacher) : '—'}
+              {lesson.substituteTeacherId && <span className="ml-1 font-semibold text-warn">(sostituta)</span>}
+            </span>
             <span className="inline-flex items-center gap-1">
               <MapPin className="size-3" /> {cls.room}
             </span>

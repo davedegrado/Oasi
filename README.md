@@ -1,11 +1,11 @@
-# Oasi Aerial · Piattaforma SaaS white-label
+# DY DYNAMITE · Piattaforma SaaS white-label
 
-Piattaforma per palestre di danza aerea, scuole di danza e studi sportivi: un unico codice e un'unica infrastruttura servono più palestre, ciascuna con il proprio marchio, dominio, utenti e dati isolati. **Oasi Metropolitana** (Modena) è il primo tenant.
+Piattaforma gestionale per associazioni, palestre e scuole: un unico codice e un'unica infrastruttura servono più strutture, ciascuna con il proprio marchio, dominio, utenti e dati isolati. **Oasi Metropolitana** (Modena) è il tenant pilota: i suoi prezzi, date e regole sono la sua configurazione, non valori della piattaforma.
 
 | Cartella | Contenuto | Stato |
 | --- | --- | --- |
 | [`apps/web`](apps/web) | Web App / PWA React + TypeScript + Vite + Tailwind | Completa in modalità demo; white-label da configurazione; collegamento alle API in corso |
-| [`apps/api`](apps/api) | API ASP.NET Core (.NET 10) multi-tenant | Core, calendario, presenze, iscrizioni, recuperi con diritto residuo, lezioni singole, stagioni, piani e pagamenti registrati, agonismo, documenti, eventi, Super Admin — 46 test |
+| [`apps/api`](apps/api) | API ASP.NET Core (.NET 10) multi-tenant | Core, calendario, presenze, iscrizioni, recuperi con diritto residuo, lezioni singole, stagioni, piani e pagamenti registrati, agonismo, documenti, eventi, Super Admin — 51 test |
 | [`db`](db) | Migrazioni PostgreSQL/Supabase con Row Level Security, seed, test di isolamento | Pronto |
 | `native` | App iOS/Android con Capacitor | Da fare (fase 7 del piano) |
 

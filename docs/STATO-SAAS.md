@@ -1,111 +1,110 @@
-# Piattaforma SaaS multi-tenant · stato del lavoro
+# DY DYNAMITE · stato del lavoro
 
-Riepilogo di ciò che è stato fatto a partire dal documento «Prompt per Claude · Evoluzione del progetto Oasi», che cosa è verificato da test e che cosa resta da decidere o da fare.
+Riferimento: «Prompt per Claude · Aggiornamento della piattaforma Oasi Metropolitana e consolidamento dell'architettura SaaS DY DYNAMITE».
+Del prompt precedente («Oasi SaaS compatto») sono rimasti solo due principi: **ogni regola è configurabile per struttura**, e **i valori del prompt sono la configurazione di Oasi Metropolitana**, non valori della piattaforma.
 
-Legenda: **API** = regola applicata dal backend con persistenza e autorizzazione, coperta da test · **Demo** = presente nella Web App dimostrativa (dati nel browser) · **No** = non realizzato.
+Legenda: **API** = regola applicata dal backend con persistenza, permessi e test · **Demo** = visibile nella Web App dimostrativa (dati nel browser) · **No** = non realizzato.
 
-## 1. Cosa c'è, punto per punto
+## 1. Requisiti, punto per punto
 
-| § | Richiesta | API | Demo | Note |
+| § | Requisito | API | Demo | Valore di Oasi / note |
 | --- | --- | --- | --- | --- |
-| 1 | Un'app, un backend, un database, isolamento tra tenant | Sì | — | RLS forzata su tutte le tabelle `app.*` (controllo automatico nel test 16 di `db/tests/isolation.sql`), chiavi esterne composte con `tenant_id` |
-| 1 | Configurazioni per tenant senza eccezioni nel codice | Sì | Sì | Fuso orario, soglie, regole dei recuperi, agonismo, documenti: `GET/PUT /v1/settings` |
-| 2 | Calendario con vista iniziale settimanale, giorni non ripetuti | — | Sì | La barra dei giorni è l'unico punto in cui compaiono; legenda ridotta |
-| 2 | Palette bianco, nero, verde salvia e oro solo per Oasi | Sì | Sì | È la configurazione iniziale del tenant Oasi (`platform.branding` nel seed `0110`, `DEMO_TENANTS` nella demo). I valori predefiniti della piattaforma e gli altri tenant non cambiano. Nuovo colore facoltativo `accent` |
-| 3 | Genitore: solo i figli collegati | Sì | No | `GET /v1/members/children`; nella demo manca il ruolo genitore |
-| 3 | Agonista / non agonista, certificato obbligatorio solo quando previsto | Sì | Sì | Verificato lato server: l'iscrizione a una classe agonistica è bloccata senza certificato approvato e valido |
-| 3 | Badge AGONISTA per staff | Sì | Sì | `competitiveBadge` su persone ed elenchi di lezione |
-| 3 | Foto del profilo | Sì | Già presente | `POST/GET /v1/members/{id}/avatar` |
-| 4 | Recupero solo con assenza valida e diritto residuo | Sì | Sì | Tabella `makeup_credits`; disponibili, impegnati, utilizzati, scaduti e storico |
-| 4 | Recupero entro la validità del piano | Sì | No | Il diritto scade con il piano collegato all'iscrizione (o con la stagione) |
-| 4 | Stesso livello o inferiore, mai superiore | Sì | Sì | Livello inferiore attivabile dall'amministrazione |
-| 4 | Controllo posti atomico | Sì | Parziale | Blocco della riga della classe: test con due richieste simultanee per l'ultimo posto |
-| 4 | Soglie di prenotazione e disdetta configurabili (48 h e 6 h sono i valori di Oasi) | Sì | Solo impostazione | Eccezioni dell'amministrazione registrate nell'audit; disdetta tardiva secondo regola della struttura |
-| 4 | Fuso orario del tenant e cambi d'ora | Sì | — | Nessun endpoint usa più l'ora del server |
-| 4 | Lezioni singole | Sì | No | `POST/DELETE /v1/bookings` |
-| 5 | Home con il prossimo saggio o evento principale | Sì | Sì | `GET /v1/events/next` |
-| 5 | Eventi gestiti dall'amministrazione, collegati a classi/discipline/insegnanti, con notifiche | Sì | Parziale | Notifica solo agli interessati e solo se cambiano data, ora o luogo |
-| 5 | Brani musicali delle performance (solo nomi) | Sì | Sì | Un insegnante li associa solo alle proprie classi |
-| 6 | Documenti degli insegnanti flessibili | Sì | Parziale | Tipologie per destinatario, richieste puntuali con termine, scadenza obbligatoria solo se configurata |
-| 6 | Scadenza inserita e correggibile | Sì | No | Corretta dall'interessato → torna in verifica; dall'amministrazione → resta approvata |
-| 6 | Stati: in attesa, approvato, da correggere, scaduto | Sì | Già presente | Campo `state` |
-| 6 | Notifiche senza duplicati, con storico | Sì | — | Tabella `reminder_log` |
-| 7 | Classi con una o più discipline dall'archivio esistente | Sì | Sì | Nessun limite fisso |
-| 7 | Blocco iscrizioni e recuperi a capienza raggiunta | Sì | Sì | |
+| 1 | Un backend e un database condivisi, isolamento tra strutture | Sì | — | RLS forzata su ogni tabella (test 16 di `db/tests/isolation.sql`) |
+| 1 | Prezzi, date e regole configurabili per struttura e stagione | Sì | Sì | Impostazioni (`/v1/settings`), stagioni, listino |
+| 2 | Palette bianco, nero, verde salvia e oro | Sì (tema del tenant) | Sì | Configurazione di Oasi; gli altri tenant mantengono la propria |
+| 2 | Calendario con vista settimanale, giorni non ripetuti | — | Sì | |
+| 3 | Atlete minorenni gestite dal genitore, solo i propri figli | Sì | No | Manca il ruolo genitore nella demo |
+| 3 | Agonista/non agonista; certificato obbligatorio solo quando previsto, verificato dal server | Sì | Sì | Cerchio Avanzato è agonistica nella demo |
+| 3 | Badge AGONISTA nel profilo e dove serve allo staff | Sì | Sì | Ora visibile anche all'atleta nel proprio profilo |
+| 3 | Foto profilo e certificato agonistico | Sì | Parziale | |
+| 4 | Recupero solo dopo un'assenza valida, contatore disponibili/utilizzati/residui con storico | Sì | Sì | |
+| 4 | Recupero entro la validità del piano; classe propria o di livello inferiore, mai superiore | Sì | Sì | |
+| 4 | Recuperi bloccati a classe piena, controllo atomico | Sì | Sì | |
+| 4 | Lezioni singole **prenotabili a partire da 48 ore prima**, disdetta libera **fino a 6 ore prima** | Sì | Sì | Oasi: apertura 48 h, disdetta 6 h; oltre: la quota resta dovuta |
+| 4 | Fuso orario del tenant, cambi d'ora | Sì | — | Europe/Rome |
+| 5 | Home con il prossimo saggio o evento principale | Sì | Sì | |
+| 5 | Performance: canzone/musica, luogo, partecipanti nel rispetto dei permessi | Sì | Sì | File audio (fino a 25 MB) o collegamento; ascolto e partecipanti riservati a chi partecipa e allo staff |
+| 5 | Eventi gestiti dall'amministrazione, consultati da insegnanti e atlete | Sì | Sì | Gli insegnanti non modificano più eventi né musica |
+| 5 | Eventi collegabili a classi, discipline, insegnanti e partecipanti; notifiche | Sì | Parziale | |
+| 6 | Presenze, note della lezione, **sostituzioni** | Sì | Sì | Chi sostituisce vede la lezione e compila le presenze |
+| 6 | **Due documenti ogni 30 giorni, entro la fine del mese** | Sì | Sì | Tipologie ricorrenti: richieste e promemoria automatici |
+| 6 | Stati in attesa / approvato / da correggere; notifiche senza duplicati | Sì | Sì | Le **push** non sono collegate a un servizio reale |
+| 6 | Lezioni: prima il calendario, poi Prossime lezioni, Storico, Richieste per tipologia e stato | — | Sì | |
+| 7 | Classi in **due aree: bambini/ragazzi e adulti/ragazzi**, categorie adattabili | Sì | Sì | Aree modificabili in Gestione |
+| 7 | **Fino a due discipline** per classe dall'archivio esistente | Sì | Sì | Limite configurabile |
 | 7 | Regolamento in Gestione → Associazione | Già presente | Sì | |
-| 7 | Scheda allievo: tessera, certificati, quote, pagamenti | Sì | Sì | |
-| 7 | Riepilogo presenze compatto, assenze ricorrenti | Sì | No | `GET /v1/classes/{id}/attendance-summary` (assenze consecutive) |
-| 7 | Download singolo, di una persona, di gruppi filtrati | Sì | No | `GET /v1/documents/export` (zip), registrato nello storico e nell'audit |
-| 8 | Documento sostituito: disponibile al massimo 7 giorni, poi eliminato dallo storage | Sì | No | Resta l'evento di audit, non il contenuto |
-| 8 | Nessuna firma elettronica dichiarata | Già presente | Già presente | |
-| 9 | Motore dei piani configurabile (annuali, mensili, periodici, rate, pacchetti, semiprivate) | Sì | Sì | Le rate sono quote dello stesso piano |
-| 9 | Pacchetti a ingressi con saldo, scadenza e disponibilità | Sì | No | |
-| 9 | Stagioni, periodi, chiusure, storico | Sì | Sola lettura | La nuova stagione copia i piani disattivati e senza date |
-| 9 | Pagamenti esterni all'app: solo registrazione | Sì | Sì | Nessun gateway; nessun dato bancario o di carta |
-| 9 | Riepiloghi: scadenze, insoluti, documenti mancanti; promemoria nuova stagione | Sì | Parziale | `GET /v1/reports/overview` |
-| 10 | Configurazione iniziale Oasi 2026/27 come dati del tenant | Sì | Sì | `db/seed/0110_oasi_stagione_2026_27.sql` |
-| 11 | Notifiche interne con collegamento alla schermata, preferenze | Sì | Già presente | Le **push** native e l'invio email non sono collegati a un servizio reale |
-| 12 | Super Admin distinto, senza accesso indiscriminato | Già presente | — | |
-| 12 | App iOS e Android per tenant | No | No | Fuori da questo ciclo |
-| 13 | Test | 46 test API + 19 controlli SQL | Nessun test automatico | Vedi sotto |
+| 7 | Scheda atleta: tessera, certificati approvati, quote e pagamenti | Sì | Sì | |
+| 7 | Riepilogo presenze compatto; download singolo, per atleta, per gruppi | Sì | Parziale | |
+| 8 | Un documento, una sola copia; stati, revisore, note | Sì | Sì | |
+| 8 | Caricamento di un documento firmato ≠ firma elettronica | Sì | Sì | Nessuna firma elettronica dichiarata |
+| 8 | Consensi e informative (immagini, minorenni) | Tabella presente | Parziale | Nessun flusso completo |
+| 9 | Motore piani configurabile: annuale, periodico, mensile, rate, lezioni singole, pacchetti, semiprivate | Sì | Sì | |
+| 9 | Pacchetto: **un ingresso per ogni partecipazione effettiva**, saldo, scadenza | Sì | No | Ingresso consumato alla presenza; con assenza o disdetta tardiva secondo le regole di Oasi |
+| 9 | Piano coerente con classe e frequenze settimanali | Sì | No | Categoria e classificazione agonistica del piano |
+| 9 | Pagamenti **bonifico e contanti**, altri metodi in futuro, nessun dato sensibile | Sì | Sì | Metodi abilitabili in Gestione |
+| 9 | Riepilogo per atleta e generale; promemoria annuale nuova stagione | Sì | Parziale | |
+| 9 | Sospensioni di un piano | No | No | Non realizzato |
+| 10 | Dati economici 2026/27 come configurazione di Oasi | Sì | Sì | `db/seed/0110_oasi_stagione_2026_27.sql` |
+| 11 | Notifiche interne con collegamento, preferenze, storico | Sì | Parziale | Push ed email non collegate |
+| 12 | Oasi tenant pilota di DY DYNAMITE, Super Admin distinto | Sì | — | |
+| 12 | Database dedicati futuri per tenant grandi | Predisposto | — | Campo `dedicated_db_ref`, non usato |
+| 12 | App iOS/Android | No | No | |
 
-## 2. Verifiche eseguite
+## 2. Cosa è cambiato rispetto al lavoro fatto sul prompt precedente
 
-- `dotnet test` in `apps/api`: **46 test superati** (30 preesistenti + 16 nuovi in `SaasTests.cs`).
-- `db/tests/isolation.sql`: **19 controlli superati** (4 nuovi: RLS su tutte le tabelle, piani e quote isolati, piano di un altro tenant rifiutato, impostazioni distinte per tenant).
-- Web App: `npm run lint` e `npm run build` senza errori; apertura delle pagine principali con i tre ruoli in un browser, senza errori in console. **Nessun test automatico sull'interfaccia.**
+- **Lezioni singole:** la prenotazione ora *si apre* N ore prima (prima era "almeno N ore prima": significato opposto). Un piano può avere una sua finestra: Circo Baby chiude 24 ore prima.
+- **Pacchetti:** l'ingresso si scala alla presenza registrata, non alla prenotazione. La prenotazione impegna il posto nel saldo.
+- **Insegnanti:** al posto delle richieste libere, due documenti ricorrenti ogni mese entro l'ultimo giorno del mese. La tipologia inventata "Polizza assicurativa insegnante" è stata tolta dalla demo.
+- **Classi:** aree e limite di due discipline (prima nessun limite).
+- **Eventi:** musica e gestione riservate all'amministrazione; ora si può allegare il file audio o un collegamento, prima solo il titolo.
+- **Pagamenti:** metodi configurabili; per Oasi solo bonifico e contanti.
+- **Documenti sostituiti:** nessuna eliminazione automatica dopo 7 giorni (non richiesta); resta disponibile come impostazione facoltativa.
+- **Valori predefiniti della piattaforma** resi neutri: i 48 h / 6 h, le aree e il limite di due discipline sono valori di Oasi.
 
-Casi coperti dai test dell'API: iscrizioni con posti e classi piene; recuperi senza assenza, con assenza valida, tardiva o ritirata, esauriti, scaduti, in livello superiore e inferiore, in lezioni piene e con richieste simultanee; prenotazioni e disdette alle soglie configurate, eccezioni dell'amministrazione; piani in unica soluzione e a rate, pagamenti parziali, eccedenti e non autorizzati; pacchetti esauriti, scaduti, di un'altra persona, non adatti per durata o età; periodi, chiusure, cambio di stagione e promemoria; minori con genitore, agonisti e non, certificato mancante, in verifica e scaduto; permessi per ruolo e isolamento tra tenant; documenti approvati, da correggere, scaduti, sostituiti ed eliminati dallo storage dopo 7 giorni; brani delle performance; notifiche non duplicate; cambio d'ora.
+## 3. Verifiche eseguite
 
-Non coperti da test: prestazioni, accessibilità, comportamento responsive (verificato solo a vista su due larghezze), invio email e push.
+- `dotnet test`: **51 test superati**, di cui 5 nuovi in `DynamiteTests.cs`.
+- `db/tests/isolation.sql`: **19 controlli superati**.
+- Web App: lint e build senza errori; pagine principali aperte in un browser con i tre ruoli, nessun errore in console. Nessun test automatico dell'interfaccia.
 
-## 3. Limite più importante: la Web App non usa ancora l'API
+Casi coperti per il prompt corretto:
+- **Prenotazioni:** lezione singola prenotata appena prima e appena dopo l'apertura della finestra, disdetta prima e dopo la soglia, termine di chiusura.
+- **Pacchetti:** ingresso consumato alla presenza, presenza tolta e ripristinata, assenza, ultimo ingresso, saldo esaurito, pacchetto scaduto, disdetta in tempo o tardiva.
+- **Documenti mensili:** due richieste al mese con termine a fine mese, notifica unica, caricamento, correzione richiesta, documento mancante segnalato all'amministrazione.
+- **Classi:** tre discipline rifiutate, area non prevista rifiutata, coerenza piano–classe.
+- **Sostituzioni:** chi può assegnarle, presenze compilate da chi sostituisce, annullamento.
+- **Eventi:** musica gestita solo dall'amministrazione, ascolto e partecipanti riservati a chi partecipa.
+- **Pagamenti:** metodo non accettato da Oasi rifiutato.
 
-La Web App funziona con dati dimostrativi salvati nel browser. Le regole elencate come «API» sono vere e verificate nel backend; quelle elencate come «Demo» riproducono lo stesso comportamento nell'interfaccia ma **non sono collegate al backend**. Il collegamento (accesso con Supabase, implementazione di `OasiRepository` verso l'API, ruolo genitore) è il prossimo passo e non è stato iniziato.
+## 4. Punti che richiedono una decisione
 
-## 4. Decisioni da confermare
+1. **Finestra di Circo Baby:** applicata solo la regola "almeno 24 ore prima", senza l'apertura a 48 ore. Il pacchetto 5 lezioni invece segue l'apertura a 48 ore.
+2. **I due documenti mensili degli insegnanti:** il prompt non li nomina. Hanno un nome provvisorio, da cambiare in Archivio.
+3. **Pacchetto prenotato e atleta assente:** ora l'ingresso si consuma (`noShowConsumesEntry`). In alternativa si può restituire.
+4. **Categorie dei piani:**
+   - Baby/Teen, Circo Baby e Preagonismo → Bambini/Ragazzi;
+   - Adulti/Teen → Adulti/Ragazzi;
+   - Genitori & Figli e Agonismo Teen senza vincolo.
+5. **"Atleta" o "allieva":** il prompt usa "atleta", la demo usa ancora "allieva". Non ho rinominato l'interfaccia.
+6. **Assenza "valida" per il recupero:** ora è quella annunciata entro la soglia di disdetta (6 ore per Oasi).
+7. **Incongruenze dei dati 2026/27**, segnalate e non corrette:
+   - lezione singola e pacchetto 5 lezioni valgono dal 14/09, la stagione inizia il 15/09;
+   - date delle rate indicate solo per Baby/Teen 1 frequenza;
+   - "due periodi stagionali" di Circo Baby intesi come quelli delle rate;
+   - il pacchetto 5 lezioni non copre lezioni da 90 minuti.
 
-Sono state fatte scelte ragionevoli e modificabili dalle impostazioni; vanno confermate prima dell'uso reale.
-
-1. **Che cos'è un'assenza «valida»** per il recupero. Ora: assenza annunciata entro la soglia di disdetta (`makeups.creditOn = declared_in_time`). Alternativa già disponibile: qualsiasi assenza registrata (`any_absence`).
-2. **Disdetta tardiva**: ora consuma l'ingresso e lascia dovuta la lezione singola (`booking.lateCancelConsumesEntry`).
-3. **Numero massimo di recuperi per piano**: ora nessun limite (`makeups.maxPerPlan`).
-4. **Recupero solo nella stessa disciplina**: ora no (`makeups.sameDisciplineOnly`).
-5. **Recuperi senza piano collegato**: scadono con la stagione attiva; senza stagione attiva non nascono.
-6. **Promemoria nuova stagione**: 60 giorni prima della fine, se manca una stagione in bozza.
-
-## 5. Incongruenze nei dati della stagione 2026/27 (segnalate, non corrette)
-
-1. Lezione singola e pacchetto 5 lezioni valgono dal **14/09/2026**, ma stagione e periodi iniziano il **15/09/2026**. Il controllo `GET /v1/seasons/{id}/check` lo segnala.
-2. Le date delle due rate sono indicate solo per Baby/Teen con 1 frequenza: sono state usate anche per 2 e 3 frequenze e per Genitori & Figli.
-3. «Circo Baby: validi in uno dei due periodi stagionali»: i due periodi sono stati intesi come quelli delle due rate (15/09–24/01 e 25/01–30/05), cioè due pacchetti configurati.
-4. Il pacchetto 5 lezioni copre lezioni da 60 o 75 minuti; le classi dimostrative durano 90 minuti e non sono coperte.
-5. Le quote gara (50–150 €) sono indicative: sono salvate come intervallo informativo e si registrano come quote manuali.
-6. Tessera: l'importo dipende dall'età (22 € fino a 15 anni, 27 € dai 16); sono due piani e la scelta è dell'amministrazione.
-
-## 6. Non realizzato
+## 5. Non realizzato
 
 - Collegamento della Web App all'API e accesso reale degli utenti.
-- Ruolo genitore, lezioni singole, pacchetti e richieste di documenti nella Web App.
-- Notifiche push e invio email verso servizi reali; lo storage Supabase non è mai stato provato contro un progetto reale.
-- App iOS e Android.
-- Modifica di stagioni e periodi dall'interfaccia (l'API c'è).
-- Test automatici dell'interfaccia.
-- Lo script `apps/web/scripts/export-demo-seed.ts` non esporta i nuovi campi: `db/seed/0100_…` non va rigenerato finché non viene aggiornato.
+- Ruolo genitore e pacchetti a ingressi nella demo.
+- Notifiche push ed email reali.
+- Sospensioni dei piani.
+- Flusso completo dei consensi.
+- App native.
+- Test automatici dell'interfaccia e verifiche di accessibilità e prestazioni.
 
-## 7. Modifiche al database
+## 6. Migrazioni
 
-Migrazioni `0008` e `0009` (solo aggiunte, tranne due cambi):
-
-- `app.member_payments.gateway_ref` **eliminata** e modalità di pagamento ridotte a contanti, bonifico, POS, altro (nessun incasso online).
-- `app.documents.file_path` torna facoltativa: diventa vuota quando il file sostituito viene eliminato.
-
-Nuove tabelle: `class_disciplines`, `document_requests`, `reminder_log`, `notification_preferences`, `seasons`, `season_periods`, `plan_installments`, `member_plans`, `makeup_credits`, `lesson_bookings`, `event_links`, `event_tracks`.
-
-## 8. Comportamenti cambiati rispetto a prima
-
-- Un recupero richiede ora un diritto residuo: senza un'assenza valida la richiesta è rifiutata.
-- La richiesta di recupero occupa subito il posto (prima lo occupava solo dopo l'approvazione).
-- Creare e modificare eventi è riservato all'amministrazione (prima anche agli insegnanti).
-- Una richiesta di iscrizione a una classe già piena è rifiutata subito.
-- Senza date, `GET /v1/lessons` restituisce la settimana corrente (prima 14 giorni da oggi).
+`0008`, `0009`, `0010` vanno applicate in ordine. La `0010`:
+- rinomina `fee_plans.booking_hours_before` in `booking_closes_hours_before`;
+- toglie dalle impostazioni salvate la vecchia chiave `singleLessonBookHoursBefore`, perché aveva il significato opposto.
