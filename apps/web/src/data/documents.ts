@@ -44,6 +44,8 @@ const seeds: DocSeed[] = [
   { id: 'doc-sara-cert', memberId: 'stu-sara', typeId: 'dt-certificato', version: 1, current: true, status: 'approvato', fileName: 'certificato.pdf', fileType: 'application/pdf', fileSize: 98000, fileData: DEMO_PDF, uploadedBy: 'stu-sara', daysAgo: 353, expiresIn: 12, reviewedDaysAgo: 350 },
   { id: 'doc-martina-isc', memberId: 'stu-martina', typeId: 'dt-iscrizione', version: 1, current: true, status: 'in_verifica', fileName: 'modulo-iscrizione-martina.pdf', fileType: 'application/pdf', fileSize: 52000, fileData: DEMO_PDF, signedByHand: true, uploadedBy: 'stu-martina', daysAgo: 1 },
   { id: 'doc-francesca-isc', memberId: 'stu-francesca', typeId: 'dt-iscrizione', version: 1, current: true, status: 'da_sostituire', fileName: 'iscrizione-foto.jpg', fileType: 'image/jpeg', fileSize: 1400000, fileData: DEMO_PDF, uploadedBy: 'stu-francesca', daysAgo: 6, reviewedDaysAgo: 4, reviewNote: 'Manca la firma nella seconda pagina: carica il modulo completo.' },
+  // Agoniste (Cerchio Avanzato): Elisa ha il certificato agonistico approvato, a Lucia manca
+  { id: 'doc-elisa-agon', memberId: 'stu-elisa', typeId: 'dt-agonistico', version: 1, current: true, status: 'approvato', fileName: 'certificato-agonistico.pdf', fileType: 'application/pdf', fileSize: 120300, fileData: DEMO_PDF, uploadedBy: 'stu-elisa', daysAgo: 45, expiresIn: 320, reviewedDaysAgo: 43 },
   { id: 'doc-ilaria-cert', memberId: 'stu-ilaria', typeId: 'dt-certificato', version: 1, current: true, status: 'approvato', fileName: 'certificato-2025.pdf', fileType: 'application/pdf', fileSize: 87000, fileData: DEMO_PDF, uploadedBy: 'stu-ilaria', daysAgo: 380, expiresIn: -15, reviewedDaysAgo: 378 },
 ]
 

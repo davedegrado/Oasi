@@ -30,6 +30,8 @@ export const demoClasses: Omit<ClassGroup, 'studentIds'>[] = [
   {
     id: 'cls-cerchio-avz', name: 'Cerchio Avanzato', discipline: 'cerchio', level: 'avanzato', teacherId: 'tch-valentina',
     weekday: 6, startTime: '10:30', endTime: '12:00', room: 'Sala Luna', capacity: 6,
-    description: 'Equilibri, figure di forza e lavoro dinamico con rotazione del cerchio.',
+    description: 'Equilibri, figure di forza e lavoro dinamico con rotazione del cerchio. Gruppo agonistico: prepara le gare regionali.',
+    // Dato dimostrativo: classe agonistica, così nella demo si vedono badge AGONISTA e obbligo del certificato
+    competitiveLevel: 'agonistica',
   },
 ]

@@ -67,18 +67,31 @@ function migrateFrom6(db: OasiDatabase): OasiDatabase {
 }
 
 /** v8 → v9: agonismo, classi con più discipline, brani degli eventi, soglie configurabili, piani e quote */
-function migrateFrom8(db: OasiDatabase): OasiDatabase {
+/** v9 → v10: dati dimostrativi per l'agonismo (una classe agonistica, un certificato approvato) */
+function migrateFrom9(db: OasiDatabase): OasiDatabase {
   const seed = createSeedDatabase()
+  const doc = seed.documents.find((d) => d.id === 'doc-elisa-agon')
   return {
     ...db,
     version: DATABASE_VERSION,
+    // Solo se l'amministrazione non ha già scelto una classificazione
+    classes: db.classes.map((c) => (c.id === 'cls-cerchio-avz' && c.competitiveLevel === undefined ? { ...c, competitiveLevel: 'agonistica' as const } : c)),
+    documents: doc && !db.documents.some((d) => d.memberId === doc.memberId && d.typeId === doc.typeId) ? [...db.documents, doc] : db.documents,
+  }
+}
+
+function migrateFrom8(db: OasiDatabase): OasiDatabase {
+  const seed = createSeedDatabase()
+  return migrateFrom9({
+    ...db,
+    version: 9,
     association: { ...db.association, settings: { ...seed.association.settings, ...db.association.settings, absenceNoticeHours: seed.association.settings.absenceNoticeHours } },
     documentTypes: [...db.documentTypes, ...seed.documentTypes.filter((t) => t.requiredForCompetitive && !db.documentTypes.some((x) => x.id === t.id))],
     season: db.season ?? seed.season,
     plans: db.plans ?? seed.plans,
     memberPlans: db.memberPlans ?? seed.memberPlans,
     charges: db.charges ?? seed.charges,
-  }
+  })
 }
 
 type LegacyDoc = OasiDatabase['documents'][number] & { signature?: { method: string } }
@@ -109,6 +122,7 @@ function loadFromStorage(): OasiDatabase | null {
     if (parsed.version === 6) return migrateFrom8(migrateFrom7(migrateFrom6(parsed)))
     if (parsed.version === 7) return migrateFrom8(migrateFrom7(parsed))
     if (parsed.version === 8) return migrateFrom8(parsed)
+    if (parsed.version === 9) return migrateFrom9(parsed)
     if (parsed.version !== DATABASE_VERSION) return null
     return parsed
   } catch {
