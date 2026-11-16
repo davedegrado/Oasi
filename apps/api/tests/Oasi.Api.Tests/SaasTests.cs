@@ -65,27 +65,37 @@ public sealed class SaasTests(ApiFixture api)
     [Fact]
     public async Task Soglie_e_fuso_orario_sono_configurabili_per_struttura_e_non_escono_dal_tenant()
     {
+        // Valori di Oasi (dal prompt): prenotazione aperta da 48 ore prima, disdetta libera fino a 6 ore prima,
+        // classi in due aree con al massimo due discipline, pagamenti con bonifico e contanti
         var settings = await Admin.GetFromJsonAsync<JsonElement>("/v1/settings");
-        Assert.Equal(48, settings.GetProperty("booking").GetProperty("singleLessonBookHoursBefore").GetInt32());
+        Assert.Equal(48, settings.GetProperty("booking").GetProperty("opensHoursBefore").GetInt32());
         Assert.Equal(6, settings.GetProperty("booking").GetProperty("cancelHoursBefore").GetInt32());
+        Assert.Equal("attendance", settings.GetProperty("packages").GetProperty("consumeOn").GetString());
+        Assert.Equal(2, settings.GetProperty("classes").GetProperty("maxDisciplines").GetInt32());
+        Assert.Equal(["Bambini/Ragazzi", "Adulti/Ragazzi"], settings.GetProperty("classes").GetProperty("categories").EnumerateArray().Select(c => c.GetString()!).ToArray());
+        Assert.Equal(["bank_transfer", "cash"], settings.GetProperty("payments").GetProperty("methods").EnumerateArray().Select(c => c.GetString()!).ToArray());
         Assert.Equal("Europe/Rome", settings.GetProperty("timezone").GetString());
+        // Documenti sostituiti: nessuna eliminazione automatica se non impostata
+        Assert.Equal(JsonValueKind.Null, settings.GetProperty("documents").GetProperty("replacedRetentionDays").ValueKind);
 
         try
         {
             var changed = await Json(await Admin.PutAsJsonAsync("/v1/settings", new { booking = new { cancelHoursBefore = 8 } }));
             Assert.Equal(8, changed.GetProperty("booking").GetProperty("cancelHoursBefore").GetInt32());
             // La modifica parziale non tocca le altre chiavi
-            Assert.Equal(48, changed.GetProperty("booking").GetProperty("singleLessonBookHoursBefore").GetInt32());
-            // Studio Prova conserva i propri valori
+            Assert.Equal(48, changed.GetProperty("booking").GetProperty("opensHoursBefore").GetInt32());
+            // Studio Prova ha i valori neutri della piattaforma: nessuna finestra, nessun limite di discipline
             var prova = await api.For(Seed.ProvaHost, Seed.ProvaTeacher).GetFromJsonAsync<JsonElement>("/v1/settings");
-            Assert.Equal(6, prova.GetProperty("booking").GetProperty("cancelHoursBefore").GetInt32());
+            Assert.Equal(0, prova.GetProperty("booking").GetProperty("cancelHoursBefore").GetInt32());
+            Assert.Equal(JsonValueKind.Null, prova.GetProperty("booking").GetProperty("opensHoursBefore").ValueKind);
+            Assert.Equal(JsonValueKind.Null, prova.GetProperty("classes").GetProperty("maxDisciplines").ValueKind);
         }
         finally { await Settings(new { booking = new { cancelHoursBefore = 6 } }); }
 
         Assert.Equal(HttpStatusCode.Forbidden, (await As("stu-anna").PutAsJsonAsync("/v1/settings", new { booking = new { cancelHoursBefore = 0 } })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await Admin.PutAsJsonAsync("/v1/settings", new { timezone = "Marte/Olympus" })).StatusCode);
-        // I file sostituiti non si conservano mai più di 7 giorni
-        Assert.Equal(HttpStatusCode.BadRequest, (await Admin.PutAsJsonAsync("/v1/settings", new { documents = new { replacedRetentionDays = 30 } })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Admin.PutAsJsonAsync("/v1/settings", new { payments = new { methods = new[] { "bitcoin" } } })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Admin.PutAsJsonAsync("/v1/settings", new { packages = new { consumeOn = "sempre" } })).StatusCode);
     }
 
     [Fact]
@@ -199,7 +209,7 @@ public sealed class SaasTests(ApiFixture api)
             Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
             Assert.Equal("lesson_full", await ErrorType(refused));
             // Anche una lezione singola viene rifiutata: la lezione è piena
-            Assert.Equal("lesson_full", await ErrorType(await As("stu-sofia").PostAsJsonAsync("/v1/bookings", new { lessonId = target })));
+            Assert.Equal("lesson_full", await ErrorType(await Admin.PostAsJsonAsync("/v1/bookings", new { lessonId = target, memberId = Member("stu-sofia"), @override = true })));
             // Anche le nuove iscrizioni alla classe sono bloccate: capienza raggiunta
             await api.Sql("update app.classes set capacity = 2 where id = @id", new { id = Seed.ClassTessutiAdv });
             Assert.Equal("class_full", await ErrorType(await As("stu-sofia").PostAsJsonAsync("/v1/enrollments", new { classId = Seed.ClassTessutiAdv })));
@@ -210,47 +220,58 @@ public sealed class SaasTests(ApiFixture api)
     // ── Lezioni singole e pacchetti ────────────────────────────────────
 
     [Fact]
-    public async Task Lezione_singola_rispetta_le_soglie_di_prenotazione_e_disdetta_della_struttura()
+    public async Task Lezione_singola_prenotabile_da_48_ore_prima_e_disdetta_libera_fino_a_6_ore_prima()
     {
         var beatrice = As("stu-beatrice");     // Cerchio Base
-        var lessons = await Lessons(Seed.ClassTessutiBase, fromDays: 4);
+        // Oasi: la prenotazione si apre 48 ore prima. Una lezione tra 4 o più giorni non è ancora prenotabile.
+        var far = (await Lessons(Seed.ClassTessutiBase, fromDays: 4))[0];
+        var notOpen = await beatrice.PostAsJsonAsync("/v1/bookings", new { lessonId = far });
+        var problem = await Json(notOpen);
+        Assert.Equal("booking_not_open", problem.GetProperty("type").GetString());
+        Assert.Contains("48 ore prima", problem.GetProperty("title").GetString());
+        // L'elenco delle lezioni prenotabili lo indica
+        var open = await beatrice.GetFromJsonAsync<JsonElement[]>("/v1/bookings/lessons");
+        var farRow = open!.Single(l => l.GetProperty("id").GetGuid() == far);
+        Assert.False(farRow.GetProperty("bookableNow").GetBoolean());
+        var hours = farRow.GetProperty("hoursToStart").GetDouble();
+
         try
         {
-            // Soglia di prenotazione portata a 40 giorni: troppo tardi per tutte le lezioni vicine
-            await Settings(new { booking = new { singleLessonBookHoursBefore = 960 } });
-            Assert.Equal("too_late_to_book", await ErrorType(await beatrice.PostAsJsonAsync("/v1/bookings", new { lessonId = lessons[0] })));
+            // Esattamente al confine: con l'apertura appena sotto le ore che mancano non si prenota, appena sopra sì
+            await Settings(new { booking = new { opensHoursBefore = (int)Math.Floor(hours) - 1 } });
+            Assert.Equal("booking_not_open", await ErrorType(await beatrice.PostAsJsonAsync("/v1/bookings", new { lessonId = far })));
             // Eccezione registrata dall'amministrazione (un'allieva non può forzarla)
-            Assert.Equal("too_late_to_book", await ErrorType(await beatrice.PostAsJsonAsync("/v1/bookings", new { lessonId = lessons[0], @override = true })));
-            var exception = await CreatedId(await Admin.PostAsJsonAsync("/v1/bookings", new { lessonId = lessons[0], memberId = Member("stu-beatrice"), @override = true }));
+            Assert.Equal("booking_not_open", await ErrorType(await beatrice.PostAsJsonAsync("/v1/bookings", new { lessonId = far, @override = true })));
+            var exception = await CreatedId(await Admin.PostAsJsonAsync("/v1/bookings", new { lessonId = far, memberId = Member("stu-beatrice"), @override = true }));
             Assert.Equal(HttpStatusCode.OK, (await Admin.DeleteAsync($"/v1/bookings/{exception}?override=true")).StatusCode);
-        }
-        finally { await Settings(new { booking = new { singleLessonBookHoursBefore = 48 } }); }
 
-        // Con la soglia di Oasi (48 ore) una lezione tra 4 o più giorni è prenotabile
-        var id = await CreatedId(await beatrice.PostAsJsonAsync("/v1/bookings", new { lessonId = lessons[1] }));
-        Assert.Equal("already_in_lesson", await ErrorType(await beatrice.PostAsJsonAsync("/v1/bookings", new { lessonId = lessons[1] })));
-        // Compare nell'elenco della lezione e genera la quota della lezione singola (€15, valore configurato)
-        var roster = await Admin.GetFromJsonAsync<JsonElement[]>($"/v1/lessons/{lessons[1]}/roster");
-        Assert.Contains(roster!, r => r.GetProperty("memberId").GetGuid() == Member("stu-beatrice") && r.GetProperty("isBooking").GetBoolean());
-        var account = await beatrice.GetFromJsonAsync<JsonElement>($"/v1/members/{Member("stu-beatrice")}/account");
-        Assert.Contains(account.GetProperty("charges").EnumerateArray(), c => c.GetProperty("amountCents").GetInt32() == 1500 && c.GetProperty("state").GetString() == "open");
+            await Settings(new { booking = new { opensHoursBefore = (int)Math.Ceiling(hours) + 1 } });
+            var id = await CreatedId(await beatrice.PostAsJsonAsync("/v1/bookings", new { lessonId = far }));
+            Assert.Equal("already_in_lesson", await ErrorType(await beatrice.PostAsJsonAsync("/v1/bookings", new { lessonId = far })));
+            // Compare nell'elenco della lezione e genera la quota della lezione singola (€15, valore configurato)
+            var roster = await Admin.GetFromJsonAsync<JsonElement[]>($"/v1/lessons/{far}/roster");
+            Assert.Contains(roster!, r => r.GetProperty("memberId").GetGuid() == Member("stu-beatrice") && r.GetProperty("isBooking").GetBoolean());
+            var account = await beatrice.GetFromJsonAsync<JsonElement>($"/v1/members/{Member("stu-beatrice")}/account");
+            Assert.Contains(account.GetProperty("charges").EnumerateArray(), c => c.GetProperty("amountCents").GetInt32() == 1500 && c.GetProperty("state").GetString() == "open");
 
-        // Disdetta entro la soglia: nessuna conseguenza, la quota viene annullata
-        var cancelled = await Json(await beatrice.DeleteAsync($"/v1/bookings/{id}"));
-        Assert.Equal("cancelled", cancelled.GetProperty("status").GetString());
-        Assert.True(cancelled.GetProperty("entryRefunded").GetBoolean());
+            // Disdetta prima della soglia di 6 ore (qui la lezione è a giorni di distanza): nessuna conseguenza
+            var cancelled = await Json(await beatrice.DeleteAsync($"/v1/bookings/{id}"));
+            Assert.Equal("cancelled", cancelled.GetProperty("status").GetString());
+            Assert.True(cancelled.GetProperty("entryRefunded").GetBoolean());
 
-        // Disdetta tardiva: resta dovuta (regola configurabile della struttura)
-        var late = await CreatedId(await beatrice.PostAsJsonAsync("/v1/bookings", new { lessonId = lessons[1] }));
-        try
-        {
-            await Settings(new { booking = new { cancelHoursBefore = 720 } });
+            // Disdetta dopo la soglia (soglia portata oltre le ore che mancano): resta dovuta e l'esito lo dice
+            var late = await CreatedId(await beatrice.PostAsJsonAsync("/v1/bookings", new { lessonId = far }));
+            await Settings(new { booking = new { cancelHoursBefore = (int)Math.Ceiling(hours) + 1 } });
             var res = await Json(await beatrice.DeleteAsync($"/v1/bookings/{late}"));
             Assert.Equal("late_cancelled", res.GetProperty("status").GetString());
             Assert.False(res.GetProperty("entryRefunded").GetBoolean());
+            Assert.Equal("open", await api.Scalar<string>("select ch.status from app.member_charges ch join app.lesson_bookings b on b.charge_id = ch.id where b.id = @late", new { late }));
+
+            // Termine di chiusura delle prenotazioni (es. Circo Baby: almeno 24 ore prima)
+            await Settings(new { booking = new { closesHoursBefore = (int)Math.Ceiling(hours) + 1, cancelHoursBefore = 6 } });
+            Assert.Equal("too_late_to_book", await ErrorType(await As("stu-sara").PostAsJsonAsync("/v1/bookings", new { lessonId = far })));
         }
-        finally { await Settings(new { booking = new { cancelHoursBefore = 6 } }); }
-        Assert.Equal("open", await api.Scalar<string>("select ch.status from app.member_charges ch join app.lesson_bookings b on b.charge_id = ch.id where b.id = @late", new { late }));
+        finally { await Settings(new { booking = new { opensHoursBefore = 48, closesHoursBefore = 0, cancelHoursBefore = 6 } }); }
     }
 
     [Fact]
@@ -306,34 +327,43 @@ public sealed class SaasTests(ApiFixture api)
         // Un'allieva non assegna piani
         Assert.Equal(HttpStatusCode.Forbidden, (await camilla.PostAsJsonAsync("/v1/member-plans", new { memberId = camillaId, planId })).StatusCode);
 
-        var mp = await Json(await Admin.PostAsJsonAsync("/v1/member-plans", new { memberId = camillaId, planId, paymentMode = "installments", classIds = new[] { Seed.ClassCerchioInt } }));
+        // Coerenza piano ↔ classe: Baby/Teen è per le classi Bambini/Ragazzi, Cerchio Intermedio è Adulti/Ragazzi
+        Assert.Equal("plan_class_mismatch", await ErrorType(await Admin.PostAsJsonAsync("/v1/member-plans",
+            new { memberId = camillaId, planId, classIds = new[] { Seed.ClassCerchioInt } })));
+        // ...e Agonismo Teen solo per classi agonistiche
+        Assert.Equal("plan_class_mismatch", await ErrorType(await Admin.PostAsJsonAsync("/v1/member-plans",
+            new { memberId = camillaId, planId = await PlanId("Agonismo Teen"), classIds = new[] { Seed.ClassCerchioInt } })));
+
+        // Genitori & Figli: due rate da €300 oppure €550 annuali (piano senza vincolo di categoria)
+        var mp = await Json(await Admin.PostAsJsonAsync("/v1/member-plans", new { memberId = camillaId, planId = await PlanId("Genitori & Figli (a coppia)"), paymentMode = "installments", classIds = new[] { Seed.ClassCerchioInt } }));
         Assert.Equal("2027-05-30", mp.GetProperty("validUntil").GetString());
 
-        // Le due rate sono quote dello stesso piano: €190 + €190
+        // Le due rate sono quote dello stesso piano: €300 + €300
         var account = await camilla.GetFromJsonAsync<JsonElement>($"/v1/members/{camillaId}/account");
         var charges = account.GetProperty("charges").EnumerateArray().Where(c => c.GetProperty("memberPlanId").ValueKind != JsonValueKind.Null).ToList();
         Assert.Equal(2, charges.Count);
-        Assert.All(charges, c => Assert.Equal(19000, c.GetProperty("amountCents").GetInt32()));
+        Assert.All(charges, c => Assert.Equal(30000, c.GetProperty("amountCents").GetInt32()));
         var first = charges.Single(c => c.GetProperty("installmentNo").GetInt32() == 1);
         Assert.Equal("overdue", first.GetProperty("state").GetString());   // scadenza 15/09/2026, non pagata
         var chargeId = first.GetProperty("id").GetGuid();
 
         // Pagamento parziale, poi saldo; mai oltre il dovuto; solo l'amministrazione registra
-        Assert.Equal(HttpStatusCode.Forbidden, (await camilla.PostAsJsonAsync($"/v1/charges/{chargeId}/payments", new { amountCents = 19000, paidOn = InDays(0), method = "cash" })).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await Admin.PostAsJsonAsync($"/v1/charges/{chargeId}/payments", new { amountCents = 1000, paidOn = InDays(0), method = "online" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await camilla.PostAsJsonAsync($"/v1/charges/{chargeId}/payments", new { amountCents = 30000, paidOn = InDays(0), method = "cash" })).StatusCode);
+        // Oasi accetta bonifico e contanti: altri metodi solo se abilitati nelle impostazioni
+        Assert.Equal(HttpStatusCode.BadRequest, (await Admin.PostAsJsonAsync($"/v1/charges/{chargeId}/payments", new { amountCents = 1000, paidOn = InDays(0), method = "pos" })).StatusCode);
         var partial = await Json(await Admin.PostAsJsonAsync($"/v1/charges/{chargeId}/payments", new { amountCents = 10000, paidOn = InDays(0), method = "bank_transfer", note = "Bonifico" }));
-        Assert.Equal(9000, partial.GetProperty("residualCents").GetInt32());
-        Assert.Equal("overpayment", await ErrorType(await Admin.PostAsJsonAsync($"/v1/charges/{chargeId}/payments", new { amountCents = 9001, paidOn = InDays(0), method = "cash" })));
-        var full = await Json(await Admin.PostAsJsonAsync($"/v1/charges/{chargeId}/payments", new { amountCents = 9000, paidOn = InDays(0), method = "cash" }));
+        Assert.Equal(20000, partial.GetProperty("residualCents").GetInt32());
+        Assert.Equal("overpayment", await ErrorType(await Admin.PostAsJsonAsync($"/v1/charges/{chargeId}/payments", new { amountCents = 20001, paidOn = InDays(0), method = "cash" })));
+        var full = await Json(await Admin.PostAsJsonAsync($"/v1/charges/{chargeId}/payments", new { amountCents = 20000, paidOn = InDays(0), method = "cash" }));
         Assert.Equal("paid", full.GetProperty("chargeState").GetString());
 
         account = await camilla.GetFromJsonAsync<JsonElement>($"/v1/members/{camillaId}/account");
-        Assert.Equal(19000, account.GetProperty("paidCents").GetInt32());
+        Assert.Equal(30000, account.GetProperty("paidCents").GetInt32());
         // Un'altra allieva non vede il riepilogo di Camilla; il riepilogo generale è dell'amministrazione
         Assert.Equal(HttpStatusCode.Forbidden, (await As("stu-anna").GetAsync($"/v1/members/{camillaId}/account")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await camilla.GetAsync("/v1/reports/overview")).StatusCode);
         var overview = await Admin.GetFromJsonAsync<JsonElement>("/v1/reports/overview");
-        Assert.True(overview.GetProperty("totals").GetProperty("paidCents").GetInt32() >= 19000);
+        Assert.True(overview.GetProperty("totals").GetProperty("paidCents").GetInt32() >= 30000);
 
         // Il diritto di recupero nato da una lezione della classe collegata scade con il piano
         await Seed.DeclareAbsence(api, camilla, Seed.ClassCerchioInt);
@@ -553,35 +583,45 @@ public sealed class SaasTests(ApiFixture api)
     // ── Documenti ──────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Documento_sostituito_resta_al_massimo_7_giorni_poi_il_file_viene_eliminato_dallo_storage()
+    public async Task Documento_sostituito_resta_nello_storico_salvo_periodo_di_conservazione_configurato()
     {
         var anna = As("stu-anna");
         var typeId = await CreatedId(await Admin.PostAsJsonAsync("/v1/document-types", new { name = "Test · Sostituzione", category = "other", isRequired = false }));
         var v1 = await CreatedId(await anna.PostAsync("/v1/documents", Upload(typeId, "v1.pdf", "prima versione")));
         var v2 = await CreatedId(await anna.PostAsync("/v1/documents", Upload(typeId, "v2.pdf", "seconda versione")));
 
-        // La versione precedente è marcata come sostituita e ha una data di eliminazione entro 7 giorni
-        Assert.True(await api.Scalar<bool>("select not is_current and purge_after > now() + interval '6 days 23 hours' and purge_after <= now() + interval '7 days' from app.documents where id = @v1", new { v1 }));
+        // Valore predefinito: la versione sostituita resta nello storico con il suo file, senza eliminazione automatica
+        Assert.True(await api.Scalar<bool>("select not is_current and purge_after is null from app.documents where id = @v1", new { v1 }));
+        await RunJobs();
         Assert.Equal(HttpStatusCode.OK, (await anna.GetAsync($"/v1/documents/{v1}/file")).StatusCode);
-        var path = await api.Scalar<string>("select file_path from app.documents where id = @v1", new { v1 });
+
+        // La struttura può impostare un periodo di conservazione: qui 7 giorni
+        try
+        {
+        await Settings(new { documents = new { replacedRetentionDays = 7 } });
+        var v3 = await CreatedId(await anna.PostAsync("/v1/documents", Upload(typeId, "v3.pdf", "terza versione")));
+        // La versione sostituita ha una data di eliminazione a 7 giorni
+        Assert.True(await api.Scalar<bool>("select not is_current and purge_after > now() + interval '6 days 23 hours' and purge_after <= now() + interval '7 days' from app.documents where id = @v2", new { v2 }));
+        Assert.Equal(HttpStatusCode.OK, (await anna.GetAsync($"/v1/documents/{v2}/file")).StatusCode);
+        var path = await api.Scalar<string>("select file_path from app.documents where id = @v2", new { v2 });
         var storage = api.Services.GetRequiredService<IFileStorage>();
         Assert.NotNull(await storage.GetAsync(path!));
 
         // Prima della scadenza il lavoro pianificato non tocca nulla
         await RunJobs();
-        Assert.Equal(HttpStatusCode.OK, (await anna.GetAsync($"/v1/documents/{v1}/file")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await anna.GetAsync($"/v1/documents/{v2}/file")).StatusCode);
 
         // Trascorsi i 7 giorni: file eliminato dallo storage, resta solo l'evento di audit
-        await api.Sql("update app.documents set purge_after = now() - interval '1 minute' where id = @v1", new { v1 });
+        await api.Sql("update app.documents set purge_after = now() - interval '1 minute' where id = @v2", new { v2 });
         await RunJobs();
         Assert.Null(await storage.GetAsync(path!));
-        Assert.Equal(HttpStatusCode.Gone, (await anna.GetAsync($"/v1/documents/{v1}/file")).StatusCode);
-        Assert.True(await api.Scalar<bool>("select file_path is null and file_sha256 is null and file_deleted_at is not null from app.documents where id = @v1", new { v1 }));
-        Assert.Equal(1L, await api.Scalar<long>("select count(*) from app.document_events where document_id = @v1 and action = 'file_deleted'", new { v1 }));
-        Assert.Equal(1L, await api.Scalar<long>("select count(*) from app.document_events where document_id = @v1 and action = 'replaced'", new { v1 }));
+        Assert.Equal(HttpStatusCode.Gone, (await anna.GetAsync($"/v1/documents/{v2}/file")).StatusCode);
+        Assert.True(await api.Scalar<bool>("select file_path is null and file_sha256 is null and file_deleted_at is not null from app.documents where id = @v2", new { v2 }));
+        Assert.Equal(1L, await api.Scalar<long>("select count(*) from app.document_events where document_id = @v2 and action = 'file_deleted'", new { v2 }));
+        Assert.Equal(1L, await api.Scalar<long>("select count(*) from app.document_events where document_id = @v2 and action = 'replaced'", new { v2 }));
         // La versione attuale resta disponibile; un secondo giro non fa nulla
         await RunJobs();
-        Assert.Equal(HttpStatusCode.OK, (await anna.GetAsync($"/v1/documents/{v2}/file")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await anna.GetAsync($"/v1/documents/{v3}/file")).StatusCode);
 
         // Download di gruppo: solo amministrazione, registrato nello storico
         Assert.Equal(HttpStatusCode.Forbidden, (await anna.GetAsync($"/v1/documents/export?memberId={Member("stu-anna")}")).StatusCode);
@@ -590,7 +630,9 @@ public sealed class SaasTests(ApiFixture api)
         Assert.Equal("application/zip", zip.Content.Headers.ContentType!.MediaType);
         using var archive = new System.IO.Compression.ZipArchive(await zip.Content.ReadAsStreamAsync());
         Assert.Single(archive.Entries);
-        Assert.Equal(1L, await api.Scalar<long>("select count(*) from app.document_events where document_id = @v2 and note = 'Download di gruppo'", new { v2 }));
+        Assert.Equal(1L, await api.Scalar<long>("select count(*) from app.document_events where document_id = @v3 and note = 'Download di gruppo'", new { v3 }));
+        }
+        finally { await Settings(new { documents = new { replacedRetentionDays = (int?)null } }); }
     }
 
     [Fact]
@@ -598,7 +640,7 @@ public sealed class SaasTests(ApiFixture api)
     {
         var chiara = api.For(Seed.OasiHost, Seed.Chiara);
         var chiaraId = Member("tch-chiara");
-        // Tipologia per insegnanti: nessun numero fisso, nessuna cadenza obbligatoria; qui con scadenza da indicare
+        // Tipologia per insegnanti creata dall'amministrazione, con scadenza da indicare
         var typeId = await CreatedId(await Admin.PostAsJsonAsync("/v1/document-types", new { name = "Test · Attestato insegnante", category = "other", isRequired = false, audience = "teachers", expiryRequired = true }));
         Assert.Contains((await chiara.GetFromJsonAsync<JsonElement[]>("/v1/document-types"))!, t => t.GetProperty("id").GetGuid() == typeId);
         Assert.DoesNotContain((await As("stu-anna").GetFromJsonAsync<JsonElement[]>("/v1/document-types"))!, t => t.GetProperty("id").GetGuid() == typeId);
@@ -611,7 +653,7 @@ public sealed class SaasTests(ApiFixture api)
         var note = Assert.Single(notes!, n => n.GetProperty("title").GetString() == "Documento richiesto: Test · Attestato insegnante");
         Assert.Equal("/documenti", note.GetProperty("link").GetString());   // la notifica porta alla schermata interessata
         var area = await chiara.GetFromJsonAsync<JsonElement>($"/v1/members/{chiaraId}/documents");
-        Assert.Single(area.GetProperty("requests").EnumerateArray());
+        Assert.Single(area.GetProperty("requests").EnumerateArray(), r => r.GetProperty("typeId").GetGuid() == typeId);
         // Un'allieva non vede le richieste degli insegnanti
         Assert.Equal(HttpStatusCode.Forbidden, (await As("stu-anna").GetAsync($"/v1/document-requests?memberId={chiaraId}")).StatusCode);
 
@@ -660,7 +702,7 @@ public sealed class SaasTests(ApiFixture api)
         var body = new
         {
             type = "recital", title = "Test · Saggio d'inverno", description = "Saggio", date = InDays(20), startTime = "17:00", endTime = "19:00", location = "Teatro",
-            capacity = 100, isFeatured = true, classIds = new[] { Seed.ClassCerchioInt }, isPublished = true, notify = true,
+            capacity = 100, isFeatured = true, classIds = new[] { Seed.ClassCerchioInt }, isPublished = true, notify = true, memberIds = Array.Empty<Guid>(),
         };
         // Solo l'amministrazione crea e modifica gli eventi
         Assert.Equal(HttpStatusCode.Forbidden, (await api.For(Seed.OasiHost, Seed.Chiara).PostAsJsonAsync("/v1/events", body)).StatusCode);
@@ -683,22 +725,49 @@ public sealed class SaasTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.NoContent, (await Admin.PutAsJsonAsync($"/v1/events/{id}", body with { date = InDays(21) })).StatusCode);
         Assert.Single((await sara.GetFromJsonAsync<JsonElement[]>("/v1/notifications"))!, n => n.GetProperty("title").GetString() == "Evento aggiornato: Test · Saggio d'inverno");
 
-        // Brani: l'insegnante li associa alle proprie classi; solo nomi, nessun file
+        // Musica della performance: la gestisce l'amministrazione; gli insegnanti consultano, non modificano
         var chiara = api.For(Seed.OasiHost, Seed.Chiara);
-        var track = await CreatedId(await chiara.PostAsJsonAsync($"/v1/events/{id}/tracks", new { title = "Experience", artist = "Ludovico Einaudi", groupLabel = "Gruppo cerchio", classId = Seed.ClassCerchioInt }));
-        await CreatedId(await chiara.PostAsJsonAsync($"/v1/events/{id}/tracks", new { title = "Nuvole bianche", classId = Seed.ClassCerchioInt }));
-        Assert.Equal(HttpStatusCode.Forbidden, (await chiara.PostAsJsonAsync($"/v1/events/{id}/tracks", new { title = "Altro", classId = Seed.ClassTessutiInt })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await chiara.PostAsJsonAsync($"/v1/events/{id}/tracks", new { title = "Experience", classId = Seed.ClassCerchioInt })).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await sara.PostAsJsonAsync($"/v1/events/{id}/tracks", new { title = "No" })).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await chiara.PostAsJsonAsync($"/v1/events/{id}/tracks", new { title = " " })).StatusCode);
+        var track = await CreatedId(await Admin.PostAsJsonAsync($"/v1/events/{id}/tracks", new { title = "Experience", artist = "Ludovico Einaudi", groupLabel = "Gruppo cerchio", classId = Seed.ClassCerchioInt, linkUrl = "https://example.com/brano" }));
+        await CreatedId(await Admin.PostAsJsonAsync($"/v1/events/{id}/tracks", new { title = "Nuvole bianche", classId = Seed.ClassCerchioInt }));
+        Assert.Equal(HttpStatusCode.BadRequest, (await Admin.PostAsJsonAsync($"/v1/events/{id}/tracks", new { title = " " })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Admin.PostAsJsonAsync($"/v1/events/{id}/tracks", new { title = "x", linkUrl = "http://non-sicuro.example" })).StatusCode);
+
+        // File audio caricato dall'amministrazione, ascoltabile da chi partecipa (Sara: classe collegata) e dallo staff
+        var audio = new MultipartFormDataContent();
+        var bytes = new ByteArrayContent(Encoding.UTF8.GetBytes("ID3 finto mp3"));
+        bytes.Headers.ContentType = new MediaTypeHeaderValue("audio/mpeg");
+        audio.Add(bytes, "file", "experience.mp3");
+        Assert.Equal(HttpStatusCode.NoContent, (await Admin.PostAsync($"/v1/events/{id}/tracks/{track}/audio", audio)).StatusCode);
         var tracks = await sara.GetFromJsonAsync<JsonElement[]>($"/v1/events/{id}/tracks");
         Assert.Equal(["Experience", "Nuvole bianche"], tracks!.Select(t => t.GetProperty("title").GetString()!).ToArray());
-        // Un'altra insegnante non modifica i brani di classi non sue; l'amministrazione sì
-        Assert.Equal(HttpStatusCode.Forbidden, (await api.For(Seed.OasiHost, Seed.Elena).DeleteAsync($"/v1/events/{id}/tracks/{track}")).StatusCode);
+        Assert.True(tracks![0].GetProperty("hasAudio").GetBoolean());
+        Assert.Equal("https://example.com/brano", tracks[0].GetProperty("linkUrl").GetString());
+        var song = await sara.GetAsync($"/v1/events/{id}/tracks/{track}/audio");
+        Assert.Equal(HttpStatusCode.OK, song.StatusCode);
+        Assert.Equal("audio/mpeg", song.Content.Headers.ContentType!.MediaType);
+        Assert.Equal(HttpStatusCode.OK, (await chiara.GetAsync($"/v1/events/{id}/tracks/{track}/audio")).StatusCode);
+        // Chi non partecipa vede il titolo ma non ascolta, né vede l'elenco dei partecipanti
+        var anna = As("stu-anna");
+        var annaTracks = await anna.GetFromJsonAsync<JsonElement[]>($"/v1/events/{id}/tracks");
+        Assert.False(annaTracks![0].GetProperty("hasAudio").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, annaTracks[0].GetProperty("linkUrl").ValueKind);
+        Assert.Equal(HttpStatusCode.Forbidden, (await anna.GetAsync($"/v1/events/{id}/tracks/{track}/audio")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await anna.GetAsync($"/v1/events/{id}/participants")).StatusCode);
+        // Elenco dei partecipanti: le allieve della classe collegata e le persone assegnate
+        var participants = await sara.GetFromJsonAsync<JsonElement[]>($"/v1/events/{id}/participants");
+        Assert.Contains(participants!, p => p.GetProperty("memberId").GetGuid() == Member("stu-sara"));
+        Assert.DoesNotContain(participants!, p => p.GetProperty("memberId").GetGuid() == Member("stu-anna"));
+        Assert.Equal(HttpStatusCode.NoContent, (await Admin.PutAsJsonAsync($"/v1/events/{id}", body with { date = InDays(21), memberIds = new[] { Member("stu-anna") }, notify = false })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await anna.GetAsync($"/v1/events/{id}/participants")).StatusCode);
+        // Solo l'amministrazione elimina i brani
+        Assert.Equal(HttpStatusCode.Forbidden, (await chiara.DeleteAsync($"/v1/events/{id}/tracks/{track}")).StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, (await Admin.DeleteAsync($"/v1/events/{id}/tracks/{track}")).StatusCode);
 
-        // I brani riguardano solo le performance
+        // La musica riguarda solo le performance
         var workshop = await CreatedId(await Admin.PostAsJsonAsync("/v1/events", body with { type = "workshop", title = "Test · Workshop", isFeatured = false, notify = false }));
-        Assert.Equal("not_a_performance", await ErrorType(await chiara.PostAsJsonAsync($"/v1/events/{workshop}/tracks", new { title = "x" })));
+        Assert.Equal("not_a_performance", await ErrorType(await Admin.PostAsJsonAsync($"/v1/events/{workshop}/tracks", new { title = "x" })));
 
         // Evento non pubblicato: invisibile alle allieve
         var draft = await CreatedId(await Admin.PostAsJsonAsync("/v1/events", body with { title = "Test · Bozza", isPublished = false, isFeatured = false }));

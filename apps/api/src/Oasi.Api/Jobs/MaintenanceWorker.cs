@@ -9,7 +9,8 @@ namespace Oasi.Api.Jobs;
 
 /// <summary>
 /// Lavori pianificati, eseguiti per ogni struttura dentro il suo contesto (RLS):
-///  · elimina dallo storage i file dei documenti sostituiti, scaduto il periodo di conservazione (≤ 7 giorni);
+///  · elimina dallo storage i file dei documenti sostituiti, se la struttura ha impostato un periodo di conservazione;
+///  · crea le richieste dei documenti ricorrenti (es. due documenti al mese per gli insegnanti) e ne ricorda il termine;
 ///  · avvisa di documenti in scadenza e scaduti, e delle richieste non evase (una volta sola);
 ///  · avvisa delle quote scadute;
 ///  · segna come scaduti piani e diritti di recupero;
@@ -86,12 +87,41 @@ public sealed class MaintenanceWorker(Db db, IFileStorage storage, IConfiguratio
             if (await Notifier.Once(c, tx, key, await Notifier.UsersOfMember(c, tx, d.MemberId), "documents", title, body, "/documenti") && d.Expired)
                 await Notifier.ToUsers(c, tx, admins, "documents", title, "Un documento è scaduto: lo trovi nell'archivio.", null, link: $"/archivio/{d.Id}");
         }
-        var requests = await c.QueryAsync<(Guid Id, Guid MemberId, string TypeName)>(@"
-            select r.id, r.member_id, t.name from app.document_requests r join app.document_types t on t.id = r.type_id
+        // Documenti ricorrenti (es. due documenti al mese per gli insegnanti): una richiesta per persona e periodo
+        var created = await c.QueryAsync<(Guid Id, Guid MemberId, string TypeName, DateTime DueOn)>(@"
+            with fresh as (
+              insert into app.document_requests (tenant_id, member_id, type_id, due_on, period_key)
+              select app.current_tenant(), mb.id, t.id,
+                     app.period_due(t.recurrence, t.recurrence_days, t.due_day_of_month, app.tenant_today()),
+                     app.period_key(t.recurrence, t.recurrence_days, app.tenant_today())
+              from app.document_types t cross join app.members mb
+              where t.is_active and t.recurrence <> 'none'
+                and app.document_required(mb.id, t.audience, t.is_required, t.required_for_competitive)
+                and not app.document_satisfied(mb.id, t.id)
+              on conflict do nothing
+              returning id, member_id, type_id, due_on)
+            select f.id, f.member_id, t.name, f.due_on::timestamp from fresh f join app.document_types t on t.id = f.type_id", transaction: tx);
+        foreach (var r in created)
+            await Notifier.Once(c, tx, $"docreq:{r.Id}:new", await Notifier.UsersOfMember(c, tx, r.MemberId), "documents",
+                $"Documento da caricare: {r.TypeName}", $"Caricalo entro il {r.DueOn:dd/MM/yyyy}.", "/documenti");
+
+        // Termine vicino: un promemoria
+        var dueSoon = await c.QueryAsync<(Guid Id, Guid MemberId, string TypeName, DateTime DueOn)>(@"
+            select r.id, r.member_id, t.name, r.due_on::timestamp from app.document_requests r join app.document_types t on t.id = r.type_id
+            where r.status = 'open' and r.due_on between app.tenant_today() and app.tenant_today() + @days", new { days = s.Documents.RequestReminderDays }, tx);
+        foreach (var r in dueSoon)
+            await Notifier.Once(c, tx, $"docreq:{r.Id}:due-soon", await Notifier.UsersOfMember(c, tx, r.MemberId), "documents",
+                $"Promemoria: {r.TypeName}", $"Il termine è il {r.DueOn:dd/MM/yyyy}.", "/documenti");
+
+        // Termine passato: avviso all'interessato e all'amministrazione (documento mancante)
+        var requests = await c.QueryAsync<(Guid Id, Guid MemberId, string TypeName, string MemberName)>(@"
+            select r.id, r.member_id, t.name, mb.first_name || ' ' || mb.last_name from app.document_requests r
+            join app.document_types t on t.id = r.type_id join app.members mb on mb.id = r.member_id
             where r.status = 'open' and r.due_on < app.tenant_today()", transaction: tx);
         foreach (var r in requests)
-            await Notifier.Once(c, tx, $"docreq:{r.Id}:overdue", await Notifier.UsersOfMember(c, tx, r.MemberId), "documents",
-                $"Documento mancante: {r.TypeName}", "Il termine indicato dalla segreteria è passato.", "/documenti");
+            if (await Notifier.Once(c, tx, $"docreq:{r.Id}:overdue", await Notifier.UsersOfMember(c, tx, r.MemberId), "documents",
+                    $"Documento mancante: {r.TypeName}", "Il termine è passato: caricalo appena puoi.", "/documenti"))
+                await Notifier.ToUsers(c, tx, admins, "documents", $"Documento mancante: {r.TypeName}", $"{r.MemberName} non l'ha ancora caricato.", null, link: "/archivio");
     }
 
     private static async Task PaymentReminders(IDbConnection c, IDbTransaction tx)

@@ -16,13 +16,12 @@ public static class PlanEndpoints
 {
     public static readonly string[] Kinds = ["membership_fee", "subscription", "package", "single_lesson", "semi_private", "workshop", "stage", "other"];
     public static readonly string[] Billings = ["one_off", "annual", "monthly", "periodic"];
-    public static readonly string[] Methods = ["cash", "bank_transfer", "pos", "other"];
 
     public sealed record InstallmentInput(int AmountCents, string? DueOn, Guid? PeriodId, string? CoversFrom, string? CoversUntil);
     public sealed record PlanInput(string Name, string Kind, int AmountCents, Guid? SeasonId, string? Category, string? Description, string? Billing,
         int? WeeklyFrequency, int? Entries, int? ValidityWeeks, string? ValidFrom, string? ValidUntil, short[]? LessonMinutes, bool? BookingRequired,
-        int? BookingHoursBefore, int? AgeMinMonths, int? AgeMaxMonths, int? Participants, int? MaxParticipants, string? CompetitiveLevel,
-        bool? GrantsMakeups, bool? IsActive, int? Position, InstallmentInput[]? Installments);
+        int? BookingOpensHoursBefore, int? BookingClosesHoursBefore, int? AgeMinMonths, int? AgeMaxMonths, int? Participants, int? MaxParticipants, string? CompetitiveLevel,
+        bool? GrantsMakeups, bool? IsActive, int? Position, InstallmentInput[]? Installments, string[]? ClassCategories = null);
     public sealed record MemberPlanInput(Guid MemberId, Guid PlanId, string? PaymentMode, string? ValidFrom, string? ValidUntil, Guid? PeriodId, Guid[]? ClassIds, string? Note);
     public sealed record ChargeInput(Guid MemberId, string Description, int AmountCents, string DueOn, string? Kind, string? PeriodLabel, string? Note);
     public sealed record PaymentInput(int AmountCents, string PaidOn, string Method, string? Note);
@@ -45,7 +44,12 @@ public static class PlanEndpoints
         public string? ValidUntil { get; init; }
         public short[]? LessonMinutes { get; init; }
         public bool BookingRequired { get; init; }
-        public short? BookingHoursBefore { get; init; }
+        /// <summary>La prenotazione si apre N ore prima (null: lezione singola = valore della struttura, altri piani = sempre aperta)</summary>
+        public short? BookingOpensHoursBefore { get; init; }
+        /// <summary>La prenotazione si chiude N ore prima (es. Circo Baby: 24)</summary>
+        public short? BookingClosesHoursBefore { get; init; }
+        /// <summary>Categorie di classe coerenti con il piano (vuoto = tutte)</summary>
+        public string[] ClassCategories { get; init; } = [];
         public short? AgeMinMonths { get; init; }
         public short? AgeMaxMonths { get; init; }
         public short Participants { get; init; }
@@ -90,7 +94,7 @@ public static class PlanEndpoints
     private const string SelectPlans = @"
         select id, name, kind, amount_cents, is_active, season_id, category, description, billing, weekly_frequency, entries, validity_weeks,
                to_char(valid_from, 'YYYY-MM-DD') as valid_from, to_char(valid_until, 'YYYY-MM-DD') as valid_until, lesson_minutes, booking_required,
-               booking_hours_before, age_min_months, age_max_months, participants, max_participants, competitive_level, grants_makeups, position
+               booking_opens_hours_before, booking_closes_hours_before, class_categories, age_min_months, age_max_months, participants, max_participants, competitive_level, grants_makeups, position
         from app.fee_plans";
 
     private const string SelectCharges = @"
@@ -158,7 +162,9 @@ public static class PlanEndpoints
                 return (await c.QueryAsync(@"
                     select mp.id, mp.member_id, mb.first_name || ' ' || mb.last_name as member_name, mp.plan_id, p.name as plan_name, p.kind, p.category,
                            mp.payment_mode, mp.status, to_char(mp.valid_from, 'YYYY-MM-DD') as valid_from, to_char(mp.valid_until, 'YYYY-MM-DD') as valid_until,
-                           mp.weekly_frequency, mp.entries_total, mp.entries_used, mp.entries_total - mp.entries_used as entries_left, mp.note,
+                           mp.weekly_frequency, mp.entries_total, mp.entries_used,
+                           (select count(*)::int from app.lesson_bookings b where b.member_plan_id = mp.id and b.status = 'booked' and not b.entry_consumed) as entries_reserved,
+                           mp.entries_total - mp.entries_used - (select count(*)::int from app.lesson_bookings b where b.member_plan_id = mp.id and b.status = 'booked' and not b.entry_consumed) as entries_left, mp.note,
                            coalesce((select array_agg(e.class_id) from app.enrollments e where e.member_plan_id = mp.id and e.status = 'approved'), '{}') as class_ids
                     from app.member_plans mp join app.fee_plans p on p.id = mp.plan_id join app.members mb on mb.id = mp.member_id
                     where (@subject::uuid is null or mp.member_id = @subject) order by mp.valid_until desc limit 500", new { subject }, tx)).Camel();
@@ -204,8 +210,13 @@ public static class PlanEndpoints
                 // Diritto di frequenza: collega (o crea) l'iscrizione alle classi, rispettando la capienza
                 foreach (var classId in classIds)
                 {
-                    var cls = await c.QuerySingleOrDefaultAsync<(int Capacity, bool IsActive, string CompetitiveLevel)?>(
-                        "select capacity::int, is_active, competitive_level from app.classes where id = @classId for update", new { classId }, tx) ?? throw ApiException.NotFound("Classe");
+                    var cls = await c.QuerySingleOrDefaultAsync<(int Capacity, bool IsActive, string CompetitiveLevel, string? Category, string Name)?>(
+                        "select capacity::int, is_active, competitive_level, category, name from app.classes where id = @classId for update", new { classId }, tx) ?? throw ApiException.NotFound("Classe");
+                    // Coerenza piano ↔ classe: categoria (es. Bambini/Ragazzi) e classificazione agonistica
+                    if (plan.ClassCategories.Length > 0 && (cls.Category is null || !plan.ClassCategories.Contains(cls.Category)))
+                        throw ApiException.Conflict("plan_class_mismatch", $"Il piano «{plan.Name}» non è previsto per la classe «{cls.Name}» ({cls.Category ?? "senza categoria"}).");
+                    if (plan.CompetitiveLevel != "none" && cls.CompetitiveLevel != plan.CompetitiveLevel)
+                        throw ApiException.Conflict("plan_class_mismatch", $"Il piano «{plan.Name}» è per classi {(plan.CompetitiveLevel == "competitive" ? "agonistiche" : "preagonistiche")}: «{cls.Name}» non lo è.");
                     var existing = await c.ExecuteScalarAsync<Guid?>("select id from app.enrollments where class_id = @classId and member_id = @MemberId and status = 'approved'", new { classId, input.MemberId }, tx);
                     if (existing is { } eid) { await c.ExecuteAsync("update app.enrollments set member_plan_id = @id where id = @eid", new { id, eid }, tx); continue; }
                     if (!cls.IsActive) throw ApiException.Conflict("class_inactive", "La classe non accetta iscrizioni.");
@@ -295,10 +306,12 @@ public static class PlanEndpoints
         {
             if (input.AmountCents <= 0) throw ApiException.Invalid("Importo non valido.");
             if (!DateOnly.TryParse(input.PaidOn, out _)) throw ApiException.Invalid("Data non valida.");
-            if (!Methods.Contains(input.Method)) throw ApiException.Invalid("Modalità non valida: contanti, bonifico, POS o altro.");
             var m = ctx.Member();
             var result = await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
             {
+                // Metodi accettati dalla struttura (Oasi: bonifico e contanti); altri si possono abilitare dalle impostazioni
+                var accepted = (await TenantSettings.Load(c, tx)).Payments.Methods;
+                if (!accepted.Contains(input.Method)) throw ApiException.Invalid($"Metodo di pagamento non accettato. Metodi attivi: {string.Join(", ", accepted)}.");
                 var ch = await c.QuerySingleOrDefaultAsync<(int AmountCents, string Status)?>("select amount_cents, status from app.member_charges where id = @id for update", new { id }, tx)
                     ?? throw ApiException.NotFound("Quota");
                 if (ch.Status == "cancelled") throw ApiException.Conflict("charge_cancelled", "La quota è annullata.");
@@ -340,8 +353,7 @@ public static class PlanEndpoints
                     select mb.id as member_id, mb.first_name || ' ' || mb.last_name as member_name, t.id as type_id, t.name as type_name
                     from app.members mb
                     join app.document_types t on t.is_active and app.document_required(mb.id, t.audience, t.is_required, t.required_for_competitive)
-                    where not exists (select 1 from app.documents d where d.member_id = mb.id and d.type_id = t.id and d.is_current
-                        and d.status in ('pending_review', 'approved') and (d.expires_on is null or d.expires_on >= app.tenant_today()))
+                    where not app.document_satisfied(mb.id, t.id)
                     order by member_name, type_name limit 500", transaction: tx)).Camel();
                 var season = DynamicRows.Camel((object?)await c.QuerySingleOrDefaultAsync("select id, name, to_char(end_date, 'YYYY-MM-DD') as end_date, (end_date - app.tenant_today()) as days_left from app.seasons where status = 'active'", transaction: tx));
                 var nextSeason = await c.ExecuteScalarAsync<bool>("select exists(select 1 from app.seasons s where s.status = 'draft' and s.start_date > app.tenant_today())", transaction: tx);
@@ -406,7 +418,8 @@ public static class PlanEndpoints
             update app.fee_plans set name = @Name, kind = @Kind, amount_cents = @AmountCents, season_id = @SeasonId, category = coalesce(@Category, ''),
               description = coalesce(@Description, ''), billing = coalesce(@Billing, 'one_off'), weekly_frequency = @WeeklyFrequency, entries = @Entries,
               validity_weeks = @ValidityWeeks, valid_from = @ValidFrom::date, valid_until = @ValidUntil::date, lesson_minutes = @LessonMinutes,
-              booking_required = coalesce(@BookingRequired, false), booking_hours_before = @BookingHoursBefore, age_min_months = @AgeMinMonths,
+              booking_required = coalesce(@BookingRequired, false), booking_opens_hours_before = @BookingOpensHoursBefore, booking_closes_hours_before = @BookingClosesHoursBefore,
+              class_categories = coalesce(@ClassCategories, class_categories), age_min_months = @AgeMinMonths,
               age_max_months = @AgeMaxMonths, participants = coalesce(@Participants, 1), max_participants = @MaxParticipants,
               competitive_level = coalesce(@CompetitiveLevel, 'none'), grants_makeups = coalesce(@GrantsMakeups, true), is_active = coalesce(@IsActive, true),
               position = coalesce(@Position, 0)
@@ -414,7 +427,7 @@ public static class PlanEndpoints
             new
             {
                 id, i.Name, i.Kind, i.AmountCents, i.SeasonId, i.Category, i.Description, i.Billing, i.WeeklyFrequency, i.Entries, i.ValidityWeeks, i.ValidFrom, i.ValidUntil,
-                i.LessonMinutes, i.BookingRequired, i.BookingHoursBefore, i.AgeMinMonths, i.AgeMaxMonths, i.Participants, i.MaxParticipants, i.CompetitiveLevel,
+                i.LessonMinutes, i.BookingRequired, i.BookingOpensHoursBefore, i.BookingClosesHoursBefore, i.ClassCategories, i.AgeMinMonths, i.AgeMaxMonths, i.Participants, i.MaxParticipants, i.CompetitiveLevel,
                 i.GrantsMakeups, i.IsActive, i.Position,
             }, tx);
         if (i.Installments is null) return;

@@ -26,11 +26,13 @@ public static class ClassEndpoints
         /// <summary>Una o più discipline dall'archivio della struttura (la prima è la principale).</summary>
         public Guid[] DisciplineIds { get; init; } = [];
         public string CompetitiveLevel { get; init; } = "none";
+        /// <summary>Area della classe tra quelle configurate dalla struttura (es. Bambini/Ragazzi, Adulti/Ragazzi)</summary>
+        public string? Category { get; init; }
     }
 
     public sealed record ClassInput(string Name, Guid DisciplineId, Guid? LevelId, Guid? RoomId, int? AgeMin, int? AgeMax,
         int Capacity, int Weekday, string StartTime, string EndTime, string? Description, Guid[]? TeacherIds,
-        Guid[]? DisciplineIds = null, string? CompetitiveLevel = null);
+        Guid[]? DisciplineIds = null, string? CompetitiveLevel = null, string? Category = null);
 
     private const string SelectClasses = @"
         select c.id, c.name, c.discipline_id, c.level_id, c.room_id, c.age_min, c.age_max, c.capacity, c.weekday,
@@ -40,7 +42,7 @@ public static class ClassEndpoints
                coalesce((select array_agg(member_id) from app.class_teachers t where t.class_id = c.id), '{}') as teacher_ids,
                coalesce((select array_agg(cd.discipline_id order by (cd.discipline_id = c.discipline_id) desc, d.position)
                          from app.class_disciplines cd join app.disciplines d on d.id = cd.discipline_id where cd.class_id = c.id), '{}') as discipline_ids,
-               c.competitive_level
+               c.competitive_level, c.category
         from app.classes c";
 
     public static void Map(WebApplication app)
@@ -61,10 +63,11 @@ public static class ClassEndpoints
             var m = ctx.Member();
             var id = await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
             {
+                await EnsureClassRules(c, tx, input);
                 foreach (var d in Disciplines(input)) await EnsureActiveDiscipline(c, tx, d);
                 var newId = await c.ExecuteScalarAsync<Guid>(@"
-                    insert into app.classes (tenant_id, name, discipline_id, level_id, room_id, age_min, age_max, capacity, weekday, start_time, end_time, description, competitive_level)
-                    values (app.current_tenant(), @Name, @DisciplineId, @LevelId, @RoomId, @AgeMin, @AgeMax, @Capacity, @Weekday, @StartTime::time, @EndTime::time, coalesce(@Description, ''), coalesce(@CompetitiveLevel, 'none'))
+                    insert into app.classes (tenant_id, name, discipline_id, level_id, room_id, age_min, age_max, capacity, weekday, start_time, end_time, description, competitive_level, category)
+                    values (app.current_tenant(), @Name, @DisciplineId, @LevelId, @RoomId, @AgeMin, @AgeMax, @Capacity, @Weekday, @StartTime::time, @EndTime::time, coalesce(@Description, ''), coalesce(@CompetitiveLevel, 'none'), @Category)
                     returning id", input, tx);
                 await SetTeachers(c, tx, newId, input.TeacherIds);
                 await SetDisciplines(c, tx, newId, Disciplines(input));
@@ -88,6 +91,7 @@ public static class ClassEndpoints
             {
                 var currentDiscipline = await c.ExecuteScalarAsync<Guid?>("select discipline_id from app.classes where id = @id", new { id }, tx)
                     ?? throw ApiException.NotFound("Classe");
+                await EnsureClassRules(c, tx, input);
                 var currentAll = (await c.QueryAsync<Guid>("select discipline_id from app.class_disciplines where class_id = @id", new { id }, tx)).ToHashSet();
                 foreach (var d in Disciplines(input).Where(d => d != currentDiscipline && !currentAll.Contains(d))) await EnsureActiveDiscipline(c, tx, d);
                 var enrolled = await c.ExecuteScalarAsync<int>("select count(*) from app.enrollments where class_id = @id and status = 'approved'", new { id }, tx);
@@ -96,8 +100,8 @@ public static class ClassEndpoints
                     update app.classes set name = @Name, discipline_id = @DisciplineId, level_id = @LevelId, room_id = @RoomId,
                       age_min = @AgeMin, age_max = @AgeMax, capacity = @Capacity, weekday = @Weekday,
                       start_time = @StartTime::time, end_time = @EndTime::time, description = coalesce(@Description, ''),
-                      competitive_level = coalesce(@CompetitiveLevel, competitive_level)
-                    where id = @id", new { id, input.Name, input.DisciplineId, input.LevelId, input.RoomId, input.AgeMin, input.AgeMax, input.Capacity, input.Weekday, input.StartTime, input.EndTime, input.Description, input.CompetitiveLevel }, tx);
+                      competitive_level = coalesce(@CompetitiveLevel, competitive_level), category = coalesce(@Category, category)
+                    where id = @id", new { id, input.Name, input.DisciplineId, input.LevelId, input.RoomId, input.AgeMin, input.AgeMax, input.Capacity, input.Weekday, input.StartTime, input.EndTime, input.Description, input.CompetitiveLevel, input.Category }, tx);
                 if (n == 0) throw ApiException.NotFound("Classe");
                 await SetDisciplines(c, tx, id, Disciplines(input));
                 if (input.TeacherIds is not null) await SetTeachers(c, tx, id, input.TeacherIds);
@@ -142,7 +146,21 @@ public static class ClassEndpoints
         }).RequireMember(Roles.Admin, Roles.Teacher).RequireModule("attendance");
     }
 
-    /// <summary>Discipline della classe: la principale più le altre scelte dall'archivio (nessun limite fisso).</summary>
+    /// <summary>
+    /// Regole della struttura: numero massimo di discipline (Oasi: due) e categoria tra quelle
+    /// configurate (Oasi: Bambini/Ragazzi, Adulti/Ragazzi).
+    /// </summary>
+    private static async Task EnsureClassRules(System.Data.IDbConnection c, System.Data.IDbTransaction tx, ClassInput input)
+    {
+        var s = await TenantSettings.Load(c, tx);
+        var count = Disciplines(input).Length;
+        if (s.Classes.MaxDisciplines is { } max && count > max)
+            throw ApiException.Invalid(max == 1 ? "Una classe può avere una sola disciplina." : $"Una classe può avere al massimo {max} discipline.");
+        if (input.Category is { } cat && s.Classes.Categories.Length > 0 && !s.Classes.Categories.Contains(cat))
+            throw ApiException.Invalid($"Categoria non valida. Categorie della struttura: {string.Join(", ", s.Classes.Categories)}.");
+    }
+
+    /// <summary>Discipline della classe: la principale più le altre scelte dall'archivio (limite configurabile).</summary>
     private static Guid[] Disciplines(ClassInput i) => new[] { i.DisciplineId }.Concat(i.DisciplineIds ?? []).Distinct().ToArray();
 
     private static async Task SetDisciplines(System.Data.IDbConnection c, System.Data.IDbTransaction tx, Guid classId, Guid[] disciplineIds)

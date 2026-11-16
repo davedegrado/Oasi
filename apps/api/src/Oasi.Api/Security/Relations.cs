@@ -19,6 +19,16 @@ public static class Relations
         throw ApiException.Forbidden("Puoi gestire solo le classi che ti sono assegnate.");
     }
 
+    /// <summary>Admin, insegnante della classe, oppure insegnante che sostituisce in quella lezione.</summary>
+    public static async Task EnsureCanManageLesson(IDbConnection c, IDbTransaction tx, Member m, Guid lessonId, Guid classId)
+    {
+        if (m.IsAdmin) return;
+        if (m.IsTeacher && await TeachesClass(c, tx, m, classId)) return;
+        if (m.IsTeacher && await c.ExecuteScalarAsync<bool>("select exists(select 1 from app.lessons where id = @lessonId and substitute_member_id = @me)",
+                new { lessonId, me = m.MemberId }, tx)) return;
+        throw ApiException.Forbidden("Puoi gestire solo le lezioni delle tue classi o quelle in cui sostituisci.");
+    }
+
     /// <summary>
     /// L'utente può agire per conto di questa persona? Sé stesso, oppure genitore
     /// con il permesso richiesto, oppure admin.

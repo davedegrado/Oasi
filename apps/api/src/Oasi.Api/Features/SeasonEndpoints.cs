@@ -123,10 +123,10 @@ public static class SeasonEndpoints
         {
             var id = await c.ExecuteScalarAsync<Guid>(@"
                 insert into app.fee_plans (tenant_id, name, kind, amount_cents, is_active, season_id, category, description, billing, weekly_frequency, entries,
-                  validity_weeks, lesson_minutes, booking_required, booking_hours_before, age_min_months, age_max_months, participants, max_participants,
+                  validity_weeks, lesson_minutes, booking_required, booking_opens_hours_before, booking_closes_hours_before, class_categories, age_min_months, age_max_months, participants, max_participants,
                   competitive_level, grants_makeups, position)
                 select tenant_id, name, kind, amount_cents, false, @to, category, description, billing, weekly_frequency, entries,
-                  validity_weeks, lesson_minutes, booking_required, booking_hours_before, age_min_months, age_max_months, participants, max_participants,
+                  validity_weeks, lesson_minutes, booking_required, booking_opens_hours_before, booking_closes_hours_before, class_categories, age_min_months, age_max_months, participants, max_participants,
                   competitive_level, grants_makeups, position
                 from app.fee_plans where id = @old returning id", new { old, to }, tx);
             await c.ExecuteAsync(@"insert into app.plan_installments (tenant_id, plan_id, position, amount_cents)

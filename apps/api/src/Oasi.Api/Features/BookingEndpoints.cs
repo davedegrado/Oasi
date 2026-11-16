@@ -6,6 +6,11 @@ namespace Oasi.Api.Features;
 
 /// <summary>
 /// Prenotazione di lezioni singole e di ingressi di un pacchetto.
+/// Finestra: la prenotazione si APRE N ore prima dell'inizio (Oasi: 48) e si chiude
+/// M ore prima (Oasi: 0, cioè fino all'inizio); un piano può avere una sua finestra
+/// (es. Circo Baby: almeno 24 ore prima). Disdetta libera fino a K ore prima (Oasi: 6).
+/// Gli ingressi dei pacchetti si scalano alla partecipazione effettiva (o alla
+/// prenotazione, se la struttura lo imposta).
 /// Le soglie (quante ore prima si prenota e si disdice) sono impostazioni della
 /// struttura; un piano può avere una propria soglia di prenotazione. I posti
 /// sono verificati in modo atomico. L'amministrazione può registrare eccezioni.
@@ -15,7 +20,11 @@ public static class BookingEndpoints
     public sealed record BookingInput(Guid LessonId, Guid? MemberId, Guid? MemberPlanId, Guid? PlanId, bool? Override, string? Note);
     public sealed record BookingDto(Guid Id, Guid LessonId, Guid MemberId, string MemberName, string ClassName, string Date, string StartTime, string Status,
         bool EntryConsumed, Guid? MemberPlanId, DateTime BookedAt, DateTime? CancelledAt, string Note);
-    public sealed record OpenLessonDto(Guid Id, Guid ClassId, string ClassName, string Date, string StartTime, string EndTime, int Capacity, int Taken, int? LevelRank, double HoursToStart);
+    public sealed record OpenLessonDto(Guid Id, Guid ClassId, string ClassName, string Date, string StartTime, string EndTime, int Capacity, int Taken, int? LevelRank, double HoursToStart, int? OpensHoursBefore)
+    {
+        /// <summary>La finestra di prenotazione della lezione singola è aperta</summary>
+        public bool BookableNow => OpensHoursBefore is null || HoursToStart <= OpensHoursBefore;
+    }
 
     public static void Map(WebApplication app)
     {
@@ -34,7 +43,8 @@ public static class BookingEndpoints
                 return await c.QueryAsync<OpenLessonDto>(@"
                     select l.id, l.class_id, c.name as class_name, to_char(l.date, 'YYYY-MM-DD') as date, to_char(l.start_time, 'HH24:MI') as start_time,
                            to_char(l.end_time, 'HH24:MI') as end_time, c.capacity::int, app.lesson_taken(l.id) as taken, lv.rank as level_rank,
-                           extract(epoch from (app.local_instant(l.date, l.start_time) - now())) / 3600.0 as hours_to_start
+                           (extract(epoch from (app.local_instant(l.date, l.start_time) - now())) / 3600.0)::float8 as hours_to_start,
+                           (select (s->'booking'->>'opensHoursBefore')::int from app.settings() s) as opens_hours_before
                     from app.lessons l join app.classes c on c.id = l.class_id left join app.levels lv on lv.id = c.level_id
                     where l.date between @start::date and @end::date and l.status <> 'cancelled' and c.is_active
                       and app.local_instant(l.date, l.start_time) > now()
@@ -78,53 +88,66 @@ public static class BookingEndpoints
                 if (inClass) throw ApiException.Conflict("already_in_lesson", "Sei già in questa lezione.");
 
                 Guid? memberPlanId = null, chargeId = null;
-                int threshold;
+                int? opens;
+                int closes;
                 if (input.MemberPlanId is { } mpId)
                 {
                     // Ingresso di un pacchetto: si blocca la riga del piano per scalare il saldo senza doppi utilizzi
                     var mp = await c.QuerySingleOrDefaultAsync<PackRow>(@"
                         select mp.id, mp.member_id, mp.status, mp.valid_from::timestamp as valid_from, mp.valid_until::timestamp as valid_until,
-                               mp.entries_total, mp.entries_used, p.booking_hours_before, p.lesson_minutes, p.age_min_months, p.age_max_months
+                               mp.entries_total, mp.entries_used, p.booking_opens_hours_before, p.booking_closes_hours_before, p.lesson_minutes, p.age_min_months, p.age_max_months,
+                               (select count(*)::int from app.lesson_bookings b where b.member_plan_id = mp.id and b.status = 'booked' and not b.entry_consumed) as entries_reserved
                         from app.member_plans mp join app.fee_plans p on p.id = mp.plan_id where mp.id = @mpId for update of mp", new { mpId }, tx)
                         ?? throw ApiException.NotFound("Pacchetto");
                     if (mp.MemberId != subject) throw ApiException.Forbidden("Il pacchetto appartiene a un'altra persona.");
                     if (mp.EntriesTotal is null) throw ApiException.Conflict("not_a_package", "Questo piano non è un pacchetto a ingressi.");
                     if (mp.Status != "active" || lesson.Date < mp.ValidFrom || lesson.Date > mp.ValidUntil)
                         throw ApiException.Conflict("package_expired", "Il pacchetto non è valido per la data della lezione.");
-                    if (mp.EntriesUsed >= mp.EntriesTotal) throw ApiException.Conflict("package_exhausted", "Il pacchetto non ha più ingressi disponibili.");
+                    // Saldo: ingressi già consumati più quelli impegnati da prenotazioni in corso
+                    if (mp.EntriesUsed + mp.EntriesReserved >= mp.EntriesTotal) throw ApiException.Conflict("package_exhausted", "Il pacchetto non ha più ingressi disponibili.");
                     if (mp.LessonMinutes is { Length: > 0 } allowed && !allowed.Contains((short)lesson.Minutes))
                         throw ApiException.Conflict("lesson_not_covered", "Il pacchetto non copre lezioni di questa durata.");
                     await EnsureAgeMonths(c, tx, subject, mp.AgeMinMonths, mp.AgeMaxMonths);
-                    threshold = mp.BookingHoursBefore ?? settings.Booking.SingleLessonBookHoursBefore;
+                    opens = mp.BookingOpensHoursBefore;   // pacchetto: solo la finestra configurata sul piano
+                    closes = mp.BookingClosesHoursBefore ?? settings.Booking.ClosesHoursBefore;
                     memberPlanId = mp.Id;
                 }
                 else
                 {
                     // Lezione singola: serve una tariffa configurata dalla struttura (nessun prezzo nel codice)
-                    var plan = await c.QuerySingleOrDefaultAsync<(Guid Id, string Name, int AmountCents, short? BookingHoursBefore)?>(@"
-                        select id, name, amount_cents, booking_hours_before from app.fee_plans
+                    var plan = await c.QuerySingleOrDefaultAsync<(Guid Id, string Name, int AmountCents, short? Opens, short? Closes)?>(@"
+                        select id, name, amount_cents, booking_opens_hours_before, booking_closes_hours_before from app.fee_plans
                         where kind = 'single_lesson' and is_active and (@planId::uuid is null or id = @planId)
                           and (valid_from is null or @d::date >= valid_from) and (valid_until is null or @d::date <= valid_until)
                         order by position, name limit 1", new { planId = input.PlanId, d = lesson.Date }, tx);
                     if (plan is not { } p) throw ApiException.Conflict("single_lesson_not_configured", "La struttura non ha configurato la tariffa per le lezioni singole.");
-                    threshold = p.BookingHoursBefore ?? settings.Booking.SingleLessonBookHoursBefore;
+                    opens = p.Opens ?? settings.Booking.OpensHoursBefore;
+                    closes = p.Closes ?? settings.Booking.ClosesHoursBefore;
                     chargeId = await c.ExecuteScalarAsync<Guid>(@"
                         insert into app.member_charges (tenant_id, member_id, fee_plan_id, description, amount_cents, due_on, kind)
                         values (app.current_tenant(), @subject, @plan, @description, @amount, @due::date, 'plan') returning id",
                         new { subject, plan = p.Id, description = $"{p.Name} del {lesson.Date:dd/MM/yyyy}", amount = p.AmountCents, due = lesson.Date }, tx);
                 }
 
-                if (!exception && lesson.HoursToStart < threshold)
-                    throw ApiException.Conflict("too_late_to_book", $"La prenotazione va fatta almeno {threshold} ore prima della lezione.");
+                if (!exception && opens is { } o && lesson.HoursToStart > o)
+                {
+                    var from = await c.ExecuteScalarAsync<DateTime>("select (app.local_instant(l.date, l.start_time) - make_interval(hours => @o)) at time zone app.tenant_timezone() from app.lessons l where l.id = @id",
+                        new { o, id = lesson.Id }, tx);
+                    throw ApiException.Conflict("booking_not_open", $"Le prenotazioni per questa lezione si aprono {o} ore prima: dal {from:dd/MM} alle {from:HH:mm}.");
+                }
+                if (!exception && lesson.HoursToStart < closes)
+                    throw ApiException.Conflict("too_late_to_book", closes > 0 ? $"La prenotazione va fatta almeno {closes} ore prima della lezione." : "La lezione è iniziata.");
                 if (!exception) await LessonRules.EnsureAge(c, tx, subject, lesson.AgeMin, lesson.AgeMax);
                 await LessonRules.EnsureSeat(c, tx, lesson);   // i posti si rispettano anche nelle eccezioni
 
-                if (memberPlanId is not null)
+                // Ingresso consumato subito solo se la struttura scala alla prenotazione; altrimenti alla presenza
+                var consumeNow = memberPlanId is not null && settings.Packages.ConsumeOn == "booking";
+                if (consumeNow)
                     await c.ExecuteAsync("update app.member_plans set entries_used = entries_used + 1 where id = @id", new { id = memberPlanId }, tx);
                 var newId = await c.ExecuteScalarAsync<Guid>(@"
-                    insert into app.lesson_bookings (tenant_id, lesson_id, member_id, member_plan_id, charge_id, entry_consumed, booked_by, note)
-                    values (app.current_tenant(), @lesson, @subject, @memberPlanId, @chargeId, @consumed, @user, @note) returning id",
-                    new { lesson = lesson.Id, subject, memberPlanId, chargeId, consumed = memberPlanId is not null, user = m.UserId,
+                    insert into app.lesson_bookings (tenant_id, lesson_id, member_id, member_plan_id, charge_id, entry_consumed, consumed_by, booked_by, note)
+                    values (app.current_tenant(), @lesson, @subject, @memberPlanId, @chargeId, @consumed, @by, @user, @note) returning id",
+                    new { lesson = lesson.Id, subject, memberPlanId, chargeId, consumed = consumeNow, by = consumeNow ? "booking" : null, user = m.UserId,
                           note = (exception ? "[Eccezione dell'amministrazione] " : "") + (input.Note ?? "") }, tx);
                 if (exception) await Audit.Log(c, tx, m.UserId, m.TenantId, "booking.override", newId.ToString(), new { lesson = lesson.Id, subject });
                 return newId;
@@ -148,8 +171,14 @@ public static class BookingEndpoints
                 if (lesson.Started) throw ApiException.Conflict("lesson_started", "La lezione è già iniziata.");
                 var late = lesson.HoursToStart < settings.Booking.CancelHoursBefore && !(@override == true && m.IsAdmin);
                 var keepCost = late && settings.Booking.LateCancelConsumesEntry;
-                await c.ExecuteAsync("update app.lesson_bookings set status = @s, cancelled_at = now(), entry_consumed = @consumed where id = @id",
-                    new { id, s = late ? "late_cancelled" : "cancelled", consumed = keepCost && b.EntryConsumed }, tx);
+                // Disdetta tardiva con ingresso non ancora scalato (scalo alla presenza): l'ingresso si consuma ora
+                var consumeLate = keepCost && !b.EntryConsumed && b.MemberPlanId is not null;
+                if (consumeLate)
+                    await c.ExecuteAsync("update app.member_plans set entries_used = entries_used + 1 where id = @id", new { id = b.MemberPlanId }, tx);
+                var stillConsumed = keepCost && (b.EntryConsumed || consumeLate);
+                await c.ExecuteAsync(@"update app.lesson_bookings set status = @s, cancelled_at = now(), entry_consumed = @consumed,
+                    consumed_by = case when not @consumed then null when @lateBy::text is not null then @lateBy else consumed_by end where id = @id",
+                    new { id, s = late ? "late_cancelled" : "cancelled", consumed = stillConsumed, lateBy = consumeLate ? "late_cancel" : null }, tx);
                 if (!keepCost)
                 {
                     if (b.EntryConsumed && b.MemberPlanId is not null)
@@ -172,10 +201,38 @@ public static class BookingEndpoints
         public DateTime ValidUntil { get; init; }
         public short? EntriesTotal { get; init; }
         public short EntriesUsed { get; init; }
-        public short? BookingHoursBefore { get; init; }
+        public short? BookingOpensHoursBefore { get; init; }
+        public short? BookingClosesHoursBefore { get; init; }
+        public int EntriesReserved { get; init; }
         public short[]? LessonMinutes { get; init; }
         public short? AgeMinMonths { get; init; }
         public short? AgeMaxMonths { get; init; }
+    }
+
+    /// <summary>
+    /// Presenza registrata dall'insegnante su una prenotazione con pacchetto: se la struttura scala
+    /// alla partecipazione, l'ingresso si consuma con la presenza (e con l'assenza, se "noShowConsumesEntry").
+    /// Togliere la presenza restituisce l'ingresso.
+    /// </summary>
+    internal static async Task OnAttendance(System.Data.IDbConnection c, System.Data.IDbTransaction tx, TenantSettings s, Guid lessonId, Guid memberId, string? actual)
+    {
+        if (s.Packages.ConsumeOn != "attendance") return;
+        var b = await c.QuerySingleOrDefaultAsync<(Guid Id, Guid? PlanId, bool Consumed, string? By)?>(@"
+            select id, member_plan_id, entry_consumed, consumed_by from app.lesson_bookings
+            where lesson_id = @lessonId and member_id = @memberId and status = 'booked' and member_plan_id is not null for update", new { lessonId, memberId }, tx);
+        if (b is not { } k) return;
+        var shouldConsume = actual == "present" || (actual == "absent" && s.Booking.NoShowConsumesEntry);
+        if (shouldConsume && !k.Consumed)
+        {
+            await c.ExecuteAsync("update app.member_plans set entries_used = entries_used + 1 where id = @id", new { id = k.PlanId }, tx);
+            await c.ExecuteAsync("update app.lesson_bookings set entry_consumed = true, consumed_by = @by where id = @id",
+                new { id = k.Id, by = actual == "present" ? "attendance" : "no_show" }, tx);
+        }
+        else if (!shouldConsume && k.Consumed && k.By is "attendance" or "no_show")
+        {
+            await c.ExecuteAsync("update app.member_plans set entries_used = greatest(entries_used - 1, 0) where id = @id", new { id = k.PlanId }, tx);
+            await c.ExecuteAsync("update app.lesson_bookings set entry_consumed = false, consumed_by = null where id = @id", new { id = k.Id }, tx);
+        }
     }
 
     internal static async Task EnsureAgeMonths(System.Data.IDbConnection c, System.Data.IDbTransaction tx, Guid memberId, short? min, short? max)

@@ -17,15 +17,28 @@ public sealed class TenantSettings
     public MakeupSettings Makeups { get; init; } = new();
     public CompetitiveSettings Competitive { get; init; } = new();
     public DocumentSettings Documents { get; init; } = new();
+    public PackageSettings Packages { get; init; } = new();
+    public ClassSettings Classes { get; init; } = new();
+    public PaymentSettings Payments { get; init; } = new();
+
+    /// <summary>Metodi di pagamento che la piattaforma sa registrare. Se ne possono aggiungere altri in futuro.</summary>
+    public static readonly string[] KnownPaymentMethods = ["cash", "bank_transfer", "pos", "other"];
 
     public sealed class BookingSettings
     {
-        /// <summary>Ore minime di anticipo per prenotare una lezione singola.</summary>
-        public int SingleLessonBookHoursBefore { get; init; } = 48;
-        /// <summary>Ore minime di anticipo per disdire senza conseguenze.</summary>
-        public int CancelHoursBefore { get; init; } = 6;
+        /// <summary>
+        /// Apertura delle prenotazioni di una lezione singola: quante ore prima dell'inizio
+        /// si può prenotare (null = nessun limite). Oasi: 48.
+        /// </summary>
+        public int? OpensHoursBefore { get; init; }
+        /// <summary>Chiusura delle prenotazioni: ore prima dell'inizio (0 = fino all'inizio).</summary>
+        public int ClosesHoursBefore { get; init; }
+        /// <summary>Disdetta libera fino a N ore prima dell'inizio. Oasi: 6.</summary>
+        public int CancelHoursBefore { get; init; }
         /// <summary>Una disdetta tardiva consuma comunque l'ingresso / resta dovuta.</summary>
         public bool LateCancelConsumesEntry { get; init; } = true;
+        /// <summary>Prenotazione senza presentarsi (assenza registrata): l'ingresso è consumato.</summary>
+        public bool NoShowConsumesEntry { get; init; } = true;
     }
 
     public sealed class MakeupSettings
@@ -45,10 +58,31 @@ public sealed class TenantSettings
 
     public sealed class DocumentSettings
     {
-        public int ReplacedRetentionDays { get; init; } = 7;
+        /// <summary>Giorni dopo i quali il file di una versione sostituita viene eliminato (null = si conserva).</summary>
+        public int? ReplacedRetentionDays { get; init; }
         public int ExpiryReminderDays { get; init; } = 30;
-        /// <summary>Mai più di 7 giorni, qualunque valore sia stato salvato.</summary>
-        public int EffectiveRetentionDays => Math.Clamp(ReplacedRetentionDays, 0, 7);
+        /// <summary>Promemoria N giorni prima del termine di un documento richiesto (es. documenti mensili).</summary>
+        public int RequestReminderDays { get; init; } = 3;
+    }
+
+    public sealed class PackageSettings
+    {
+        /// <summary>"attendance": l'ingresso si scala alla partecipazione effettiva; "booking": alla prenotazione.</summary>
+        public string ConsumeOn { get; init; } = "attendance";
+    }
+
+    public sealed class ClassSettings
+    {
+        /// <summary>Aree in cui sono organizzate le classi (es. Bambini/Ragazzi, Adulti/Ragazzi). Vuoto = nessuna.</summary>
+        public string[] Categories { get; init; } = [];
+        /// <summary>Numero massimo di discipline per classe (null = nessun limite). Oasi: 2.</summary>
+        public int? MaxDisciplines { get; init; }
+    }
+
+    public sealed class PaymentSettings
+    {
+        /// <summary>Metodi accettati dalla struttura, tra quelli che la piattaforma sa registrare.</summary>
+        public string[] Methods { get; init; } = ["cash", "bank_transfer"];
     }
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -69,16 +103,28 @@ public sealed class TenantSettings
         }
         foreach (var (section, key, min, max) in new[]
                  {
-                     ("booking", "singleLessonBookHoursBefore", 0, 24 * 60), ("booking", "cancelHoursBefore", 0, 24 * 30),
-                     ("documents", "replacedRetentionDays", 0, 7), ("documents", "expiryReminderDays", 0, 365),
+                     ("booking", "opensHoursBefore", 1, 24 * 60), ("booking", "closesHoursBefore", 0, 24 * 30), ("booking", "cancelHoursBefore", 0, 24 * 30),
+                     ("documents", "replacedRetentionDays", 0, 3650), ("documents", "expiryReminderDays", 0, 365), ("classes", "maxDisciplines", 1, 20),
                  })
         {
+            // null è ammesso dove significa "nessun limite"
+            if (patch[section] is JsonObject o && o.ContainsKey(key) && o[key] is null && key is "opensHoursBefore" or "replacedRetentionDays" or "maxDisciplines") continue;
             if (patch[section]?[key] is not { } v) continue;
             if (v.GetValueKind() != JsonValueKind.Number || v.GetValue<int>() < min || v.GetValue<int>() > max)
                 throw ApiException.Invalid($"Valore non valido per {section}.{key} (da {min} a {max}).");
         }
         if (patch["makeups"]?["creditOn"] is { } creditOn && creditOn.GetValue<string>() is not ("declared_in_time" or "any_absence"))
             throw ApiException.Invalid("makeups.creditOn deve essere declared_in_time oppure any_absence.");
+        if (patch["packages"]?["consumeOn"] is { } consume && consume.GetValue<string>() is not ("attendance" or "booking"))
+            throw ApiException.Invalid("packages.consumeOn deve essere attendance oppure booking.");
+        if (patch["payments"]?["methods"] is { } methods)
+        {
+            var list = methods.AsArray().Select(m => m?.GetValue<string>()).ToArray();
+            if (list.Length == 0 || list.Any(m => m is null || !KnownPaymentMethods.Contains(m)))
+                throw ApiException.Invalid($"Metodi di pagamento ammessi: {string.Join(", ", KnownPaymentMethods)}.");
+        }
+        if (patch["classes"]?["categories"] is { } cats && cats.AsArray().Any(c => string.IsNullOrWhiteSpace(c?.GetValue<string>())))
+            throw ApiException.Invalid("Le categorie di classe non possono essere vuote.");
         if (patch["makeups"]?["maxPerPlan"] is { } maxPerPlan && maxPerPlan.GetValueKind() == JsonValueKind.Number && maxPerPlan.GetValue<int>() < 0)
             throw ApiException.Invalid("makeups.maxPerPlan non può essere negativo.");
         return patch;

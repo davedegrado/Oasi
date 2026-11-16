@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using Oasi.Api.Infrastructure;
+using Oasi.Api.Notifications;
 using Oasi.Api.Security;
 
 namespace Oasi.Api.Features;
@@ -8,11 +9,13 @@ namespace Oasi.Api.Features;
 public static class CalendarEndpoints
 {
     public sealed record LessonDto(Guid Id, Guid ClassId, string ClassName, Guid DisciplineId, string Date, string StartTime, string EndTime,
-        string Status, string? OriginalStartTime, string? OriginalEndTime, string? Note, bool IsMakeup, string? Declared, string? Actual);
+        string Status, string? OriginalStartTime, string? OriginalEndTime, string? Note, bool IsMakeup, string? Declared, string? Actual,
+        Guid? SubstituteMemberId = null, string? SubstituteName = null, string? SubstitutionNote = null);
 
     public sealed record RosterEntry(Guid MemberId, string FirstName, string LastName, bool IsMakeup, bool IsBooking, bool IsCompetitive, string? Declared, string? Actual);
 
     public sealed record LessonUpdate(string Status, string? StartTime, string? EndTime, string? Note);
+    public sealed record SubstituteInput(Guid? MemberId, string? Note);
     public sealed record AttendanceInput(string? Actual);
     public sealed record DeclarationInput(Guid? MemberId, string? Declared);
 
@@ -46,14 +49,17 @@ public static class CalendarEndpoints
                            l.note,
                            (exists(select 1 from app.makeup_requests r where r.target_lesson_id = l.id and r.member_id = @subject and r.status = 'approved')
                             or exists(select 1 from app.lesson_bookings b where b.lesson_id = l.id and b.member_id = @subject and b.status = 'booked')) as is_makeup,
-                           a.declared, a.actual
+                           a.declared, a.actual,
+                           l.substitute_member_id, sb.first_name || ' ' || sb.last_name as substitute_name, l.substitution_note
                     from app.lessons l
+                    left join app.members sb on sb.id = l.substitute_member_id
                     join app.classes c on c.id = l.class_id
                     left join app.attendance a on a.lesson_id = l.id and a.member_id = @subject
                     where l.date between @start::date and @end::date
                       and (
                         @everything
-                        or (@teaching and exists(select 1 from app.class_teachers ct where ct.class_id = l.class_id and ct.member_id = @me))
+                        or (@teaching and (exists(select 1 from app.class_teachers ct where ct.class_id = l.class_id and ct.member_id = @me)
+                                           or l.substitute_member_id = @me))
                         or (not @everything and not @teaching and (
                               exists(select 1 from app.enrollments e where e.class_id = l.class_id and e.member_id = @subject and e.status = 'approved')
                               or exists(select 1 from app.makeup_requests r where r.target_lesson_id = l.id and r.member_id = @subject and r.status = 'approved')
@@ -97,6 +103,43 @@ public static class CalendarEndpoints
             return Results.NoContent();
         }).RequireMember(Roles.Admin, Roles.Teacher);
 
+        // Sostituzione: l'insegnante della classe (o l'amministrazione) indica chi la sostituisce in caso di assenza.
+        // Chi sostituisce vede la lezione nel proprio calendario e compila presenze e note; le allieve sono avvisate.
+        g.MapPut("/{id:guid}/substitute", async (HttpContext ctx, Db db, Guid id, SubstituteInput input) =>
+        {
+            var m = ctx.Member();
+            await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
+            {
+                var lesson = await LoadLesson(c, tx, id);
+                await Relations.EnsureCanManageClass(c, tx, m, lesson.ClassId);
+                if (lesson.Started) throw ApiException.Conflict("lesson_started", "La lezione è già iniziata.");
+                string? name = null;
+                if (input.MemberId is { } sub)
+                {
+                    name = await c.ExecuteScalarAsync<string?>(@"select mb.first_name || ' ' || mb.last_name from app.members mb
+                        join app.memberships ms on ms.member_id = mb.id and ms.status = 'active' and 'teacher' = any(ms.roles) where mb.id = @sub", new { sub }, tx)
+                        ?? throw ApiException.Invalid("La sostituzione va affidata a un insegnante della struttura.");
+                    if (await Relations.TeachesClass(c, tx, new Member(m.TenantId, Guid.Empty, sub, []), lesson.ClassId))
+                        throw ApiException.Invalid("È già un'insegnante della classe.");
+                }
+                await c.ExecuteAsync("update app.lessons set substitute_member_id = @MemberId, substitution_note = @Note where id = @id", new { id, input.MemberId, input.Note }, tx);
+                var when = $"{lesson.Date:dd/MM}";
+                if (input.MemberId is { } s2)
+                    await Notifier.ToUsers(c, tx, await Notifier.UsersOfMember(c, tx, s2), "teaching", "Ti è stata affidata una sostituzione",
+                        $"Lezione del {when}.{(string.IsNullOrWhiteSpace(input.Note) ? "" : " " + input.Note)}", m.UserId, link: $"/lezioni/{id}");
+                var students = await c.QueryAsync<Guid>(@"
+                    select e.member_id from app.enrollments e where e.class_id = @classId and e.status = 'approved'
+                    union select r.member_id from app.makeup_requests r where r.target_lesson_id = @id and r.status = 'approved'
+                    union select b.member_id from app.lesson_bookings b where b.lesson_id = @id and b.status = 'booked'", new { classId = lesson.ClassId, id }, tx);
+                var users = new List<Guid>();
+                foreach (var st in students) users.AddRange(await Notifier.UsersOfMember(c, tx, st));
+                await Notifier.ToUsers(c, tx, users, "schedule_changes", name is null ? "Sostituzione annullata" : "Lezione con insegnante sostituta",
+                    name is null ? $"La lezione del {when} torna con la sua insegnante." : $"Lezione del {when} con {name}.", m.UserId, link: "/calendario");
+                await Audit.Log(c, tx, m.UserId, m.TenantId, "lesson.substitute", id.ToString(), new { input.MemberId });
+            });
+            return Results.NoContent();
+        }).RequireMember(Roles.Admin, Roles.Teacher);
+
         // Elenco della lezione: iscritte + recuperi approvati, con presenza dichiarata ed effettiva
         g.MapGet("/{id:guid}/roster", async (HttpContext ctx, Db db, Guid id) =>
         {
@@ -104,7 +147,7 @@ public static class CalendarEndpoints
             return await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
             {
                 var lesson = await LoadLesson(c, tx, id);
-                await Relations.EnsureCanManageClass(c, tx, m, lesson.ClassId);
+                await Relations.EnsureCanManageLesson(c, tx, m, lesson.Id, lesson.ClassId);
                 return await c.QueryAsync<RosterEntry>(@"
                     with people as (
                       select e.member_id, false as is_makeup, false as is_booking from app.enrollments e where e.class_id = @classId and e.status = 'approved'
@@ -128,7 +171,7 @@ public static class CalendarEndpoints
             await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
             {
                 var lesson = await LoadLesson(c, tx, id);
-                await Relations.EnsureCanManageClass(c, tx, m, lesson.ClassId);
+                await Relations.EnsureCanManageLesson(c, tx, m, lesson.Id, lesson.ClassId);
                 if (lesson.Status == "cancelled") throw ApiException.Conflict("lesson_cancelled", "La lezione è annullata.");
                 await EnsureInRoster(c, tx, lesson, memberId);
                 await c.ExecuteAsync(@"
@@ -136,7 +179,9 @@ public static class CalendarEndpoints
                     values (app.current_tenant(), @id, @memberId, @Actual, @user, now())
                     on conflict (tenant_id, lesson_id, member_id) do update set actual = excluded.actual, recorded_by = excluded.recorded_by, recorded_at = now()",
                     new { id, memberId, input.Actual, user = m.UserId }, tx);
-                await MakeupCredits.OnActual(c, tx, await TenantSettings.Load(c, tx), await LessonRules.Load(c, tx, id), memberId, input.Actual);
+                var settings = await TenantSettings.Load(c, tx);
+                await MakeupCredits.OnActual(c, tx, settings, await LessonRules.Load(c, tx, id), memberId, input.Actual);
+                await BookingEndpoints.OnAttendance(c, tx, settings, id, memberId, input.Actual);
             });
             return Results.NoContent();
         }).RequireMember(Roles.Admin, Roles.Teacher).RequireModule("attendance");

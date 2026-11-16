@@ -16,6 +16,14 @@
 --  3. "Circo Baby: validi in uno dei due periodi stagionali": i due periodi
 --     sono intesi come quelli delle due rate (15/09–24/01 e 25/01–30/05).
 --  4. Il pacchetto 5 lezioni copre lezioni da 60 o 75 minuti.
+--  5. "Lezioni singole prenotabili a partire da 48 ore prima": la finestra di
+--     48 ore è applicata alla lezione singola e al pacchetto 5 lezioni; Circo
+--     Baby ha solo il termine "almeno 24 ore prima".
+--  6. I due documenti mensili degli insegnanti non sono nominati nel prompt:
+--     le tipologie hanno un nome provvisorio da cambiare in Archivio.
+--  7. Categorie di piano: Baby/Teen, Circo Baby e Preagonismo Baby → classi
+--     Bambini/Ragazzi; Adulti/Teen → Adulti/Ragazzi; Genitori & Figli e
+--     Agonismo Teen senza vincolo di categoria.
 -- ════════════════════════════════════════════════════════════════════
 begin;
 
@@ -35,8 +43,11 @@ begin
   insert into app.tenant_settings (tenant_id, settings) values (t, '{}'::jsonb) on conflict do nothing;
   update app.tenant_settings set settings = app.jsonb_deep_merge(settings, '{
     "timezone": "Europe/Rome",
-    "booking": { "singleLessonBookHoursBefore": 48, "cancelHoursBefore": 6 },
-    "competitive": { "competitionFeeRangeCents": [5000, 15000] }
+    "booking": { "opensHoursBefore": 48, "closesHoursBefore": 0, "cancelHoursBefore": 6 },
+    "packages": { "consumeOn": "attendance" },
+    "competitive": { "competitionFeeRangeCents": [5000, 15000] },
+    "classes": { "categories": ["Bambini/Ragazzi", "Adulti/Ragazzi"], "maxDisciplines": 2 },
+    "payments": { "methods": ["bank_transfer", "cash"] }
   }'::jsonb) where tenant_id = t;
 
   -- ── Stagione e periodi ──
@@ -66,8 +77,8 @@ begin
       (1, 34000, 19000), (2, 60000, 33000), (3, 90000, 47000)
     ) as v(freq, annual, installment)
   loop
-    insert into app.fee_plans (tenant_id, name, kind, amount_cents, season_id, category, billing, weekly_frequency, position)
-    values (t, 'Baby/Teen · ' || r.freq || case when r.freq = 1 then ' frequenza' else ' frequenze' end, 'subscription', r.annual, s, 'Baby/Teen', 'annual', r.freq, 100 + r.freq)
+    insert into app.fee_plans (tenant_id, name, kind, amount_cents, season_id, category, billing, weekly_frequency, position, class_categories)
+    values (t, 'Baby/Teen · ' || r.freq || case when r.freq = 1 then ' frequenza' else ' frequenze' end, 'subscription', r.annual, s, 'Baby/Teen', 'annual', r.freq, 100 + r.freq, '{Bambini/Ragazzi}')
     returning id into plan;
     insert into app.plan_installments (tenant_id, plan_id, position, amount_cents, due_on, covers_from, covers_until) values
       (t, plan, 1, r.installment, '2026-09-15', '2026-09-15', '2027-01-24'),
@@ -76,9 +87,9 @@ begin
 
   -- ── Circo Baby (12–36 mesi): pacchetto configurabile, non una funzione dedicata ──
   insert into app.fee_plans (tenant_id, name, kind, amount_cents, season_id, category, billing, entries, valid_from, valid_until,
-                             booking_required, booking_hours_before, age_min_months, age_max_months, grants_makeups, position) values
-    (t, 'Circo Baby · 8 ingressi (1° periodo)', 'package', 8000, s, 'Pacchetti', 'one_off', 8, '2026-09-15', '2027-01-24', true, 24, 12, 36, false, 201),
-    (t, 'Circo Baby · 8 ingressi (2° periodo)', 'package', 8000, s, 'Pacchetti', 'one_off', 8, '2027-01-25', '2027-05-30', true, 24, 12, 36, false, 202);
+                             booking_required, booking_closes_hours_before, age_min_months, age_max_months, grants_makeups, position, class_categories) values
+    (t, 'Circo Baby · 8 ingressi (1° periodo)', 'package', 8000, s, 'Pacchetti', 'one_off', 8, '2026-09-15', '2027-01-24', true, 24, 12, 36, false, 201, '{Bambini/Ragazzi}'),
+    (t, 'Circo Baby · 8 ingressi (2° periodo)', 'package', 8000, s, 'Pacchetti', 'one_off', 8, '2027-01-25', '2027-05-30', true, 24, 12, 36, false, 202, '{Bambini/Ragazzi}');
 
   -- ── Genitori & Figli: quota a coppia ──
   insert into app.fee_plans (tenant_id, name, kind, amount_cents, season_id, category, billing, participants, position)
@@ -92,26 +103,27 @@ begin
       (1, 5500, 9500, 34000), (2, 9500, 16500, 60000), (3, 13500, 23500, 90000), (4, 18000, 31000, 116000)
     ) as v(freq, monthly, periodic, annual)
   loop
-    insert into app.fee_plans (tenant_id, name, kind, amount_cents, season_id, category, billing, weekly_frequency, validity_weeks, position) values
-      (t, 'Adulti/Teen · ' || r.freq || 'x · mensile', 'subscription', r.monthly, s, 'Adulti/Teen', 'monthly', r.freq, 4, 300 + r.freq * 10 + 1);
-    insert into app.fee_plans (tenant_id, name, kind, amount_cents, season_id, category, billing, weekly_frequency, position) values
-      (t, 'Adulti/Teen · ' || r.freq || 'x · periodico', 'subscription', r.periodic, s, 'Adulti/Teen', 'periodic', r.freq, 300 + r.freq * 10 + 2),
-      (t, 'Adulti/Teen · ' || r.freq || 'x · annuale', 'subscription', r.annual, s, 'Adulti/Teen', 'annual', r.freq, 300 + r.freq * 10 + 3);
+    insert into app.fee_plans (tenant_id, name, kind, amount_cents, season_id, category, billing, weekly_frequency, validity_weeks, position, class_categories) values
+      (t, 'Adulti/Teen · ' || r.freq || 'x · mensile', 'subscription', r.monthly, s, 'Adulti/Teen', 'monthly', r.freq, 4, 300 + r.freq * 10 + 1, '{Adulti/Ragazzi}');
+    insert into app.fee_plans (tenant_id, name, kind, amount_cents, season_id, category, billing, weekly_frequency, position, class_categories) values
+      (t, 'Adulti/Teen · ' || r.freq || 'x · periodico', 'subscription', r.periodic, s, 'Adulti/Teen', 'periodic', r.freq, 300 + r.freq * 10 + 2, '{Adulti/Ragazzi}'),
+      (t, 'Adulti/Teen · ' || r.freq || 'x · annuale', 'subscription', r.annual, s, 'Adulti/Teen', 'annual', r.freq, 300 + r.freq * 10 + 3, '{Adulti/Ragazzi}');
   end loop;
 
   -- ── Lezione singola e pacchetto 5 lezioni ──
   insert into app.fee_plans (tenant_id, name, kind, amount_cents, season_id, category, billing, valid_from, valid_until, booking_required, grants_makeups, position) values
     (t, 'Lezione singola', 'single_lesson', 1500, s, 'Lezioni singole', 'one_off', '2026-09-14', '2027-05-30', true, false, 401);
-  insert into app.fee_plans (tenant_id, name, kind, amount_cents, season_id, category, billing, entries, valid_from, valid_until, lesson_minutes, booking_required, grants_makeups, position) values
-    (t, 'Pacchetto 5 lezioni', 'package', 7000, s, 'Lezioni singole', 'one_off', 5, '2026-09-14', '2027-05-30', '{60,75}', true, false, 402);
+  insert into app.fee_plans (tenant_id, name, kind, amount_cents, season_id, category, billing, entries, valid_from, valid_until, lesson_minutes, booking_required, booking_opens_hours_before, grants_makeups, position) values
+    (t, 'Pacchetto 5 lezioni', 'package', 7000, s, 'Lezioni singole', 'one_off', 5, '2026-09-14', '2027-05-30', '{60,75}', true, 48, false, 402);
 
   -- ── Preagonismo e agonismo: 4 rate, una per periodo; certificato agonistico secondo classificazione ──
   for r in select * from (values
       ('Preagonismo Baby', 74000, 18500, 'pre_competitive', 501), ('Agonismo Teen', 90000, 22500, 'competitive', 502)
     ) as v(name, annual, installment, level, pos)
   loop
-    insert into app.fee_plans (tenant_id, name, kind, amount_cents, season_id, category, billing, competitive_level, position)
-    values (t, r.name, 'subscription', r.annual, s, 'Agonismo', 'annual', r.level, r.pos) returning id into plan;
+    insert into app.fee_plans (tenant_id, name, kind, amount_cents, season_id, category, billing, competitive_level, position, class_categories)
+    values (t, r.name, 'subscription', r.annual, s, 'Agonismo', 'annual', r.level, r.pos,
+            case when r.level = 'pre_competitive' then '{Bambini/Ragazzi}'::text[] else '{}'::text[] end) returning id into plan;
     insert into app.plan_installments (tenant_id, plan_id, position, amount_cents, due_on, period_id, covers_from, covers_until) values
       (t, plan, 1, r.installment, '2026-09-15', p1, '2026-09-15', '2026-11-08'),
       (t, plan, 2, r.installment, '2026-11-09', p2, '2026-11-09', '2027-01-24'),
@@ -134,6 +146,17 @@ begin
   values (t, 'Certificato medico agonistico', 'medical', 'Certificato di idoneità all’attività sportiva agonistica. Richiesto agli agonisti e agli iscritti a classi agonistiche o preagonistiche.',
           false, 'none', 12, true, 'students', true, true)
   on conflict (tenant_id, name) do nothing;
+
+  -- ── Insegnanti: due documenti amministrativi ogni mese, entro l'ultimo giorno del mese ──
+  -- I nomi sono provvisori (il prompt non li indica): l'amministrazione li rinomina in Archivio.
+  insert into app.document_types (tenant_id, name, category, description, is_required, signature_mode, is_sensitive, audience, recurrence)
+  values
+    (t, 'Documento mensile insegnanti 1', 'other', 'Primo dei due documenti richiesti ogni mese per pagamenti e adempimenti. Da caricare entro la fine del mese.', true, 'none', false, 'teachers', 'monthly'),
+    (t, 'Documento mensile insegnanti 2', 'other', 'Secondo dei due documenti richiesti ogni mese per pagamenti e adempimenti. Da caricare entro la fine del mese.', true, 'none', false, 'teachers', 'monthly')
+  on conflict (tenant_id, name) do nothing;
+
+  -- ── Classi esistenti: categoria (dati dimostrativi: sono tutte classi per adulti) ──
+  update app.classes set category = 'Adulti/Ragazzi' where tenant_id = t and category is null;
 end $$;
 
 commit;
