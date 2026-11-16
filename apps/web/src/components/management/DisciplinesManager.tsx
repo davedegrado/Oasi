@@ -15,7 +15,7 @@ import { weekdayName } from '@/lib/dates'
 import { cn } from '@/lib/utils'
 
 const ICONS: DisciplineIconName[] = ['circle', 'wind', 'sparkles', 'music', 'flower', 'dumbbell', 'star']
-const COLORS = ['#D66A9B', '#8A7BB8', '#E0915A', '#4E9F8A', '#5B8BD0', '#C9A227', '#B04A6F']
+const COLORS = ['#667C5F', '#B8963E', '#111111', '#4E9F8A', '#5B8BD0', '#E0915A', '#B04A6F', '#D66A9B', '#8A7BB8']
 
 const slugify = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 

@@ -7,7 +7,8 @@ export const STATUS_STYLE: Record<LearningStatus, { tone: 'neutral' | 'warn' | '
 }
 
 export const STATUS_COLOR: Record<LearningStatus, string> = {
-  da_imparare: '#E8DCE2',
-  in_progetto: '#8A7BB8',
-  riuscita: '#4F9C84',
+  // Variabili del tema: i grafici seguono la palette del tenant
+  da_imparare: 'var(--color-line)',
+  in_progetto: 'var(--color-tessuti)',
+  riuscita: 'var(--color-ok)',
 }

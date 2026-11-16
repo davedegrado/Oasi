@@ -72,6 +72,15 @@ export function applyTheme(config: TenantConfig) {
   // Dettagli e decorazioni: il colore d'accento del tenant, se configurato
   root.setProperty('--color-rosa', c.accent ?? c.primaryMid)
   root.setProperty('--color-accent', c.accent ?? c.primaryMid)
+  // Tono secondario (badge "In progetto", avatar, riquadri): segue l'accento del tenant.
+  // Leggermente scurito perché resti leggibile come testo su fondo chiaro.
+  if (c.accent) {
+    root.setProperty('--color-tessuti', `color-mix(in srgb, ${c.accent} 78%, black)`)
+    root.setProperty('--color-tessuti-soft', `color-mix(in srgb, ${c.accent} 16%, white)`)
+  } else {
+    root.removeProperty('--color-tessuti')
+    root.removeProperty('--color-tessuti-soft')
+  }
   root.setProperty('--color-cipria', c.primarySoft)
   root.setProperty('--color-cerchio-soft', c.primarySoft)
   root.setProperty('--color-rosa-scuro', c.primaryStrong)
