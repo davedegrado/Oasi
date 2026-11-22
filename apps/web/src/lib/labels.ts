@@ -30,7 +30,7 @@ export const MEMBERSHIP_LABEL: Record<MembershipStatus, string> = {
 }
 
 export const ROLE_LABEL: Record<Role, string> = {
-  allieva: 'Allieva',
+  allieva: 'Atleta',
   insegnante: 'Insegnante',
   admin: 'Amministratore',
 }

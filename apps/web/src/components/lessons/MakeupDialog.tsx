@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Field, Select, Textarea } from '@/components/ui/input'
 import { useDatabase, useRepository } from '@/hooks/useDatabase'
 import { useToast } from '@/hooks/useToast'
-import { euro, findClass, findTeacher, lessonRoster, lessonsForStudent, makeupCredits, makeupLevelAllowed, singleLessonWindow } from '@/services/selectors'
+import { euro, findClass, findTeacher, lessonRoster, lessonsForStudent, makeupCredits, makeupLevelAllowed, makeupWindow, singleLessonWindow } from '@/services/selectors'
 import { addDays, formatDate, todayISO } from '@/lib/dates'
 import { fullName } from '@/lib/utils'
 
@@ -28,6 +28,7 @@ export function MakeupDialog({ lesson, studentId, onClose }: { lesson: Lesson; s
 
   const credits = makeupCredits(db, studentId)
   const levelOk = !!cls && makeupLevelAllowed(db, studentId, cls)
+  const mWindow = makeupWindow(db, lesson)
   const [error, setError] = useState('')
   // Lezione singola: prenotabile a partire da N ore prima (Oasi: 48), a pagamento secondo il listino
   const window = singleLessonWindow(db, lesson)
@@ -68,7 +69,7 @@ export function MakeupDialog({ lesson, studentId, onClose }: { lesson: Lesson; s
               Prenota lezione singola · {euro(single.amountCents)}
             </Button>
           )}
-          <Button onClick={send} disabled={free <= 0 || credits.available <= 0 || !levelOk}>
+          <Button onClick={send} disabled={free <= 0 || credits.available <= 0 || !levelOk || !mWindow.open}>
             <RefreshCcw /> Invia richiesta
           </Button>
         </>
@@ -76,7 +77,15 @@ export function MakeupDialog({ lesson, studentId, onClose }: { lesson: Lesson; s
     >
       <div className="space-y-4">
         {error && <p className="rounded-2xl bg-danger-soft p-3 text-sm text-danger">{error}</p>}
-        {single && !window.open && window.openAt && window.hours > 0 && (
+        {credits.available > 0 && mWindow.tooEarly && mWindow.openAt && (
+          <p className="rounded-2xl bg-cipria-50 p-3 text-sm text-ink-soft">
+            Il recupero per questa lezione si chiede a partire da {db.association.settings.makeupOpensHours} ore prima: dal {formatDate(mWindow.openAt.toISOString().slice(0, 10))} alle {mWindow.openAt.toTimeString().slice(0, 5)}.
+          </p>
+        )}
+        {credits.available > 0 && mWindow.tooLate && window.hours > 0 && (
+          <p className="rounded-2xl bg-warn-soft p-3 text-sm text-ink-soft">Il recupero va chiesto almeno {db.association.settings.makeupClosesHours} ore prima della lezione.</p>
+        )}
+        {single && window.tooEarly && window.openAt && (
           <p className="rounded-2xl bg-cipria-50 p-3 text-sm text-ink-soft">
             Come lezione singola si prenota a partire da {db.association.settings.bookingOpensHours} ore prima: dal {formatDate(window.openAt.toISOString().slice(0, 10))} alle {window.openAt.toTimeString().slice(0, 5)}.
           </p>

@@ -20,7 +20,7 @@ import { weekdayName } from '@/lib/dates'
 import { useDisciplines } from '@/hooks/useDisciplines'
 import { cn, fullName } from '@/lib/utils'
 
-/** Catalogo dei corsi: l'allieva chiede l'iscrizione, l'insegnante della classe la approva */
+/** Catalogo dei corsi: l'atleta chiede l'iscrizione, l'insegnante della classe la approva */
 export function StudentClasses() {
   const db = useDatabase()
   const repo = useRepository()

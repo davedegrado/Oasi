@@ -15,7 +15,7 @@ import { RequestStatusBadge } from '@/components/requests/RequestStatusBadge'
 import { useDatabase, useRepository } from '@/hooks/useDatabase'
 import { useCurrentStudent } from '@/hooks/useDemo'
 import { useToast } from '@/hooks/useToast'
-import { findClass, isLessonPast, isMakeupFor, lessonsForStudent, makeupCredits, makeupLevelAllowed, singleLessonWindow, sortLessons } from '@/services/selectors'
+import { findClass, isLessonPast, isMakeupFor, lessonsForStudent, makeupCredits, makeupLevelAllowed, makeupWindow, singleLessonWindow, sortLessons } from '@/services/selectors'
 import { formatDate } from '@/lib/dates'
 
 export function StudentCalendar() {
@@ -35,7 +35,7 @@ export function StudentCalendar() {
   const credits = makeupCredits(db, student.id)
   const canRequestMakeup = (l: Lesson) => {
     const cls = findClass(db, l.classId)
-    return !mineIds.has(l.id) && !isLessonPast(l) && l.status !== 'annullata' && !requested.has(l.id) && credits.available > 0 && !!cls && makeupLevelAllowed(db, student.id, cls)
+    return !mineIds.has(l.id) && !isLessonPast(l) && l.status !== 'annullata' && !requested.has(l.id) && credits.available > 0 && !!cls && makeupLevelAllowed(db, student.id, cls) && makeupWindow(db, l).open
   }
   // Lezione singola: altre classi, prenotabile quando si apre la finestra della palestra
   const canBook = (l: Lesson) => !mineIds.has(l.id) && !isLessonPast(l) && l.status !== 'annullata' && singleLessonWindow(db, l).open

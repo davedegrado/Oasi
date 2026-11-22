@@ -29,7 +29,7 @@ export function StudentHeader({ student, actions, classesLink }: { student: Stud
           </div>
           <h1 className="mt-2 text-3xl font-extrabold text-ink">{fullName(student)}</h1>
           <p className="mt-1 text-sm text-ink-muted">
-            {ageFrom(student.birthDate)} anni · allieva dal {formatDate(student.joinedAt, { year: true })}
+            {ageFrom(student.birthDate)} anni · atleta dal {formatDate(student.joinedAt, { year: true })}
           </p>
         </div>
         {actions && <div className="flex gap-2">{actions}</div>}

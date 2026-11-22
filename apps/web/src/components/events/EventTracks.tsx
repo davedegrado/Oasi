@@ -12,7 +12,7 @@ import { fullName, uid } from '@/lib/utils'
 
 /**
  * Musica di una performance: titolo, autore, gruppo o classe, collegamento e file audio.
- * La gestisce l'amministrazione; insegnanti e allieve la consultano.
+ * La gestisce l'amministrazione; insegnanti e atlete la consultano.
  * Collegamento e audio sono riservati a staff e partecipanti (`canListen`).
  */
 export function EventTracksDialog({ event, editor, canListen = true, onClose }: { event: OasiEvent; editor?: 'admin'; canListen?: boolean; onClose: () => void }) {
@@ -118,7 +118,7 @@ export function EventTracksDialog({ event, editor, canListen = true, onClose }: 
 
 /**
  * Pulsanti "Musica" e "Partecipanti" per le performance.
- * `editor`: solo l'amministrazione modifica; `viewerId`: allieva che guarda (vede musica e partecipanti solo se partecipa).
+ * `editor`: solo l'amministrazione modifica; `viewerId`: atleta che guarda (vede musica e partecipanti solo se partecipa).
  */
 export function EventTracksButton({ event, editor, viewerId }: { event: OasiEvent; editor?: 'admin'; viewerId?: string }) {
   const db = useDatabase()

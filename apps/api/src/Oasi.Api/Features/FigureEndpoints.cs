@@ -116,7 +116,7 @@ public static class FigureEndpoints
             });
         }).RequireMember();
 
-        // Solo l'allieva (o il genitore) aggiorna il proprio stato: le valutazioni sono formative
+        // Solo l'atleta (o il genitore) aggiorna il proprio stato: le valutazioni sono formative
         progress.MapPut("/{figureId:guid}", async (HttpContext ctx, Db db, Guid figureId, ProgressInput input, Guid? memberId) =>
         {
             if (!ProgressStates.Contains(input.Status)) throw ApiException.Invalid("Stato non valido: usa to_learn, planned o achieved.");
@@ -161,10 +161,10 @@ public static class FigureEndpoints
             {
                 if (!m.IsAdmin)
                 {
-                    // L'insegnante scrive solo per allieve delle proprie classi
+                    // L'insegnante scrive solo per atlete delle proprie classi
                     var ok = await c.ExecuteScalarAsync<bool>(@"select exists(select 1 from app.enrollments e join app.class_teachers t on t.class_id = e.class_id
                         where e.member_id = @MemberId and e.status = 'approved' and t.member_id = @me)", new { input.MemberId, me = m.MemberId }, tx);
-                    if (!ok) throw ApiException.Forbidden("Puoi lasciare osservazioni solo alle allieve delle tue classi.");
+                    if (!ok) throw ApiException.Forbidden("Puoi lasciare osservazioni solo alle atlete delle tue classi.");
                 }
                 return await c.ExecuteScalarAsync<Guid>(@"
                     insert into app.feedback (tenant_id, member_id, figure_id, author_member_id, body, visible_to_student)

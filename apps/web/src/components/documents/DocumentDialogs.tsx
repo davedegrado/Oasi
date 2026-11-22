@@ -20,6 +20,7 @@ export function UploadDocumentDialog({ row, memberId, uploadedBy, onClose }: { r
   const [file, setFile] = useState<File | null>(null)
   const [signed, setSigned] = useState(false)
   const [expires, setExpires] = useState('')
+  const [title, setTitle] = useState(row.title ?? '')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const { type } = row
@@ -29,10 +30,11 @@ export function UploadDocumentDialog({ row, memberId, uploadedBy, onClose }: { r
     if (file.size > MAX_DOCUMENT_BYTES) return setError('Il file supera i 4 MB consentiti')
     if (!ALLOWED_DOCUMENT_TYPES.includes(file.type)) return setError('Formato non ammesso: carica un PDF o un’immagine (JPG, PNG)')
     if (type.signatureMode === 'caricamento_firmato' && !signed) return setError('Il modulo va caricato firmato a mano: conferma la firma')
+    if (row.needsTitle && !title.trim()) return setError('Dai un titolo al documento')
     setBusy(true)
     try {
       const fileData = await readFileAsDataUrl(file)
-      await repo.uploadDocument({ memberId, typeId: type.id, uploadedBy, fileName: file.name, fileType: file.type, fileSize: file.size, fileData, signedUpload: signed, expiresOn: expires || undefined })
+      await repo.uploadDocument({ memberId, typeId: type.id, uploadedBy, fileName: file.name, fileType: file.type, fileSize: file.size, fileData, signedUpload: signed, expiresOn: expires || undefined, title: title.trim() || undefined })
       toast(uploadedBy === 'admin' ? 'Documento caricato nel profilo' : 'Documento inviato alla segreteria per la verifica')
       onClose()
     } catch (e) {
@@ -46,7 +48,7 @@ export function UploadDocumentDialog({ row, memberId, uploadedBy, onClose }: { r
     <Dialog
       open
       onOpenChange={(o) => !o && onClose()}
-      title={row.doc ? `Sostituisci: ${type.name}` : `Carica: ${type.name}`}
+      title={row.doc ? `Sostituisci: ${row.title ?? type.name}` : row.needsTitle && type.id === '' ? 'Carica un documento' : `Carica: ${type.name}`}
       description={type.description}
       footer={
         <>
@@ -64,6 +66,11 @@ export function UploadDocumentDialog({ row, memberId, uploadedBy, onClose }: { r
           <p className="rounded-2xl bg-warn-soft p-3 text-sm text-ink-soft">
             <strong>Nota della segreteria:</strong> {row.doc.reviewNote}
           </p>
+        )}
+        {row.needsTitle && (
+          <Field label="Titolo del documento" htmlFor="doc-title" hint={type.id === '' ? undefined : `Per «${type.name}» servono ${type.requiredCount} documenti: dai un nome a ciascuno.`}>
+            <Input id="doc-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Es. Ricevuta compensi novembre" maxLength={120} />
+          </Field>
         )}
         <label className="flex cursor-pointer flex-col items-center gap-2 rounded-3xl border-2 border-dashed border-rosa/50 bg-cipria-50 px-4 py-6 text-center">
           <FileText className="size-7 text-rosa-intenso" />
@@ -85,8 +92,9 @@ export function UploadDocumentDialog({ row, memberId, uploadedBy, onClose }: { r
             Confermo che il documento è firmato a mano (scansione o foto del modulo firmato).
           </label>
         )}
-        {(type.validityMonths || type.category === 'certificato_medico') && (
-          <Field label="Data di scadenza (se indicata sul documento)" htmlFor="doc-exp" hint={type.validityMonths ? `Se vuota: ${type.validityMonths} mesi da oggi` : undefined}>
+        {/* La scadenza si può sempre indicare (facoltativa) */}
+        {(
+          <Field label="Data di scadenza (facoltativa)" htmlFor="doc-exp" hint={type.validityMonths ? `Se vuota: ${type.validityMonths} mesi da oggi` : undefined}>
             <Input id="doc-exp" type="date" value={expires} onChange={(e) => setExpires(e.target.value)} />
           </Field>
         )}
@@ -109,7 +117,7 @@ export function DocumentDetailDialog({ row, mode, onClose, onReplace }: { row: M
   const decide = async (decision: DocumentDecision) => {
     try {
       await repo.reviewDocument(doc!.id, decision, note)
-      toast(decision === 'approva' ? 'Documento approvato' : 'Richiesta inviata all’allieva')
+      toast(decision === 'approva' ? 'Documento approvato' : 'Richiesta inviata all’atleta')
       onClose()
     } catch (e) {
       setError(errorText(e))
@@ -119,7 +127,7 @@ export function DocumentDetailDialog({ row, mode, onClose, onReplace }: { row: M
   const history = [doc, ...previous].filter(Boolean).flatMap((d) => d!.history.map((h) => ({ ...h, version: d!.version }))).sort((a, b) => b.at.localeCompare(a.at))
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()} title={type.name} description={`${DOCUMENT_CATEGORY_LABEL[type.category]}${type.required ? ' · obbligatorio' : ''}`}>
+    <Dialog open onOpenChange={(o) => !o && onClose()} title={row.title ?? type.name} description={`${type.id === '' ? 'Documento libero' : DOCUMENT_CATEGORY_LABEL[type.category]}${type.required ? ' · obbligatorio' : ''}`}>
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <DocumentStateBadge state={state} />
@@ -170,7 +178,7 @@ export function DocumentDetailDialog({ row, mode, onClose, onReplace }: { row: M
             <p className="flex items-center gap-2 text-sm font-bold">
               <FileCheck2 className="size-4 text-rosa-intenso" /> Verifica della segreteria
             </p>
-            <Textarea rows={2} placeholder="Nota per l’allieva (obbligatoria se chiedi una correzione)" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Nota di verifica" />
+            <Textarea rows={2} placeholder="Nota per l’atleta (obbligatoria se chiedi una correzione)" value={note} onChange={(e) => setNote(e.target.value)} aria-label="Nota di verifica" />
             <div className="flex flex-wrap gap-2">
               {doc.status !== 'approvato' && (
                 <Button size="sm" onClick={() => decide('approva')}>

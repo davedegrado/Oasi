@@ -12,7 +12,7 @@ namespace Oasi.Api.Features;
 /// </summary>
 public static class MakeupCredits
 {
-    /// <summary>L'allieva (o il genitore) ha annunciato o ritirato un'assenza.</summary>
+    /// <summary>L'atleta (o il genitore) ha annunciato o ritirato un'assenza.</summary>
     public static async Task OnDeclaration(IDbConnection c, IDbTransaction tx, TenantSettings s, LessonRules.LessonInfo lesson, Guid memberId, string? declared)
     {
         if (declared == "absent")

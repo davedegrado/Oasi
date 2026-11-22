@@ -123,7 +123,7 @@ public static class ClosureEndpoints
 
     /// <summary>
     /// Annulla le lezioni nelle date della chiusura (quelle già annullate per altri motivi restano com'erano)
-    /// e chiude i recuperi richiesti o approvati su quelle lezioni, avvisando le allieve interessate:
+    /// e chiude i recuperi richiesti o approvati su quelle lezioni, avvisando le atlete interessate:
     /// nessun appuntamento resta fissato in un giorno di chiusura.
     /// </summary>
     internal static async Task Apply(IDbConnection c, IDbTransaction tx, Guid closureId, Guid? actor = null)

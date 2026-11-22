@@ -104,7 +104,7 @@ export function RequestsPanel({ teacherId, decidedBy, title = 'Richieste da appr
                     </div>
                   </div>
                   {actions(
-                    () => decide(() => repo.decideMakeup(r.id, true, decidedBy), 'Recupero confermato: compare nel calendario dell’allieva'),
+                    () => decide(() => repo.decideMakeup(r.id, true, decidedBy), 'Recupero confermato: compare nel calendario dell’atleta'),
                     () => decide(() => repo.decideMakeup(r.id, false, decidedBy), 'Recupero rifiutato'),
                   )}
                 </li>

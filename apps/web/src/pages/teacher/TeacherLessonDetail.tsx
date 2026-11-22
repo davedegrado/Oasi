@@ -50,7 +50,7 @@ export function TeacherLessonDetail({ basePath = '/insegnante/lezioni', studentB
   const saveSubstitute = async (teacherId: string | null) => {
     try {
       await repo.setSubstitute(lesson.id, teacherId, sub.note.trim())
-      toast(teacherId ? 'Sostituzione assegnata: insegnante e allieve sono avvisate' : 'Sostituzione annullata', teacherId ? undefined : 'info')
+      toast(teacherId ? 'Sostituzione assegnata: insegnante e atlete sono avvisate' : 'Sostituzione annullata', teacherId ? undefined : 'info')
       setSubDialog(false)
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Operazione non riuscita', 'info')
@@ -71,7 +71,7 @@ export function TeacherLessonDetail({ basePath = '/insegnante/lezioni', studentB
     if (!statusDialog) return
     if (statusDialog === 'variata') await repo.updateLesson(lesson.id, { status: 'variata', startTime: form.startTime, endTime: form.endTime, note: form.note })
     else await repo.updateLesson(lesson.id, { status: statusDialog, note: form.note })
-    toast(statusDialog === 'annullata' ? 'Lezione annullata: le allieve vedranno l’avviso' : 'Orario aggiornato nel calendario')
+    toast(statusDialog === 'annullata' ? 'Lezione annullata: le atlete vedranno l’avviso' : 'Orario aggiornato nel calendario')
     setStatusDialog(null)
   }
 
@@ -187,7 +187,7 @@ export function TeacherLessonDetail({ basePath = '/insegnante/lezioni', studentB
                 <p className="text-[11px] font-semibold text-danger">hanno disdetto</p>
               </div>
             </div>
-            <p className="mb-3 text-xs text-ink-muted">Le allieve sono attese di default e possono disdire dall’app; i pulsanti a destra registrano la presenza effettiva.</p>
+            <p className="mb-3 text-xs text-ink-muted">Le atlete sono attese di default e possono disdire dall’app; i pulsanti a destra registrano la presenza effettiva.</p>
             <ul className="divide-y divide-line/70">
               {roster.map(({ student: s, isMakeup, isBooking, declared }) => {
                 const m = lesson.attendance[s.id]
@@ -229,7 +229,7 @@ export function TeacherLessonDetail({ basePath = '/insegnante/lezioni', studentB
                 )
               })}
             </ul>
-            <p className="mt-3 text-xs text-ink-muted">Le presenze vengono salvate subito e compaiono nello storico di ciascuna allieva.</p>
+            <p className="mt-3 text-xs text-ink-muted">Le presenze vengono salvate subito e compaiono nello storico di ciascuna atleta.</p>
           </CardContent>
         </Card>
       )}
@@ -238,7 +238,7 @@ export function TeacherLessonDetail({ basePath = '/insegnante/lezioni', studentB
         open={!!statusDialog}
         onOpenChange={(o) => !o && setStatusDialog(null)}
         title={statusDialog === 'annullata' ? 'Annulla lezione' : 'Varia orario'}
-        description="Le allieve vedranno la comunicazione nella loro Home e nel calendario."
+        description="Le atlete vedranno la comunicazione nella loro Home e nel calendario."
         footer={
           <>
             <Button variant="outline" onClick={() => setStatusDialog(null)}>
@@ -261,7 +261,7 @@ export function TeacherLessonDetail({ basePath = '/insegnante/lezioni', studentB
               </Field>
             </div>
           )}
-          <Field label="Messaggio per le allieve" htmlFor="status-note">
+          <Field label="Messaggio per le atlete" htmlFor="status-note">
             <Textarea id="status-note" rows={3} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder={statusDialog === 'annullata' ? 'Es. la lezione verrà recuperata sabato…' : 'Es. sala occupata fino alle 20…'} />
           </Field>
         </div>
@@ -270,7 +270,7 @@ export function TeacherLessonDetail({ basePath = '/insegnante/lezioni', studentB
         open={subDialog}
         onOpenChange={setSubDialog}
         title="Sostituzione"
-        description="In caso di assenza indica chi tiene la lezione: la vedrà nel suo calendario e potrà compilare le presenze. Le allieve vengono avvisate."
+        description="In caso di assenza indica chi tiene la lezione: la vedrà nel suo calendario e potrà compilare le presenze. Le atlete vengono avvisate."
         footer={
           <>
             {substitute && (

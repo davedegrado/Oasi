@@ -11,12 +11,12 @@ import { MemberDocumentsPanel } from '@/components/documents/MemberDocumentsPane
 import { useDatabase } from '@/hooks/useDatabase'
 import { findStudent } from '@/services/selectors'
 
-/** Percorso di un'allieva visto da insegnante o amministrazione */
+/** Percorso di un'atleta visto da insegnante o amministrazione */
 export function StudentJourneyPage({ backTo, backLabel, figureBase, showAdmin }: { backTo: string; backLabel: string; figureBase: string; showAdmin?: boolean }) {
   const { id } = useParams()
   const db = useDatabase()
   const student = findStudent(db, id)
-  if (!student) return <EmptyState title="Allieva non trovata" action={<Link to={backTo}>{backLabel}</Link>} />
+  if (!student) return <EmptyState title="Atleta non trovata" action={<Link to={backTo}>{backLabel}</Link>} />
 
   return (
     <div className="animate-fade-up space-y-5">

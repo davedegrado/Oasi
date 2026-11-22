@@ -14,7 +14,7 @@ import { photo } from '@/lib/assets'
 const ROLES: { role: Role; title: string; subtitle: string; icon: typeof UserRound; accent: string }[] = [
   {
     role: 'allieva',
-    title: 'Sono un’allieva',
+    title: 'Sono un’atleta',
     subtitle: 'Lezioni, archivio figure e i tuoi progressi',
     icon: UserRound,
     accent: 'bg-rosa-intenso text-white',
@@ -22,7 +22,7 @@ const ROLES: { role: Role; title: string; subtitle: string; icon: typeof UserRou
   {
     role: 'insegnante',
     title: 'Sono un’insegnante',
-    subtitle: 'Presenze, allieve e gestione delle figure',
+    subtitle: 'Presenze, atlete e gestione delle figure',
     icon: GraduationCap,
     accent: 'bg-cipria text-rosa-scuro',
   },
@@ -56,7 +56,7 @@ export function WelcomePage() {
       <div className="relative h-[52dvh] min-h-[340px] overflow-hidden lg:sticky lg:top-0 lg:h-dvh">
         <img
           src={config.coverUrl ?? photo('cerchio-12')}
-          alt="Allieva in sospensione durante una lezione"
+          alt="Atleta in sospensione durante una lezione"
           className="absolute inset-0 size-full object-cover object-[50%_30%]"
           fetchPriority="high"
         />

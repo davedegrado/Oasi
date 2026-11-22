@@ -17,7 +17,7 @@ import { fmtDay, openDocumentFile, readFileAsDataUrl, STATE_META } from '@/compo
 import { DocumentDetailDialog } from '@/components/documents/DocumentDialogs'
 import { useDatabase, useRepository } from '@/hooks/useDatabase'
 import { useToast } from '@/hooks/useToast'
-import { documentState, memberDocuments, missingDocuments, type DocumentState, type MemberDocumentRow } from '@/services/documents'
+import { documentState, FREE_TYPE, memberDocuments, missingDocuments, type DocumentState, type MemberDocumentRow } from '@/services/documents'
 import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from '@/services/localRepository'
 import { DOCUMENT_CATEGORY_LABEL } from '@/lib/labels'
 import { cn, fullName, uid } from '@/lib/utils'
@@ -28,7 +28,7 @@ const STATES = ['in_verifica', 'approvato', 'da_sostituire', 'rifiutato', 'in_sc
 
 /**
  * Archivio documentale generale. Legge gli stessi documenti dei profili
- * (nessuna copia): ogni riga apre il documento dell'allieva.
+ * (nessuna copia): ogni riga apre il documento dell'atleta.
  */
 export function AdminArchive() {
   const db = useDatabase()
@@ -40,7 +40,7 @@ export function AdminArchive() {
 
   return (
     <div className="animate-fade-up space-y-5">
-      <PageHeader eyebrow="Amministrazione" title="Archivio documenti" description="Moduli, liberatorie, consensi e certificati di tutte le allieve, con verifiche, scadenze e storico." />
+      <PageHeader eyebrow="Amministrazione" title="Archivio documenti" description="Moduli, liberatorie, consensi e certificati di tutte le atlete, con verifiche, scadenze e storico." />
       <Segmented<Tab>
         value={tab}
         onChange={setTab}
@@ -71,16 +71,18 @@ function DocumentsTab() {
   const [to, setTo] = useState('')
   const [expiresBefore, setExpiresBefore] = useState('')
   const [history, setHistory] = useState(false)
-  const [open, setOpen] = useState<{ memberId: string; typeId: string } | null>(null)
+  const [open, setOpen] = useState<{ memberId: string; docId: string } | null>(null)
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase()
     return db.documents
       .filter((d) => history || d.current)
       .map((d) => {
-        // Documenti delle allieve e degli insegnanti: una sola riga per documento, letta dal profilo e dall'archivio
+        // Documenti delle atlete e degli insegnanti: una sola riga per documento, letta dal profilo e dall'archivio
         const student = db.students.find((s) => s.id === d.memberId) ?? db.teachers.find((t) => t.id === d.memberId)
-        const type = db.documentTypes.find((t) => t.id === d.typeId)
+        const known = d.typeId === '' ? FREE_TYPE : db.documentTypes.find((t) => t.id === d.typeId)
+        // Documenti liberi o con più documenti per tipologia: si mostra il titolo dato da chi carica
+        const type = known && d.title ? { ...known, name: d.title } : known
         return { d, student, type, state: (d.current ? documentState(d, undefined, type) : d.status) as DocumentState }
       })
       .filter(({ d, student, type, state }) =>
@@ -96,7 +98,7 @@ function DocumentsTab() {
       .sort((a, b) => Number(b.state === 'in_verifica') - Number(a.state === 'in_verifica') || b.d.uploadedAt.localeCompare(a.d.uploadedAt))
   }, [db, q, category, typeId, status, from, to, expiresBefore, history])
 
-  const row: MemberDocumentRow | undefined = open ? memberDocuments(db, open.memberId).find((r) => r.type.id === open.typeId) : undefined
+  const row: MemberDocumentRow | undefined = open ? memberDocuments(db, open.memberId).find((r) => r.doc?.id === open.docId || r.previous.some((p) => p.id === open.docId)) : undefined
   const reset = () => {
     setQ(''); setCategory(''); setTypeId(''); setStatus(''); setFrom(''); setTo(''); setExpiresBefore('')
   }
@@ -107,7 +109,7 @@ function DocumentsTab() {
         <CardContent className="space-y-3">
           <div className="relative">
             <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-ink-muted" />
-            <Input className="pl-10" placeholder="Cerca per nome o email dell’allieva" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Cerca allieva" />
+            <Input className="pl-10" placeholder="Cerca per nome o email dell’atleta" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Cerca atleta" />
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
             <Select value={category} onChange={(e) => setCategory(e.target.value)} aria-label="Categoria">
@@ -146,7 +148,7 @@ function DocumentsTab() {
             <li key={d.id}>
               <button
                 type="button"
-                onClick={() => setOpen({ memberId: d.memberId, typeId: d.typeId })}
+                onClick={() => setOpen({ memberId: d.memberId, docId: d.id })}
                 className={cn('flex w-full items-center gap-3 rounded-2xl bg-white p-3 text-left shadow-soft transition hover:ring-2 hover:ring-rosa/40', !d.current && 'opacity-70')}
               >
                 <Avatar person={student!} size="sm" />
@@ -324,9 +326,9 @@ function TypeDialog({ type, onClose }: { type: DocumentType; onClose: () => void
         </Field>
         <Field label="Richiesto a" htmlFor="dt-aud">
           <Select id="dt-aud" value={form.audience ?? 'allieve'} onChange={(e) => set('audience', e.target.value as 'allieve' | 'insegnanti' | 'tutti')}>
-            <option value="allieve">Allieve</option>
+            <option value="allieve">Atlete</option>
             <option value="insegnanti">Insegnanti</option>
-            <option value="tutti">Allieve e insegnanti</option>
+            <option value="tutti">Atlete e insegnanti</option>
           </Select>
         </Field>
         <Field label="Firma a mano" htmlFor="dt-sign">
@@ -334,14 +336,14 @@ function TypeDialog({ type, onClose }: { type: DocumentType; onClose: () => void
             {(Object.keys(SIGNATURE_LABEL) as DocumentType['signatureMode'][]).map((s) => <option key={s} value={s}>{SIGNATURE_LABEL[s]}</option>)}
           </Select>
         </Field>
-        <Field label="Descrizione per le allieve" htmlFor="dt-desc" className="sm:col-span-2">
+        <Field label="Descrizione per le atlete" htmlFor="dt-desc" className="sm:col-span-2">
           <Textarea id="dt-desc" rows={2} value={form.description} onChange={(e) => set('description', e.target.value)} />
         </Field>
         <Field label="Validità (mesi, vuoto = nessuna scadenza)" htmlFor="dt-val">
           <Input id="dt-val" type="number" min={1} value={form.validityMonths ?? ''} onChange={(e) => set('validityMonths', e.target.value ? Number(e.target.value) : undefined)} />
         </Field>
         <div className="space-y-2 text-sm text-ink-soft">
-          {([['required', 'Obbligatorio per tutti i destinatari'], ['requiredForCompetitive', 'Obbligatorio solo per agoniste e classi agonistiche'], ['sensitive', 'Dato riservato (es. sanitario)'], ['active', 'Attiva (richiesta alle allieve)']] as const).map(([k, label]) => (
+          {([['required', 'Obbligatorio per tutti i destinatari'], ['requiredForCompetitive', 'Obbligatorio solo per agoniste e classi agonistiche'], ['sensitive', 'Dato riservato (es. sanitario)'], ['active', 'Attiva (richiesta alle atlete)']] as const).map(([k, label]) => (
             <label key={k} className="flex items-center gap-2">
               <input type="checkbox" className="size-4 accent-rosa-intenso" checked={!!form[k]} onChange={(e) => set(k, e.target.checked)} /> {label}
             </label>
@@ -361,7 +363,7 @@ function SharedTab() {
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-ink-muted">Regolamenti e moduli scaricabili dalle allieve o dalle insegnanti.</p>
+        <p className="text-sm text-ink-muted">Regolamenti e moduli scaricabili dalle atlete o dalle insegnanti.</p>
         <Button onClick={() => setAdding(true)}>
           <Upload /> Pubblica documento
         </Button>
@@ -430,7 +432,7 @@ function SharedDialog({ onClose }: { onClose: () => void }) {
         <Field label="Visibile a" htmlFor="sh-aud">
           <Select id="sh-aud" value={audience} onChange={(e) => setAudience(e.target.value as SharedDocument['audience'])}>
             <option value="tutti">Tutti</option>
-            <option value="allieve">Solo allieve</option>
+            <option value="allieve">Solo atlete</option>
             <option value="insegnanti">Solo insegnanti</option>
           </Select>
         </Field>

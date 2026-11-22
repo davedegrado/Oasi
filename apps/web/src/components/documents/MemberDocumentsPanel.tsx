@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { useDatabase } from '@/hooks/useDatabase'
 import { DOCUMENT_CATEGORY_LABEL } from '@/lib/labels'
 import { cn } from '@/lib/utils'
-import { documentSummary, memberDocuments, needsAction, type MemberDocumentRow, periodDue } from '@/services/documents'
+import { documentSummary, memberDocuments, needsAction, type MemberDocumentRow, periodDue, FREE_TYPE } from '@/services/documents'
 import { DocumentStateBadge } from './DocumentBits'
 import { fmtDay } from './documentUtils'
 import { DocumentDetailDialog, UploadDocumentDialog } from './DocumentDialogs'
@@ -14,8 +14,8 @@ import { DocumentDetailDialog, UploadDocumentDialog } from './DocumentDialogs'
 type Mode = 'allieva' | 'admin'
 
 /**
- * Documenti di un profilo. Allieva: carica, firma, sostituisce e consulta.
- * Amministrazione: verifica, approva, rifiuta, chiede la sostituzione, carica per conto dell'allieva.
+ * Documenti di un profilo. Atleta: carica, firma, sostituisce e consulta.
+ * Amministrazione: verifica, approva, rifiuta, chiede la sostituzione, carica per conto dell'atleta.
  * Le insegnanti non vedono questa sezione (dati personali e sanitari).
  */
 export function MemberDocumentsPanel({ memberId, mode }: { memberId: string; mode: Mode }) {
@@ -24,7 +24,7 @@ export function MemberDocumentsPanel({ memberId, mode }: { memberId: string; mod
   const summary = documentSummary(rows)
   const [upload, setUpload] = useState<MemberDocumentRow | null>(null)
   const [detail, setDetail] = useState<MemberDocumentRow | null>(null)
-  const current = detail ? memberDocuments(db, memberId).find((r) => r.type.id === detail.type.id) ?? null : null
+  const current = detail ? rows.find((r) => r.key === detail.key) ?? null : null
 
   return (
     <Card>
@@ -54,11 +54,11 @@ export function MemberDocumentsPanel({ memberId, mode }: { memberId: string; mod
             const { type, doc, state } = row
             const action = needsAction(state)
             return (
-              <li key={type.id} className={cn('rounded-2xl border p-3', action && mode === 'allieva' ? 'border-warn/40 bg-warn-soft/40' : 'border-line/70 bg-white')}>
+              <li key={row.key} className={cn('rounded-2xl border p-3', action && mode === 'allieva' ? 'border-warn/40 bg-warn-soft/40' : 'border-line/70 bg-white')}>
                 <div className="flex items-start gap-3">
                   <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setDetail(row)} aria-label={`Dettaglio ${type.name}`}>
                     <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold text-ink">
-                      {type.name}
+                      {row.title ?? (row.needsTitle ? `${type.name} · da caricare` : type.name)}
                       {type.required && <span className="text-[11px] font-semibold text-rosa-intenso uppercase">obbligatorio</span>}
                       {type.sensitive && <Lock className="size-3.5 text-ink-muted" aria-label="Dato riservato" />}
                     </p>
@@ -95,8 +95,17 @@ export function MemberDocumentsPanel({ memberId, mode }: { memberId: string; mod
               </li>
             )
           })}
-          {rows.length === 0 && <p className="text-sm text-ink-muted">La palestra non ha ancora configurato documenti richiesti.</p>}
+          {rows.length === 0 && <p className="text-sm text-ink-muted">Nessun documento richiesto per ora.</p>}
         </ul>
+        {/* Documento libero: non serve sapere prima che documento sia */}
+        <Button
+          className="mt-3"
+          size="sm"
+          variant="soft"
+          onClick={() => setUpload({ key: 'free:new', type: FREE_TYPE, state: 'mancante', previous: [], needsTitle: true })}
+        >
+          <Upload /> Carica un altro documento
+        </Button>
         {mode === 'allieva' && (
           <p className="mt-4 flex items-start gap-2 text-xs text-ink-muted">
             <FileSignature className="mt-0.5 size-3.5 shrink-0" />I moduli si firmano a mano e si caricano come scansione o foto. I documenti sono visibili solo a te e alla segreteria. Il certificato medico è un dato riservato e non è accessibile alle insegnanti.

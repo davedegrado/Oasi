@@ -6,7 +6,7 @@ namespace Oasi.Api.Features;
 
 /// <summary>
 /// Persone della struttura. L'amministrazione vede tutti; un insegnante solo gli
-/// allievi delle proprie classi e senza dati amministrativi; un genitore solo i
+/// atleti delle proprie classi e senza dati amministrativi; un genitore solo i
 /// figli collegati al proprio account; ciascuno il proprio profilo.
 /// </summary>
 public static class MemberEndpoints
@@ -62,7 +62,7 @@ public static class MemberEndpoints
                 order by mb.last_name, mb.first_name limit 1000", new { q, classId, full = m.IsAdmin, me = m.MemberId }, tx));
         }).RequireMember(Roles.Admin, Roles.Teacher);
 
-        // I figli collegati al proprio account (genitore/tutore): mai i dati di altri allievi
+        // I figli collegati al proprio account (genitore/tutore): mai i dati di altri atleti
         g.MapGet("/children", async (HttpContext ctx, Db db) =>
         {
             var m = ctx.Member();
@@ -152,7 +152,7 @@ public static class MemberEndpoints
             var m = ctx.Member();
             var row = await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
             {
-                // Le foto degli allievi sono visibili a staff, interessato e genitore
+                // Le foto degli atleti sono visibili a staff, interessato e genitore
                 if (!m.IsAdmin && !m.IsTeacher && id != m.MemberId) await Relations.EnsureCanActFor(c, tx, m, id, "view");
                 return await c.QuerySingleOrDefaultAsync<(string? Path, string? Type)?>(@"
                     select mb.avatar_path, o.content_type from app.members mb left join app.media_objects o on o.path = mb.avatar_path where mb.id = @id", new { id }, tx);

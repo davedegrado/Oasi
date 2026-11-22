@@ -7,7 +7,7 @@ import { formatDate, todayISO } from '@/lib/dates'
 
 const LABEL = { pagata: ['Pagata', 'ok'], parziale: ['Acconto', 'warn'], scaduta: ['Scaduta', 'danger'], aperta: ['Da pagare', 'rosa'], annullata: ['Annullata', 'neutral'] } as const
 
-/** Quote e pagamenti registrati di un'allieva. I pagamenti avvengono fuori dall'app. */
+/** Quote e pagamenti registrati di un'atleta. I pagamenti avvengono fuori dall'app. */
 export function AccountCard({ studentId }: { studentId: string }) {
   const db = useDatabase()
   const today = todayISO()

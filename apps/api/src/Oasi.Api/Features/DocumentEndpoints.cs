@@ -295,7 +295,7 @@ public static class DocumentEndpoints
                 "request_replacement" => "replacement_requested",
                 _ => throw ApiException.Invalid("Azione non valida: approve, reject o request_replacement."),
             };
-            if (next != "approved" && string.IsNullOrWhiteSpace(input.Note)) throw ApiException.Invalid("Spiega all'allieva cosa correggere.");
+            if (next != "approved" && string.IsNullOrWhiteSpace(input.Note)) throw ApiException.Invalid("Spiega all'atleta cosa correggere.");
             var m = ctx.Member();
             await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
             {
@@ -537,7 +537,7 @@ public static class DocumentEndpoints
 
     /// <summary>
     /// Interessata, genitore collegato o amministrazione. Le insegnanti non accedono ai
-    /// documenti delle allieve (dati personali e sanitari).
+    /// documenti delle atlete (dati personali e sanitari).
     /// </summary>
     private static async Task EnsureCanSeeMemberDocuments(IDbConnection c, IDbTransaction tx, Member m, Guid memberId)
     {

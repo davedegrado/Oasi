@@ -44,7 +44,7 @@ export function lessonsForClasses(db: OasiDatabase, classIds: string[]): Lesson[
   return sortLessons(db.lessons.filter((l) => classIds.includes(l.classId)))
 }
 
-/** Lezioni dell'allieva: le sue classi + i recuperi approvati */
+/** Lezioni dell'atleta: le sue classi + i recuperi approvati */
 export function lessonsForStudent(db: OasiDatabase, studentId: string): Lesson[] {
   const student = findStudent(db, studentId)
   if (!student) return []
@@ -113,11 +113,24 @@ export function lessonTeacherId(db: OasiDatabase, lesson: Lesson): string | unde
 
 /** La lezione si prenota come lezione singola? La prenotazione si apre N ore prima (impostazione della palestra) */
 export function singleLessonWindow(db: OasiDatabase, lesson: Lesson, now = new Date()) {
-  const opens = db.association.settings.bookingOpensHours
+  const s = db.association.settings
+  return lessonWindow(lesson, s.bookingOpensHours, s.bookingClosesHours ?? 0, now)
+}
+
+/** Recupero: si chiede dentro la finestra impostata dall'amministrazione (da N a M ore prima della lezione) */
+export function makeupWindow(db: OasiDatabase, lesson: Lesson, now = new Date()) {
+  const s = db.association.settings
+  return lessonWindow(lesson, s.makeupOpensHours, s.makeupClosesHours ?? 0, now)
+}
+
+function lessonWindow(lesson: Lesson, opens: number | undefined, closes: number, now: Date) {
   const start = new Date(`${lesson.date}T${lesson.startTime}:00`)
   const hours = (start.getTime() - now.getTime()) / 3_600_000
   const openAt = opens ? new Date(start.getTime() - opens * 3_600_000) : null
-  return { hours, open: hours > 0 && (opens === undefined || hours <= opens), openAt }
+  const closeAt = new Date(start.getTime() - closes * 3_600_000)
+  const tooEarly = opens !== undefined && opens !== null && hours > opens
+  const tooLate = hours < Math.max(closes, 0) || hours <= 0
+  return { hours, open: !tooEarly && !tooLate, tooEarly, tooLate, openAt, closeAt }
 }
 
 export function upcomingLessons(lessons: Lesson[], includeCancelled = true): Lesson[] {
@@ -179,7 +192,7 @@ export function studentsOfTeacher(db: OasiDatabase, teacherId: string): Student[
   return db.students.filter((s) => ids.has(s.id))
 }
 
-/** Allieve che stanno lavorando (stato "In progetto") su ciascuna figura */
+/** Atlete che stanno lavorando (stato "In progetto") su ciascuna figura */
 export function studentsWorkingOnFigures(db: OasiDatabase, students: Student[]) {
   return db.figures
     .map((figure) => ({
@@ -320,7 +333,7 @@ export function chargeState(c: Charge, today: string): ChargeState {
   return paid > 0 ? 'parziale' : 'aperta'
 }
 
-/** Riepilogo economico di un'allieva (o di tutta la palestra se studentId è assente) */
+/** Riepilogo economico di un'atleta (o di tutta la palestra se studentId è assente) */
 export function accountSummary(db: OasiDatabase, today: string, studentId?: string) {
   const charges = db.charges.filter((c) => !c.cancelled && (!studentId || c.studentId === studentId))
   const due = charges.reduce((s, c) => s + c.amountCents, 0)
@@ -334,7 +347,7 @@ export const euro = (cents: number) => new Intl.NumberFormat('it-IT', { style: '
 /** Tipi di evento che prevedono un'esibizione: per questi si indicano i brani */
 export const isPerformance = (e: { type: string }) => e.type === 'gara' || e.type === 'saggio' || e.type === 'spettacolo'
 
-/** Partecipanti di un evento: adesioni e allieve delle classi collegate */
+/** Partecipanti di un evento: adesioni e atlete delle classi collegate */
 export function eventParticipants(db: OasiDatabase, event: { participantIds: string[]; classIds?: string[] }) {
   const fromClasses = db.classes.filter((c) => event.classIds?.includes(c.id)).flatMap((c) => c.studentIds)
   return [...new Set([...event.participantIds, ...fromClasses])].map((id) => findStudent(db, id)).filter((s): s is Student => !!s)

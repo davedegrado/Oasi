@@ -17,7 +17,7 @@ import { cn, fullName } from '@/lib/utils'
 
 const ROLE_META: Record<Role, { icon: typeof UserRound; description: string }> = {
   allieva: { icon: UserRound, description: 'Calendario, archivio figure e progressi personali' },
-  insegnante: { icon: GraduationCap, description: 'Lezioni, presenze, allieve e gestione figure' },
+  insegnante: { icon: GraduationCap, description: 'Lezioni, presenze, atlete e gestione figure' },
   admin: { icon: Shield, description: 'Utenti, classi, eventi e configurazione' },
 }
 
@@ -75,7 +75,7 @@ export function RoleSwitcher({ open, onOpenChange }: { open: boolean; onOpenChan
 
       {people.length > 0 && persona?.userId && (
         <div className="mt-5">
-          <Label htmlFor="persona-select">{persona.role === 'allieva' ? 'Visualizza come allieva' : 'Visualizza come insegnante'}</Label>
+          <Label htmlFor="persona-select">{persona.role === 'allieva' ? 'Visualizza come atleta' : 'Visualizza come insegnante'}</Label>
           <Select
             id="persona-select"
             value={persona.userId}

@@ -17,15 +17,11 @@ export const demoDocumentTypes: DocumentType[] = [
     id: 'dt-agonistico', name: 'Certificato medico agonistico', category: 'certificato_medico', required: false, requiredForCompetitive: true, signatureMode: 'nessuna', validityMonths: 12, sensitive: true, active: true,
     description: 'Certificato di idoneità all’attività sportiva agonistica. Richiesto solo agli agonisti e agli iscritti a classi agonistiche o preagonistiche.',
   },
-  // Insegnanti: due documenti ogni mese, entro la fine del mese (regola di Oasi). Il prompt non li nomina:
-  // i nomi sono provvisori e l'amministrazione li cambia in Archivio → Tipologie.
+  // Insegnanti: due documenti ogni mese, entro la fine del mese (regola di Oasi). Quali siano non è
+  // definito: l'insegnante dà a ciascuno il titolo che vuole e, se serve, la scadenza.
   {
-    id: 'dt-mensile-1', name: 'Documento mensile insegnanti 1', category: 'altro', required: true, audience: 'insegnanti', recurrence: 'mensile', signatureMode: 'nessuna', sensitive: false, active: true,
-    description: 'Primo dei due documenti richiesti ogni mese per pagamenti e adempimenti. Da caricare entro la fine del mese.',
-  },
-  {
-    id: 'dt-mensile-2', name: 'Documento mensile insegnanti 2', category: 'altro', required: true, audience: 'insegnanti', recurrence: 'mensile', signatureMode: 'nessuna', sensitive: false, active: true,
-    description: 'Secondo dei due documenti richiesti ogni mese per pagamenti e adempimenti. Da caricare entro la fine del mese.',
+    id: 'dt-mensili', name: 'Documenti mensili insegnanti', category: 'altro', required: true, audience: 'insegnanti', recurrence: 'mensile', requiredCount: 2, signatureMode: 'nessuna', sensitive: false, active: true,
+    description: 'Due documenti da caricare ogni mese, entro la fine del mese, per pagamenti e adempimenti. Indica tu il titolo di ciascuno.',
   },
   {
     id: 'dt-liberatoria', name: 'Liberatoria attività aeree', category: 'liberatoria', required: true, signatureMode: 'caricamento_firmato', sensitive: false, active: true,
@@ -52,8 +48,8 @@ const seeds: DocSeed[] = [
   { id: 'doc-francesca-isc', memberId: 'stu-francesca', typeId: 'dt-iscrizione', version: 1, current: true, status: 'da_sostituire', fileName: 'iscrizione-foto.jpg', fileType: 'image/jpeg', fileSize: 1400000, fileData: DEMO_PDF, uploadedBy: 'stu-francesca', daysAgo: 6, reviewedDaysAgo: 4, reviewNote: 'Manca la firma nella seconda pagina: carica il modulo completo.' },
   // Agoniste (Cerchio Avanzato): Elisa ha il certificato agonistico approvato, a Lucia manca
   // Insegnanti: Chiara ha caricato il primo documento del mese (approvato), Elena il primo in attesa di verifica
-  { id: 'doc-chiara-m1', memberId: 'tch-chiara', typeId: 'dt-mensile-1', version: 1, current: true, status: 'approvato', fileName: 'documento-mese.pdf', fileType: 'application/pdf', fileSize: 64000, fileData: DEMO_PDF, uploadedBy: 'tch-chiara', daysAgo: 0, reviewedDaysAgo: 0, monthly: true },
-  { id: 'doc-elena-m1', memberId: 'tch-elena', typeId: 'dt-mensile-1', version: 1, current: true, status: 'in_verifica', fileName: 'documento-mese.pdf', fileType: 'application/pdf', fileSize: 58000, fileData: DEMO_PDF, uploadedBy: 'tch-elena', daysAgo: 0, monthly: true },
+  { id: 'doc-chiara-m1', memberId: 'tch-chiara', typeId: 'dt-mensili', title: 'Ricevuta compensi', version: 1, current: true, status: 'approvato', fileName: 'ricevuta-compensi.pdf', fileType: 'application/pdf', fileSize: 64000, fileData: DEMO_PDF, uploadedBy: 'tch-chiara', daysAgo: 0, reviewedDaysAgo: 0, monthly: true },
+  { id: 'doc-elena-m1', memberId: 'tch-elena', typeId: 'dt-mensili', title: 'Ricevuta compensi', version: 1, current: true, status: 'in_verifica', fileName: 'ricevuta-compensi.pdf', fileType: 'application/pdf', fileSize: 58000, fileData: DEMO_PDF, uploadedBy: 'tch-elena', daysAgo: 0, monthly: true },
   { id: 'doc-elisa-agon', memberId: 'stu-elisa', typeId: 'dt-agonistico', version: 1, current: true, status: 'approvato', fileName: 'certificato-agonistico.pdf', fileType: 'application/pdf', fileSize: 120300, fileData: DEMO_PDF, uploadedBy: 'stu-elisa', daysAgo: 45, expiresIn: 320, reviewedDaysAgo: 43 },
   { id: 'doc-ilaria-cert', memberId: 'stu-ilaria', typeId: 'dt-certificato', version: 1, current: true, status: 'approvato', fileName: 'certificato-2025.pdf', fileType: 'application/pdf', fileSize: 87000, fileData: DEMO_PDF, uploadedBy: 'stu-ilaria', daysAgo: 380, expiresIn: -15, reviewedDaysAgo: 378 },
 ]

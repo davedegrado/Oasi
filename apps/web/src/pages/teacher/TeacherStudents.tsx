@@ -27,11 +27,11 @@ export function TeacherStudents() {
 
   return (
     <div className="animate-fade-up">
-      <PageHeader eyebrow="Allieve" title="Le tue allieve" description="Presenze e progressi aggiornati in tempo reale dalle schede figure delle allieve." />
+      <PageHeader eyebrow="Atlete" title="Le tue atlete" description="Presenze e progressi aggiornati in tempo reale dalle schede figure delle atlete." />
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-ink-muted" />
-          <Input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cerca per nome" className="pl-11" aria-label="Cerca allieva" />
+          <Input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cerca per nome" className="pl-11" aria-label="Cerca atleta" />
         </div>
         <Segmented value={classId} onChange={setClassId} size="sm" options={[{ value: 'tutte', label: 'Tutte' }, ...myClasses.map((c) => ({ value: c.id, label: c.name }))]} />
       </div>
@@ -41,7 +41,7 @@ export function TeacherStudents() {
       </div>
 
       {students.length === 0 ? (
-        <EmptyState title="Nessuna allieva trovata" />
+        <EmptyState title="Nessuna atleta trovata" />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           {students.map((s) => {

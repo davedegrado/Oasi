@@ -45,7 +45,7 @@ public static class EventEndpoints
     public const long MaxAudioBytes = 25 * 1024 * 1024;
 
     /// <summary>
-    /// Partecipanti dell'evento: adesioni confermate, persone assegnate e allievi delle classi collegate.
+    /// Partecipanti dell'evento: adesioni confermate, persone assegnate e atleti delle classi collegate.
     /// </summary>
     private const string ParticipantsSql = @"
         select s.member_id from app.event_signups s where s.event_id = @id and s.status = 'confirmed'
@@ -138,7 +138,7 @@ public static class EventEndpoints
         }).RequireMember(Roles.Admin);
 
         // Performance: brano (nome, collegamento, file audio), luogo e partecipanti.
-        // Li gestisce l'amministrazione; insegnanti e allievi li consultano.
+        // Li gestisce l'amministrazione; insegnanti e atleti li consultano.
         g.MapGet("/{id:guid}/tracks", async (HttpContext ctx, Db db, Guid id) =>
         {
             var m = ctx.Member();
@@ -323,7 +323,7 @@ public static class EventEndpoints
 
     /// <summary>
     /// Destinatari: se l'evento è collegato a classi, discipline o insegnanti, solo gli interessati
-    /// (allievi, loro genitori, insegnanti); altrimenti tutta la struttura.
+    /// (atleti, loro genitori, insegnanti); altrimenti tutta la struttura.
     /// </summary>
     private static async Task NotifyAudience(System.Data.IDbConnection c, System.Data.IDbTransaction tx, Guid eventId, Guid actor, string title, EventInput input)
     {

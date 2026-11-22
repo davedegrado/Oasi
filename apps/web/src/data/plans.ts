@@ -62,7 +62,7 @@ export const demoPlans: FeePlan[] = [
   { id: 'plan-tessera-16', name: 'Tessera associativa · dai 16 anni', category: 'Tessera', kind: 'tessera', billing: 'annuale', amountCents: eur(27), ...season, active: true },
 ]
 
-/** Dati dimostrativi: a ogni allieva un piano Adulti/Teen annuale secondo le classi frequentate, più la tessera */
+/** Dati dimostrativi: a ogni atleta un piano Adulti/Teen annuale secondo le classi frequentate, più la tessera */
 export function buildDemoAccounts(students: Student[], today: string): { memberPlans: MemberPlan[]; charges: Charge[] } {
   const memberPlans: MemberPlan[] = []
   const charges: Charge[] = []

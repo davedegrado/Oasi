@@ -9,7 +9,7 @@ import { CLOSURE_KIND_LABEL } from '@/components/closures/closureLabels'
 
 /**
  * Calendario generale della palestra: tutte le lezioni di tutte le classi,
- * le chiusure (che annullano le lezioni nei calendari di allieve e insegnanti)
+ * le chiusure (che annullano le lezioni nei calendari di atlete e insegnanti)
  * e gli eventi. Le chiusure si gestiscono subito sotto.
  */
 export function GeneralCalendar() {
@@ -21,7 +21,7 @@ export function GeneralCalendar() {
     <Card>
       <CardContent>
         <h2 className="mb-1 text-base font-bold">Calendario generale</h2>
-        <p className="mb-4 text-sm text-ink-muted">Tutte le lezioni, le chiusure e gli eventi. Ciò che cambi qui si riflette nei calendari di allieve e insegnanti.</p>
+        <p className="mb-4 text-sm text-ink-muted">Tutte le lezioni, le chiusure e gli eventi. Ciò che cambi qui si riflette nei calendari di atlete e insegnanti.</p>
         <WeekCalendar
           lessons={db.lessons}
           markDay={(d) => ({ closed: closureOn(d).length > 0, event: eventsOn(d).length > 0 })}

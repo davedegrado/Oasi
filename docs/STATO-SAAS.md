@@ -18,16 +18,18 @@ Legenda: **API** = regola applicata dal backend con persistenza, permessi e test
 | 3 | Badge AGONISTA nel profilo e dove serve allo staff | Sì | Sì | Ora visibile anche all'atleta nel proprio profilo |
 | 3 | Foto profilo e certificato agonistico | Sì | Parziale | |
 | 4 | Recupero solo dopo un'assenza valida, contatore disponibili/utilizzati/residui con storico | Sì | Sì | |
+| 4 | Finestra per chiedere un recupero: da N ore prima (massimo) a M ore prima (minimo), impostata dall'amministrazione | Sì | Sì | Oasi: nessun massimo, fino all'inizio (modificabile in Gestione → Associazione) |
 | 4 | Recupero entro la validità del piano; classe propria o di livello inferiore, mai superiore | Sì | Sì | |
 | 4 | Recuperi bloccati a classe piena, controllo atomico | Sì | Sì | |
-| 4 | Lezioni singole **prenotabili a partire da 48 ore prima**, disdetta libera **fino a 6 ore prima** | Sì | Sì | Oasi: apertura 48 h, disdetta 6 h; oltre: la quota resta dovuta |
+| 4 | Lezioni singole **prenotabili a partire da 48 ore prima**, disdetta libera **fino a 6 ore prima** | Sì | Sì | Oasi: da 48 h a 0 h prima, disdetta 6 h; tutte modificabili dall'amministrazione |
 | 4 | Fuso orario del tenant, cambi d'ora | Sì | — | Europe/Rome |
 | 5 | Home con il prossimo saggio o evento principale | Sì | Sì | |
 | 5 | Performance: canzone/musica, luogo, partecipanti nel rispetto dei permessi | Sì | Sì | File audio (fino a 25 MB) o collegamento; ascolto e partecipanti riservati a chi partecipa e allo staff |
 | 5 | Eventi gestiti dall'amministrazione, consultati da insegnanti e atlete | Sì | Sì | Gli insegnanti non modificano più eventi né musica |
 | 5 | Eventi collegabili a classi, discipline, insegnanti e partecipanti; notifiche | Sì | Parziale | |
 | 6 | Presenze, note della lezione, **sostituzioni** | Sì | Sì | Chi sostituisce vede la lezione e compila le presenze |
-| 6 | **Due documenti ogni 30 giorni, entro la fine del mese** | Sì | Sì | Tipologie ricorrenti: richieste e promemoria automatici |
+| 6 | **Due documenti ogni 30 giorni, entro la fine del mese** | Sì | Sì | Una tipologia che ne chiede due al mese; l'insegnante dà a ciascuno un titolo libero e la scadenza, se c'è |
+| 8 | Documenti senza tipologia definita | Sì | Sì | Titolo libero e scadenza facoltativa, per atlete e insegnanti |
 | 6 | Stati in attesa / approvato / da correggere; notifiche senza duplicati | Sì | Sì | Le **push** non sono collegate a un servizio reale |
 | 6 | Lezioni: prima il calendario, poi Prossime lezioni, Storico, Richieste per tipologia e stato | — | Sì | |
 | 7 | Classi in **due aree: bambini/ragazzi e adulti/ragazzi**, categorie adattabili | Sì | Sì | Aree modificabili in Gestione |
@@ -63,7 +65,7 @@ Legenda: **API** = regola applicata dal backend con persistenza, permessi e test
 
 ## 3. Verifiche eseguite
 
-- `dotnet test`: **51 test superati**, di cui 5 nuovi in `DynamiteTests.cs`.
+- `dotnet test`: **53 test superati**, di cui 7 in `DynamiteTests.cs`.
 - `db/tests/isolation.sql`: **19 controlli superati**.
 - Web App: lint e build senza errori; pagine principali aperte in un browser con i tre ruoli, nessun errore in console. Nessun test automatico dell'interfaccia.
 
@@ -79,13 +81,13 @@ Casi coperti per il prompt corretto:
 ## 4. Punti che richiedono una decisione
 
 1. **Finestra di Circo Baby:** applicata solo la regola "almeno 24 ore prima", senza l'apertura a 48 ore. Il pacchetto 5 lezioni invece segue l'apertura a 48 ore.
-2. **I due documenti mensili degli insegnanti:** il prompt non li nomina. Hanno un nome provvisorio, da cambiare in Archivio.
+2. ~~I due documenti mensili degli insegnanti~~: risolto, l'insegnante dà a ciascuno un titolo libero.
 3. **Pacchetto prenotato e atleta assente:** ora l'ingresso si consuma (`noShowConsumesEntry`). In alternativa si può restituire.
 4. **Categorie dei piani:**
    - Baby/Teen, Circo Baby e Preagonismo → Bambini/Ragazzi;
    - Adulti/Teen → Adulti/Ragazzi;
    - Genitori & Figli e Agonismo Teen senza vincolo.
-5. **"Atleta" o "allieva":** il prompt usa "atleta", la demo usa ancora "allieva". Non ho rinominato l'interfaccia.
+5. ~~"Atleta" o "allieva"~~: l'interfaccia ora dice "atleta" (i percorsi interni come `/allieva` restano invariati).
 6. **Assenza "valida" per il recupero:** ora è quella annunciata entro la soglia di disdetta (6 ore per Oasi).
 7. **Incongruenze dei dati 2026/27**, segnalate e non corrette:
    - lezione singola e pacchetto 5 lezioni valgono dal 14/09, la stagione inizia il 15/09;
@@ -105,6 +107,8 @@ Casi coperti per il prompt corretto:
 
 ## 6. Migrazioni
 
-`0008`, `0009`, `0010` vanno applicate in ordine. La `0010`:
+`0008`, `0009`, `0010`, `0011` vanno applicate in ordine. La `0011` rende facoltativa la tipologia dei documenti (titolo libero) e aggiunge la finestra dei recuperi.
+
+ La `0010`:
 - rinomina `fee_plans.booking_hours_before` in `booking_closes_hours_before`;
 - toglie dalle impostazioni salvate la vecchia chiave `singleLessonBookHoursBefore`, perché aveva il significato opposto.

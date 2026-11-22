@@ -417,7 +417,7 @@ function AssignDialog({ onClose }: { onClose: () => void }) {
     >
       <div className="space-y-4">
         {error && <p className="rounded-2xl bg-danger-soft p-3 text-sm text-danger">{error}</p>}
-        <Field label="Allieva" htmlFor="as-student">
+        <Field label="Atleta" htmlFor="as-student">
           <Select id="as-student" value={studentId} onChange={(e) => setStudentId(e.target.value)}>
             {db.students.map((s) => (
               <option key={s.id} value={s.id}>

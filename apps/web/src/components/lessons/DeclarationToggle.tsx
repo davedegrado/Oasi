@@ -6,7 +6,7 @@ import { useToast } from '@/hooks/useToast'
 import { isLessonPast } from '@/services/selectors'
 
 /**
- * Di default l'allieva è attesa a lezione: può solo disdire (e annullare la
+ * Di default l'atleta è attesa a lezione: può solo disdire (e annullare la
  * disdetta). L'insegnante vede subito chi non verrà. È distinto dalla presenza
  * effettiva segnata nel registro.
  */

@@ -104,7 +104,7 @@ public static class CalendarEndpoints
         }).RequireMember(Roles.Admin, Roles.Teacher);
 
         // Sostituzione: l'insegnante della classe (o l'amministrazione) indica chi la sostituisce in caso di assenza.
-        // Chi sostituisce vede la lezione nel proprio calendario e compila presenze e note; le allieve sono avvisate.
+        // Chi sostituisce vede la lezione nel proprio calendario e compila presenze e note; le atlete sono avvisate.
         g.MapPut("/{id:guid}/substitute", async (HttpContext ctx, Db db, Guid id, SubstituteInput input) =>
         {
             var m = ctx.Member();
@@ -186,7 +186,7 @@ public static class CalendarEndpoints
             return Results.NoContent();
         }).RequireMember(Roles.Admin, Roles.Teacher).RequireModule("attendance");
 
-        // Presenza o assenza dichiarata in anticipo dall'allieva (o dal genitore)
+        // Presenza o assenza dichiarata in anticipo dall'atleta (o dal genitore)
         g.MapPut("/{id:guid}/declaration", async (HttpContext ctx, Db db, Guid id, DeclarationInput input) =>
         {
             var m = ctx.Member();

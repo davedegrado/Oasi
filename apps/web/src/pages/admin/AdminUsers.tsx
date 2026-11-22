@@ -81,12 +81,12 @@ export function AdminUsers() {
     <div className="animate-fade-up">
       <PageHeader
         eyebrow="Utenti"
-        title="Allieve e insegnanti"
-        description={`${db.students.length} allieve · ${db.teachers.length} insegnanti`}
+        title="Atlete e insegnanti"
+        description={`${db.students.length} atlete · ${db.teachers.length} insegnanti`}
         actions={
           <>
             <Button size="sm" onClick={() => setCreating('allieva')}>
-              <UserPlus /> Nuova allieva
+              <UserPlus /> Nuova atleta
             </Button>
             <Button size="sm" variant="soft" onClick={() => setCreating('insegnante')}>
               <GraduationCap /> Nuova insegnante
@@ -107,7 +107,7 @@ export function AdminUsers() {
             onChange={setRole}
             options={[
               { value: 'tutti', label: 'Tutti' },
-              { value: 'allieva', label: 'Allieve' },
+              { value: 'allieva', label: 'Atlete' },
               { value: 'insegnante', label: 'Insegnanti' },
             ]}
           />
@@ -161,7 +161,7 @@ export function AdminUsers() {
                       </button>
                     </td>
                     <td className="px-3 py-3">
-                      <Badge tone={r.kind === 'insegnante' ? 'tessuti' : 'rosa'}>{r.kind === 'insegnante' ? 'Insegnante' : 'Allieva'}</Badge>
+                      <Badge tone={r.kind === 'insegnante' ? 'tessuti' : 'rosa'}>{r.kind === 'insegnante' ? 'Insegnante' : 'Atleta'}</Badge>
                     </td>
                     <td className="max-w-56 px-3 py-3 text-ink-soft">
                       <span className="line-clamp-2">{r.classes}</span>
@@ -201,7 +201,7 @@ export function AdminUsers() {
                     <span className="block truncate font-semibold text-ink">{r.name}</span>
                     <span className="block truncate text-xs text-ink-muted">{r.classes}</span>
                     <span className="mt-1.5 flex flex-wrap gap-1.5">
-                      <Badge tone={r.kind === 'insegnante' ? 'tessuti' : 'rosa'}>{r.kind === 'insegnante' ? 'Insegnante' : 'Allieva'}</Badge>
+                      <Badge tone={r.kind === 'insegnante' ? 'tessuti' : 'rosa'}>{r.kind === 'insegnante' ? 'Insegnante' : 'Atleta'}</Badge>
                       {r.status !== 'staff' && <MembershipBadge status={r.status} />}
                       {r.person.invitePending && <Badge tone="warn">Invito inviato</Badge>}
                       {isNewRow(r) && !r.person.invitePending && <Badge tone="rosa">Nuova</Badge>}

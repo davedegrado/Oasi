@@ -21,7 +21,7 @@ import { demoFigureSeeds, photo } from './figures'
 import { demoStudentSeeds, demoTeachers } from './people'
 import { buildDemoAccounts, demoPlans, demoSeason } from './plans'
 
-export const DATABASE_VERSION = 11
+export const DATABASE_VERSION = 12
 
 /** Hash deterministico: la demo genera sempre gli stessi dati per lo stesso giorno */
 function hash(text: string): number {
@@ -108,7 +108,7 @@ function buildLessons(classes: ClassGroup[], today: string): Lesson[] {
           attendance[sid] = hash(`${sid}-${date}`) % 100 < 84 ? 'presente' : 'assente'
         }
       }
-      // Alcune allieve hanno già annunciato presenza o assenza per le prossime lezioni
+      // Alcune atlete hanno già annunciato presenza o assenza per le prossime lezioni
       const declarations: Record<string, AttendanceMark> = {}
       if (!ended && override?.status !== 'annullata' && week <= 1) {
         for (const sid of cls.studentIds) {

@@ -9,7 +9,7 @@ export function useDemo() {
   return ctx
 }
 
-/** Allieva impersonata nella demo */
+/** Atleta impersonata nella demo */
 export function useCurrentStudent() {
   const { persona } = useDemo()
   const db = useDatabase()

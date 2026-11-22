@@ -69,7 +69,7 @@ export function AdminEvents() {
       <PageHeader
         eyebrow="Eventi"
         title="Spettacoli, stage e workshop"
-        description={isAdmin ? 'Crea eventi, modificali e controlla le adesioni delle allieve.' : 'Consulta gli eventi, le adesioni, la musica e i partecipanti delle performance.'}
+        description={isAdmin ? 'Crea eventi, modificali e controlla le adesioni delle atlete.' : 'Consulta gli eventi, le adesioni, la musica e i partecipanti delle performance.'}
         actions={
           isAdmin ? (
             <Button onClick={() => setEditing({ event: emptyEvent(), isNew: true })}>
@@ -141,7 +141,7 @@ export function AdminEvents() {
                 ))}
             </ul>
             {viewing.participantIds.length === 0 && <p className="text-sm text-ink-muted">Nessuna adesione per ora.</p>}
-            <p className="mt-4 text-xs text-ink-muted">Le allieve aderiscono dalla loro Home con il pulsante “Partecipo”.</p>
+            <p className="mt-4 text-xs text-ink-muted">Le atlete aderiscono dalla loro Home con il pulsante “Partecipo”.</p>
           </>
         )}
       </Dialog>
@@ -163,7 +163,7 @@ function EventDialog({ initial, isNew, onClose }: { initial: OasiEvent; isNew: b
     if (!event.date) return setError('Inserisci una data')
     if (event.signupDeadline && event.signupDeadline > event.date) return setError('La scadenza delle adesioni deve precedere l’evento')
     await repo.saveEvent({ ...event, title: event.title.trim() })
-    toast(isNew ? 'Evento creato: visibile alle allieve' : 'Evento aggiornato')
+    toast(isNew ? 'Evento creato: visibile alle atlete' : 'Evento aggiornato')
     onClose()
   }
 

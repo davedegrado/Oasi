@@ -27,7 +27,7 @@ export function ManageFigureDetailPage({ basePath, studentBase }: { basePath: st
           <Pencil /> Modifica
         </Link>
       }
-      panel={<FigureClassStats figureId={figure.id} students={students} studentLinkBase={studentBase} title={isTeacher ? 'Le tue allieve su questa figura' : 'Tutte le allieve su questa figura'} />}
+      panel={<FigureClassStats figureId={figure.id} students={students} studentLinkBase={studentBase} title={isTeacher ? 'Le tue atlete su questa figura' : 'Tutte le atlete su questa figura'} />}
     />
   )
 }

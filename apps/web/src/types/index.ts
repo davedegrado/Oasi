@@ -105,11 +105,11 @@ export interface Lesson {
   originalEndTime?: string
   /** Presenza effettiva registrata dall'insegnante */
   attendance: Record<string, AttendanceMark>
-  /** Disdette: di default l'allieva è attesa; qui si registra solo chi non verrà */
+  /** Disdette: di default l'atleta è attesa; qui si registra solo chi non verrà */
   declarations?: Record<string, AttendanceMark>
   /** Lezione annullata da una chiusura della sede */
   closureId?: string
-  /** Lezioni singole prenotate da allieve non iscritte alla classe */
+  /** Lezioni singole prenotate da atlete non iscritte alla classe */
   bookings?: string[]
   /** Insegnante che sostituisce quella della classe in questa lezione */
   substituteTeacherId?: string
@@ -235,8 +235,14 @@ export interface AssociationInfo {
   settings: {
     maxStudentsPerClass: number
     absenceNoticeHours: number
-    /** La prenotazione di una lezione singola si apre N ore prima dell'inizio (Oasi: 48) */
+    /** Lezioni singole: si prenotano a partire da N ore prima (massimo; Oasi: 48) */
     bookingOpensHours?: number
+    /** ...e fino a N ore prima (minimo; 0 = fino all'inizio) */
+    bookingClosesHours?: number
+    /** Recuperi: si chiedono a partire da N ore prima della lezione scelta (vuoto = senza limite) */
+    makeupOpensHours?: number
+    /** ...e fino a N ore prima (0 = fino all'inizio) */
+    makeupClosesHours?: number
     /** Aree in cui sono organizzate le classi (Oasi: Bambini/Ragazzi, Adulti/Ragazzi) */
     classCategories?: string[]
     /** Numero massimo di discipline per classe (Oasi: 2) */
@@ -385,7 +391,7 @@ export type NotificationKind = 'iscrizione' | 'recupero' | 'variazione' | 'chius
 
 /**
  * Notifica nel centro notifiche. Destinatari: "student:<id>", "teacher:<id>",
- * "admin", "students" (tutte le allieve), "teachers".
+ * "admin", "students" (tutte le atlete), "teachers".
  */
 export interface AppNotification {
   id: string
@@ -400,7 +406,7 @@ export interface AppNotification {
 
 export interface DemoPersona {
   role: Role
-  /** id dell'allieva o dell'insegnante impersonata */
+  /** id dell'atleta o dell'insegnante impersonata */
   userId: string | null
 }
 
@@ -424,10 +430,12 @@ export interface DocumentType {
   active: boolean
   /** Obbligatorio solo per agonisti o iscritti a classi agonistiche/preagonistiche */
   requiredForCompetitive?: boolean
-  /** A chi è richiesto (predefinito: allieve). Per gli insegnanti l'amministrazione decide quali e quanti documenti. */
+  /** A chi è richiesto (predefinito: atlete). Per gli insegnanti l'amministrazione decide quali e quanti documenti. */
   audience?: 'allieve' | 'insegnanti' | 'tutti'
   /** Documento da caricare a ogni periodo (es. ogni mese, entro l'ultimo giorno del mese) */
   recurrence?: 'mensile'
+  /** Quanti documenti di questa tipologia servono (per periodo). Oltre 1, chi carica dà a ciascuno un titolo. */
+  requiredCount?: number
 }
 
 export interface DocumentEvent {
@@ -465,6 +473,8 @@ export interface MemberDocument {
   history: DocumentEvent[]
   /** Periodo a cui si riferisce un documento ricorrente (es. "2026-11") */
   periodKey?: string
+  /** Titolo dato da chi carica (documenti liberi o più documenti della stessa tipologia) */
+  title?: string
 }
 
 /** Documenti messi a disposizione dalla palestra (regolamento, modulistica) */

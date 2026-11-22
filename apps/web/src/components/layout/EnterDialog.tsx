@@ -51,7 +51,7 @@ export function EnterDialog({ role, onClose }: { role: Role; onClose: () => void
     <Dialog
       open
       onOpenChange={(o) => !o && onClose()}
-      title={mode === 'register' ? 'Registrati come nuova allieva' : role === 'allieva' ? 'Entra come allieva' : 'Entra come insegnante'}
+      title={mode === 'register' ? 'Registrati come nuova atleta' : role === 'allieva' ? 'Entra come atleta' : 'Entra come insegnante'}
       description={mode === 'register' ? 'Simulazione: nessuna email viene inviata.' : 'Demo senza password: scegli con quale profilo entrare.'}
     >
       {mode === 'choose' ? (
@@ -69,7 +69,7 @@ export function EnterDialog({ role, onClose }: { role: Role; onClose: () => void
             </button>
           )}
           <div>
-            <Field label={role === 'allieva' ? 'Oppure scegli un’altra allieva' : 'Oppure scegli un’altra insegnante'} htmlFor="enter-other">
+            <Field label={role === 'allieva' ? 'Oppure scegli un’altra atleta' : 'Oppure scegli un’altra insegnante'} htmlFor="enter-other">
               <Select id="enter-other" value={other} onChange={(e) => setOther(e.target.value)}>
                 {people.map((p) => (
                   <option key={p.id} value={p.id}>

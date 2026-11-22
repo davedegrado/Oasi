@@ -43,7 +43,7 @@ export const NAVIGATION: Record<Role, NavItem[]> = {
   insegnante: [
     { to: '/insegnante', label: 'Dashboard', icon: LayoutDashboard, end: true },
     { to: '/insegnante/lezioni', label: 'Lezioni', icon: BookOpenCheck, badge: 'requests' },
-    { to: '/insegnante/allieve', label: 'Allieve', icon: Users },
+    { to: '/insegnante/allieve', label: 'Atlete', icon: Users },
     { to: '/insegnante/figure', label: 'Figure', icon: Sparkles, module: 'figure_archive' },
     { to: '/insegnante/eventi', label: 'Eventi', icon: CalendarHeart, module: 'events' },
     { to: '/insegnante/profilo', label: 'Profilo', icon: UserRound, sidebarOnly: true },

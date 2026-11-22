@@ -13,7 +13,7 @@ import { cn, uid } from '@/lib/utils'
 
 const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())
 
-/** Nuova allieva o nuova insegnante: la persona riceve un invito via email (simulato nella demo) */
+/** Nuova atleta o nuova insegnante: la persona riceve un invito via email (simulato nella demo) */
 export function NewPersonDialog({ kind, onClose }: { kind: 'allieva' | 'insegnante'; onClose: () => void }) {
   const db = useDatabase()
   const disciplines = useDisciplines()
@@ -58,7 +58,7 @@ export function NewPersonDialog({ kind, onClose }: { kind: 'allieva' | 'insegnan
     <Dialog
       open
       onOpenChange={(o) => !o && onClose()}
-      title={kind === 'allieva' ? 'Nuova allieva' : 'Nuova insegnante'}
+      title={kind === 'allieva' ? 'Nuova atleta' : 'Nuova insegnante'}
       description="Riceverà un’email con il link per creare la password e accedere all’app."
       className="sm:max-w-xl"
       footer={

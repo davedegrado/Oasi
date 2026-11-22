@@ -24,12 +24,10 @@ import { LEVEL_LABEL, LEVELS } from '@/lib/labels'
 import { cn, fullName } from '@/lib/utils'
 
 const SETTINGS_META: { key: keyof AssociationInfo['settings']; label: string; description: string; type: 'toggle' | 'number'; suffix?: string }[] = [
-  { key: 'remindersEnabled', label: 'Promemoria lezioni', description: 'Notifica alle allieve il giorno prima della lezione (simulato)', type: 'toggle' },
-  { key: 'progressVisibleToTeachers', label: 'Progressi visibili alle insegnanti', description: 'Le insegnanti vedono stati e note delle allieve', type: 'toggle' },
+  { key: 'remindersEnabled', label: 'Promemoria lezioni', description: 'Notifica alle atlete il giorno prima della lezione (simulato)', type: 'toggle' },
+  { key: 'progressVisibleToTeachers', label: 'Progressi visibili alle insegnanti', description: 'Le insegnanti vedono stati e note delle atlete', type: 'toggle' },
   { key: 'trialLessonEnabled', label: 'Lezione di prova', description: 'Consente iscrizioni in stato “Lezione di prova”', type: 'toggle' },
   { key: 'maxStudentsPerClass', label: 'Capienza standard per classe', description: 'Valore predefinito per le nuove classi', type: 'number', suffix: 'allieve' },
-  { key: 'absenceNoticeHours', label: 'Preavviso disdetta', description: 'Ore minime prima della lezione per disdire senza conseguenze', type: 'number', suffix: 'ore' },
-  { key: 'bookingOpensHours', label: 'Apertura prenotazioni', description: 'Le lezioni singole si possono prenotare a partire da queste ore prima dell’inizio', type: 'number', suffix: 'ore' },
   { key: 'maxDisciplines', label: 'Discipline per classe', description: 'Numero massimo di discipline selezionabili per una classe', type: 'number', suffix: 'max' },
   { key: 'makeupLowerLevelAllowed', label: 'Recupero in livello inferiore', description: 'Consenti il recupero in classi di livello inferiore (mai superiore)', type: 'toggle' },
 ]
@@ -140,7 +138,7 @@ export function AdminSettings() {
       {section === 'didattica' && <DidacticsCard />}
       {section === 'associazione' && (
       <>
-      {/* Regolamento e modulistica: consultabili da allieve e insegnanti, modificabili dall'amministrazione */}
+      {/* Regolamento e modulistica: consultabili da atlete e insegnanti, modificabili dall'amministrazione */}
       <SharedDocumentsCard
         audience="ogni"
         action={
@@ -210,7 +208,7 @@ export function AdminSettings() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-semibold">{fullName(t)}</p>
                     <p className="text-xs text-ink-muted">
-                      {db.classes.filter((c) => c.teacherId === t.id).length} classi · {studentsOfTeacher(db, t.id).length} allieve · dal {t.since}
+                      {db.classes.filter((c) => c.teacherId === t.id).length} classi · {studentsOfTeacher(db, t.id).length} atlete · dal {t.since}
                     </p>
                   </div>
                   <div className="flex flex-col items-end gap-1">
@@ -272,6 +270,8 @@ export function AdminSettings() {
           </ul>
         </CardContent>
       </Card>
+
+      <BookingWindowsCard />
 
       <Card>
         <CardContent className="space-y-5">
@@ -401,5 +401,74 @@ function InfoDialog({ info, onClose }: { info: AssociationInfo; onClose: () => v
         ))}
       </div>
     </Dialog>
+  )
+}
+
+/**
+ * Finestre "da … a …" prima della lezione: per prenotare una lezione singola e per chiedere un recupero.
+ * Il massimo dice da quando si può (vuoto = senza limite), il minimo fino a quando.
+ */
+function BookingWindowsCard() {
+  const db = useDatabase()
+  const repo = useRepository()
+  const { toast } = useToast()
+  const a = db.association
+  const [form, setForm] = useState(() => ({
+    bookingOpensHours: a.settings.bookingOpensHours?.toString() ?? '',
+    bookingClosesHours: (a.settings.bookingClosesHours ?? 0).toString(),
+    absenceNoticeHours: a.settings.absenceNoticeHours.toString(),
+    makeupOpensHours: a.settings.makeupOpensHours?.toString() ?? '',
+    makeupClosesHours: (a.settings.makeupClosesHours ?? 0).toString(),
+  }))
+  const [error, setError] = useState('')
+  const num = (v: string) => (v.trim() === '' ? undefined : Math.max(0, Math.round(Number(v))))
+  const save = async () => {
+    const v = {
+      bookingOpensHours: num(form.bookingOpensHours),
+      bookingClosesHours: num(form.bookingClosesHours) ?? 0,
+      absenceNoticeHours: num(form.absenceNoticeHours) ?? 0,
+      makeupOpensHours: num(form.makeupOpensHours),
+      makeupClosesHours: num(form.makeupClosesHours) ?? 0,
+    }
+    if (Object.values(v).some((x) => x !== undefined && Number.isNaN(x))) return setError('Inserisci numeri di ore validi.')
+    if (v.bookingOpensHours !== undefined && v.bookingOpensHours <= v.bookingClosesHours) return setError('Lezioni singole: il massimo deve essere maggiore del minimo.')
+    if (v.makeupOpensHours !== undefined && v.makeupOpensHours <= v.makeupClosesHours) return setError('Recuperi: il massimo deve essere maggiore del minimo.')
+    setError('')
+    await repo.updateAssociation({ settings: { ...a.settings, ...v } })
+    toast('Finestre salvate')
+  }
+  const field = (key: keyof typeof form, label: string, placeholder?: string) => (
+    <Field label={label} htmlFor={`w-${key}`}>
+      <Input id={`w-${key}`} type="number" min={0} inputMode="numeric" value={form[key]} placeholder={placeholder} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
+    </Field>
+  )
+  return (
+    <Card>
+      <CardContent className="space-y-5">
+        <div>
+          <h2 className="mb-1 text-base font-bold">Prenotazioni e recuperi</h2>
+          <p className="text-sm text-ink-muted">Ore prima dell’inizio della lezione. Il massimo indica da quando si può, il minimo fino a quando. Lascia vuoto il massimo per non porre limiti.</p>
+        </div>
+        <div>
+          <p className="mb-2 text-sm font-semibold text-ink">Lezioni singole</p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {field('bookingOpensHours', 'Prenotabile da (ore prima, massimo)', 'Senza limite')}
+            {field('bookingClosesHours', 'Prenotabile fino a (ore prima, minimo)')}
+            {field('absenceNoticeHours', 'Disdetta libera fino a (ore prima)')}
+          </div>
+        </div>
+        <div>
+          <p className="mb-2 text-sm font-semibold text-ink">Richieste di recupero</p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {field('makeupOpensHours', 'Richiedibile da (ore prima, massimo)', 'Senza limite')}
+            {field('makeupClosesHours', 'Richiedibile fino a (ore prima, minimo)')}
+          </div>
+        </div>
+        {error && <p className="rounded-2xl bg-danger-soft p-3 text-sm text-danger">{error}</p>}
+        <Button size="sm" onClick={save}>
+          Salva
+        </Button>
+      </CardContent>
+    </Card>
   )
 }

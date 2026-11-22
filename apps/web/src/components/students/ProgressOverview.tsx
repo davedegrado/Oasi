@@ -10,7 +10,7 @@ import { LEVEL_LABEL, LEVELS, STATUS_LABEL, STATUS_ORDER } from '@/lib/labels'
 import { useDisciplines } from '@/hooks/useDisciplines'
 import { percent } from '@/lib/utils'
 
-/** Grafici di riepilogo dei progressi di un'allieva */
+/** Grafici di riepilogo dei progressi di un'atleta */
 export function ProgressOverview({ studentId }: { studentId: string }) {
   const db = useDatabase()
   const disciplines = useDisciplines()

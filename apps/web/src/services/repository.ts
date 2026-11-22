@@ -33,7 +33,7 @@ export interface OasiRepository {
   /** Notifica i cambiamenti dello snapshot */
   subscribe(listener: () => void): () => void
 
-  // Progressi allieve
+  // Progressi atlete
   updateProgress(studentId: string, figureId: string, patch: Partial<Omit<FigureProgress, 'updatedAt'>>): Promise<void>
 
   // Lezioni e presenze
@@ -41,7 +41,7 @@ export interface OasiRepository {
   setAllAttendance(lessonId: string, mark: AttendanceMark): Promise<void>
   updateLesson(lessonId: string, patch: Partial<Pick<Lesson, 'status' | 'startTime' | 'endTime' | 'note'>>): Promise<void>
 
-  /** Presenza o assenza annunciata in anticipo dall'allieva (null = annulla) */
+  /** Presenza o assenza annunciata in anticipo dall'atleta (null = annulla) */
   setDeclaration(lessonId: string, studentId: string, mark: AttendanceMark | null): Promise<void>
 
   // Richieste di iscrizione e di recupero
@@ -73,7 +73,7 @@ export interface OasiRepository {
   saveClass(cls: ClassGroup): Promise<void>
   deleteClass(classId: string): Promise<void>
 
-  // Allieve
+  // Atlete
   updateStudent(studentId: string, patch: Partial<Student>): Promise<void>
 
   // Eventi
@@ -81,7 +81,7 @@ export interface OasiRepository {
   deleteEvent(eventId: string): Promise<void>
   toggleEventParticipation(eventId: string, studentId: string): Promise<void>
 
-  // Discipline (dati della palestra): la disattivazione conserva classi, allieve e storico
+  // Discipline (dati della palestra): la disattivazione conserva classi, atlete e storico
   saveDiscipline(discipline: DisciplineInfo): Promise<void>
 
   // Archivio documentale: un documento appartiene a un profilo, l'archivio lo legge senza copiarlo
@@ -119,7 +119,7 @@ export interface OasiRepository {
 export interface DocumentUpload {
   memberId: string
   typeId: string
-  /** chi carica: id dell'allieva o 'admin' */
+  /** chi carica: id dell'atleta o 'admin' */
   uploadedBy: string
   fileName: string
   fileType: string
@@ -129,6 +129,8 @@ export interface DocumentUpload {
   signedUpload: boolean
   /** scadenza (es. certificato medico); se assente si usa la validità della tipologia */
   expiresOn?: string
+  /** titolo libero: obbligatorio per i documenti senza tipologia (typeId vuoto) e per le tipologie che ne chiedono più d'uno */
+  title?: string
 }
 
 export type DocumentDecision = 'approva' | 'rifiuta' | 'richiedi_sostituzione'

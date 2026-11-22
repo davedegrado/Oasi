@@ -11,7 +11,7 @@ import { STATUS_HINT, STATUS_LABEL, STATUS_ORDER } from '@/lib/labels'
 import { formatDate } from '@/lib/dates'
 import { cn } from '@/lib/utils'
 
-/** Stato personale e note dell'allieva su una figura (persistiti in locale) */
+/** Stato personale e note dell'atleta su una figura (persistiti in locale) */
 export function ProgressPanel({ studentId, figureId }: { studentId: string; figureId: string }) {
   const db = useDatabase()
   const repo = useRepository()
