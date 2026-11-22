@@ -69,12 +69,17 @@ function migrateFrom6(db: OasiDatabase): OasiDatabase {
 /** v8 → v9: agonismo, classi con più discipline, brani degli eventi, soglie configurabili, piani e quote */
 const days = (n: number | undefined) => `${n ?? 0} ${n === 1 ? 'giorno' : 'giorni'}`
 
+/** v13 → v14: scadenza obbligatoria per il certificato medico agonistico */
+function migrateFrom13(db: OasiDatabase): OasiDatabase {
+  return { ...db, version: DATABASE_VERSION, documentTypes: db.documentTypes.map((t) => (t.id === 'dt-agonistico' && t.expiryRequired === undefined ? { ...t, expiryRequired: true } : t)) }
+}
+
 /** v12 → v13: finestra dei recuperi in giorni invece che in ore (arrotondata per eccesso) */
 function migrateFrom12(db: OasiDatabase): OasiDatabase {
   const { makeupOpensHours, makeupClosesHours, ...settings } = db.association.settings as typeof db.association.settings & { makeupOpensHours?: number; makeupClosesHours?: number }
-  return {
+  return migrateFrom13({
     ...db,
-    version: DATABASE_VERSION,
+    version: 13,
     association: {
       ...db.association,
       settings: {
@@ -83,7 +88,7 @@ function migrateFrom12(db: OasiDatabase): OasiDatabase {
         makeupClosesDays: Math.ceil((makeupClosesHours ?? 0) / 24),
       },
     },
-  }
+  })
 }
 
 /** v11 → v12: finestre configurabili per i recuperi; i due documenti mensili diventano una tipologia che ne chiede due, con titolo libero */
@@ -190,6 +195,7 @@ function loadFromStorage(): OasiDatabase | null {
     if (parsed.version === 10) return migrateFrom10(parsed)
     if (parsed.version === 11) return migrateFrom11(parsed)
     if (parsed.version === 12) return migrateFrom12(parsed)
+    if (parsed.version === 13) return migrateFrom13(parsed)
     if (parsed.version !== DATABASE_VERSION) return null
     return parsed
   } catch {
@@ -715,6 +721,7 @@ export class LocalRepository implements OasiRepository {
       if (input.fileSize > MAX_DOCUMENT_BYTES) throw new Error('Il file supera i 4 MB consentiti nella demo')
       if (!ALLOWED_DOCUMENT_TYPES.includes(input.fileType)) throw new Error('Formato non ammesso: carica un PDF o un’immagine')
       const today = todayISO()
+      if (type.expiryRequired && !input.expiresOn) throw new Error('Indica la data di scadenza del documento')
       const expiresOn = input.expiresOn || (type.validityMonths ? addMonths(today, type.validityMonths) : undefined)
       const next = newVersion(db, input.memberId, input.typeId, {
         status: 'in_verifica',
@@ -742,6 +749,7 @@ export class LocalRepository implements OasiRepository {
     this.commit((db) => {
       const doc = db.documents.find((d) => d.id === documentId)
       if (!doc || !doc.current) throw new Error('Si corregge solo la versione attuale del documento.')
+      if (!expiresOn && db.documentTypes.find((t) => t.id === doc.typeId)?.expiryRequired) throw new Error('Per questo documento la scadenza è obbligatoria')
       const now = new Date().toISOString()
       const back = by !== 'admin' && doc.status === 'approvato'
       const next = {

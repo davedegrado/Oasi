@@ -14,7 +14,7 @@ export const demoDocumentTypes: DocumentType[] = [
     description: 'Certificato di idoneità all’attività sportiva non agonistica, valido 12 mesi. Visibile solo a te e alla segreteria.',
   },
   {
-    id: 'dt-agonistico', name: 'Certificato medico agonistico', category: 'certificato_medico', required: false, requiredForCompetitive: true, signatureMode: 'nessuna', validityMonths: 12, sensitive: true, active: true,
+    id: 'dt-agonistico', name: 'Certificato medico agonistico', category: 'certificato_medico', required: false, requiredForCompetitive: true, expiryRequired: true, signatureMode: 'nessuna', validityMonths: 12, sensitive: true, active: true,
     description: 'Certificato di idoneità all’attività sportiva agonistica. Richiesto solo agli agonisti e agli iscritti a classi agonistiche o preagonistiche.',
   },
   // Insegnanti: due documenti ogni mese, entro la fine del mese (regola di Oasi). Quali siano non è

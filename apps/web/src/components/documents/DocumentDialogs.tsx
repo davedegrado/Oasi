@@ -31,6 +31,7 @@ export function UploadDocumentDialog({ row, memberId, uploadedBy, onClose }: { r
     if (!ALLOWED_DOCUMENT_TYPES.includes(file.type)) return setError('Formato non ammesso: carica un PDF o un’immagine (JPG, PNG)')
     if (type.signatureMode === 'caricamento_firmato' && !signed) return setError('Il modulo va caricato firmato a mano: conferma la firma')
     if (row.needsTitle && !title.trim()) return setError('Dai un titolo al documento')
+    if (type.expiryRequired && !expires) return setError('Indica la data di scadenza scritta sul documento')
     setBusy(true)
     try {
       const fileData = await readFileAsDataUrl(file)
@@ -92,9 +93,13 @@ export function UploadDocumentDialog({ row, memberId, uploadedBy, onClose }: { r
             Confermo che il documento è firmato a mano (scansione o foto del modulo firmato).
           </label>
         )}
-        {/* La scadenza si può sempre indicare (facoltativa) */}
+        {/* La scadenza si può sempre indicare; per alcune tipologie (es. certificato agonistico) è obbligatoria */}
         {(
-          <Field label="Data di scadenza (facoltativa)" htmlFor="doc-exp" hint={type.validityMonths ? `Se vuota: ${type.validityMonths} mesi da oggi` : undefined}>
+          <Field
+            label={type.expiryRequired ? 'Data di scadenza (obbligatoria)' : 'Data di scadenza (facoltativa)'}
+            htmlFor="doc-exp"
+            hint={type.expiryRequired ? 'Quella scritta sul certificato.' : type.validityMonths ? `Se vuota: ${type.validityMonths} mesi da oggi` : undefined}
+          >
             <Input id="doc-exp" type="date" value={expires} onChange={(e) => setExpires(e.target.value)} />
           </Field>
         )}
@@ -116,6 +121,7 @@ export function DocumentDetailDialog({ row, mode, onClose, onReplace }: { row: M
   const [editingExpiry, setEditingExpiry] = useState(false)
   const [expiry, setExpiry] = useState('')
   const saveExpiry = async () => {
+    if (type.expiryRequired && !expiry) return setError('Per questo documento la scadenza è obbligatoria')
     try {
       await repo.setDocumentExpiry(doc!.id, expiry || null, mode === 'admin' ? 'admin' : doc!.memberId)
       toast(mode === 'admin' ? 'Scadenza salvata' : 'Scadenza salvata: la segreteria la verificherà')

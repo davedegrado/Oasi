@@ -402,7 +402,7 @@ function TypeDialog({ type, onClose }: { type: DocumentType; onClose: () => void
           <Input id="dt-val" type="number" min={1} value={form.validityMonths ?? ''} onChange={(e) => set('validityMonths', e.target.value ? Number(e.target.value) : undefined)} />
         </Field>
         <div className="space-y-2 text-sm text-ink-soft">
-          {([['required', 'Obbligatorio per tutti i destinatari'], ['requiredForCompetitive', 'Obbligatorio solo per agoniste e classi agonistiche'], ['sensitive', 'Dato riservato (es. sanitario)'], ['active', 'Attiva (richiesta alle atlete)']] as const).map(([k, label]) => (
+          {([['required', 'Obbligatorio per tutti i destinatari'], ['requiredForCompetitive', 'Obbligatorio solo per agoniste e classi agonistiche'], ['expiryRequired', 'Data di scadenza obbligatoria'], ['sensitive', 'Dato riservato (es. sanitario)'], ['active', 'Attiva (richiesta alle atlete)']] as const).map(([k, label]) => (
             <label key={k} className="flex items-center gap-2">
               <input type="checkbox" className="size-4 accent-rosa-intenso" checked={!!form[k]} onChange={(e) => set(k, e.target.checked)} /> {label}
             </label>

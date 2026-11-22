@@ -430,6 +430,8 @@ export interface DocumentType {
   active: boolean
   /** Obbligatorio solo per agonisti o iscritti a classi agonistiche/preagonistiche */
   requiredForCompetitive?: boolean
+  /** La data di scadenza va sempre indicata da chi carica (es. certificato medico agonistico) */
+  expiryRequired?: boolean
   /** A chi è richiesto (predefinito: atlete). Per gli insegnanti l'amministrazione decide quali e quanti documenti. */
   audience?: 'allieve' | 'insegnanti' | 'tutti'
   /** Documento da caricare a ogni periodo (es. ogni mese, entro l'ultimo giorno del mese) */
