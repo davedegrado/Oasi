@@ -170,6 +170,7 @@ export function AdminUsers() {
                       <div className="flex flex-wrap gap-1">
                         {r.status === 'staff' ? <Badge tone="neutral">Staff</Badge> : <MembershipBadge status={r.status} />}
                         {r.person.invitePending && <Badge tone="warn">Invito inviato</Badge>}
+                        {r.kind === 'allieva' && !(r.person as Student).membership.cardNumber && <Badge tone="danger">Tessera da assegnare</Badge>}
                         {isNewRow(r) && !r.person.invitePending && <Badge tone="rosa">Nuova</Badge>}
                       </div>
                     </td>
@@ -204,6 +205,7 @@ export function AdminUsers() {
                       <Badge tone={r.kind === 'insegnante' ? 'tessuti' : 'rosa'}>{r.kind === 'insegnante' ? 'Insegnante' : 'Atleta'}</Badge>
                       {r.status !== 'staff' && <MembershipBadge status={r.status} />}
                       {r.person.invitePending && <Badge tone="warn">Invito inviato</Badge>}
+                        {r.kind === 'allieva' && !(r.person as Student).membership.cardNumber && <Badge tone="danger">Tessera da assegnare</Badge>}
                       {isNewRow(r) && !r.person.invitePending && <Badge tone="rosa">Nuova</Badge>}
                     </span>
                   </span>

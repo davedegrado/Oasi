@@ -65,7 +65,7 @@ Legenda: **API** = regola applicata dal backend con persistenza, permessi e test
 
 ## 3. Verifiche eseguite
 
-- `dotnet test`: **55 test superati**, di cui 7 in `DynamiteTests.cs`.
+- `dotnet test`: **56 test superati**, di cui 7 in `DynamiteTests.cs`.
 - `db/tests/isolation.sql`: **19 controlli superati**.
 - Web App: lint e build senza errori; pagine principali aperte in un browser con i tre ruoli, nessun errore in console. Nessun test automatico dell'interfaccia.
 
@@ -107,7 +107,7 @@ Casi coperti per il prompt corretto:
 
 ## 6. Migrazioni
 
-`0008`, `0009`, `0010`, `0011`, `0012` vanno applicate in ordine. La `0011` rende facoltativa la tipologia dei documenti (titolo libero) e aggiunge la finestra dei recuperi.
+`0008`, `0009`, `0010`, `0011`, `0012`, `0013`, `0014` vanno applicate in ordine. La `0011` rende facoltativa la tipologia dei documenti (titolo libero) e aggiunge la finestra dei recuperi.
 
  La `0010`:
 - rinomina `fee_plans.booking_hours_before` in `booking_closes_hours_before`;

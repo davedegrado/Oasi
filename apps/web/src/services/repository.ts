@@ -54,6 +54,8 @@ export interface OasiRepository {
 
   // Persone (inviti simulati via email)
   addStudent(student: Student): Promise<void>
+  /** La segreteria assegna o corregge il numero di tessera e la sua validità (numero unico nella palestra) */
+  assignCard(studentId: string, cardNumber: string, expiresAt: string): Promise<void>
   addTeacher(teacher: Teacher): Promise<void>
 
   // Chiusure: festività, scioperi, chiusure della sede

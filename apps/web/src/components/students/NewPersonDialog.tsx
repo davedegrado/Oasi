@@ -22,7 +22,7 @@ export function NewPersonDialog({ kind, onClose }: { kind: 'allieva' | 'insegnan
   const [f, setF] = useState({
     firstName: '', lastName: '', email: '', phone: '', birthDate: '', bio: '',
     level: 'base' as Level, discipline: (db.disciplines.find((d) => d.isActive)?.id ?? '') as Discipline, status: 'attiva' as MembershipStatus,
-    classIds: [] as string[], disciplines: [] as Discipline[], certificate: '',
+    classIds: [] as string[], disciplines: [] as Discipline[], certificate: '', cardNumber: '',
   })
   const [error, setError] = useState('')
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((x) => ({ ...x, [k]: v }))
@@ -32,13 +32,14 @@ export function NewPersonDialog({ kind, onClose }: { kind: 'allieva' | 'insegnan
     if (!f.firstName.trim() || !f.lastName.trim()) return setError('Inserisci nome e cognome.')
     if (!isEmail(f.email)) return setError('Inserisci un indirizzo email valido: servirà per l’invito.')
     if (emailTaken) return setError('Esiste già una persona con questa email.')
+    if (f.cardNumber.trim() && db.students.some((s) => s.membership.cardNumber.trim().toLowerCase() === f.cardNumber.trim().toLowerCase())) return setError('Questo numero di tessera è già assegnato.')
     if (kind === 'allieva') {
       const student: Student = {
         id: uid('stu'), firstName: f.firstName.trim(), lastName: f.lastName.trim(), avatar: '', birthDate: f.birthDate || '2000-01-01',
         email: f.email.trim().toLowerCase(), phone: f.phone.trim(), level: f.level, mainDiscipline: f.discipline, classIds: f.classIds,
         joinedAt: todayISO(), goals: [], invitePending: true,
         membership: {
-          status: f.status, cardNumber: `UISP-MO-${Math.floor(10000 + Math.random() * 89999)}`, expiresAt: `${new Date().getFullYear() + (new Date().getMonth() >= 8 ? 1 : 0)}-08-31`,
+          status: f.status, cardNumber: f.cardNumber.trim(), expiresAt: `${new Date().getFullYear() + (new Date().getMonth() >= 8 ? 1 : 0)}-08-31`,
           medicalCertificateExpiresAt: f.certificate, feePlan: 'Da definire', feePaidUntil: todayISO(),
         },
       }
@@ -93,6 +94,9 @@ export function NewPersonDialog({ kind, onClose }: { kind: 'allieva' | 'insegnan
             <div className="grid grid-cols-2 gap-3">
               <Field label="Data di nascita" htmlFor="np-birth">
                 <Input id="np-birth" type="date" value={f.birthDate} onChange={(e) => set('birthDate', e.target.value)} />
+              </Field>
+              <Field label="Numero di tessera (facoltativo)" htmlFor="np-card" hint="Puoi assegnarlo anche dopo, dalla scheda dell’atleta.">
+                <Input id="np-card" value={f.cardNumber} onChange={(e) => set('cardNumber', e.target.value)} placeholder="Es. UISP-MO-02604" />
               </Field>
               <Field label="Stato iscrizione" htmlFor="np-status">
                 <Select id="np-status" value={f.status} onChange={(e) => set('status', e.target.value as MembershipStatus)}>

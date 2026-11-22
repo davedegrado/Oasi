@@ -27,10 +27,13 @@ public static class MemberEndpoints
         public bool CertificateMissing { get; init; }
         public Guid[] ClassIds { get; init; } = [];
         public string? Email { get; init; }
+        /// <summary>Tessera associativa ancora da assegnare (solo per l'amministrazione)</summary>
+        public bool CardMissing { get; init; }
         public string? Phone { get; init; }
     }
 
     public sealed record CompetitiveInput(bool IsCompetitive);
+    public sealed record CardInput(string CardNumber, string ExpiresOn);
     public sealed record ProfileInput(string? Phone, string? Bio, string[]? Goals);
 
     private const string SelectMembers = @"
@@ -44,7 +47,9 @@ public static class MemberEndpoints
                     and not exists (select 1 from app.documents d where d.member_id = mb.id and d.type_id = t.id and d.is_current
                       and d.status = 'approved' and (d.expires_on is null or d.expires_on >= app.tenant_today())))) as certificate_missing,
                coalesce((select array_agg(e.class_id) from app.enrollments e where e.member_id = mb.id and e.status = 'approved'), '{}') as class_ids,
-               case when @full then mb.email end as email, case when @full then mb.phone end as phone
+               case when @full then mb.email end as email,
+               (@full and not exists (select 1 from app.member_admin a where a.member_id = mb.id and a.card_number is not null)
+                      and exists (select 1 from app.memberships ms where ms.member_id = mb.id and 'student' = any(ms.roles))) as card_missing, case when @full then mb.phone end as phone
         from app.members mb";
 
     public static void Map(WebApplication app)
@@ -110,6 +115,30 @@ public static class MemberEndpoints
             });
             return Results.Ok(new { id, isCompetitive = input.IsCompetitive, missingCertificates = missing });
         }).RequireMember();
+
+        // Numero di tessera associativa e validità: li assegna l'amministrazione (anche dopo la registrazione dell'atleta)
+        g.MapPut("/{id:guid}/card", async (HttpContext ctx, Db db, Guid id, CardInput input) =>
+        {
+            var number = (input.CardNumber ?? "").Trim();
+            if (number.Length is 0 or > 40) throw ApiException.Invalid("Il numero di tessera deve avere da 1 a 40 caratteri.");
+            if (!DateOnly.TryParse(input.ExpiresOn, out _)) throw ApiException.Invalid("Indica la validità della tessera.");
+            var m = ctx.Member();
+            await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
+            {
+                if (!await c.ExecuteScalarAsync<bool>("select exists(select 1 from app.members where id = @id)", new { id }, tx)) throw ApiException.NotFound("Persona");
+                var owner = await c.ExecuteScalarAsync<string?>(@"select mb.first_name || ' ' || mb.last_name from app.member_admin a join app.members mb on mb.id = a.member_id
+                    where lower(a.card_number) = lower(@number) and a.member_id <> @id", new { number, id }, tx);
+                if (owner is not null) throw ApiException.Conflict("card_taken", $"Numero già assegnato a {owner}.");
+                await c.ExecuteAsync(@"insert into app.member_admin (tenant_id, member_id, card_number, card_expires_on)
+                    values (app.current_tenant(), @id, @number, @ExpiresOn::date)
+                    on conflict (tenant_id, member_id) do update set card_number = excluded.card_number, card_expires_on = excluded.card_expires_on",
+                    new { id, number, input.ExpiresOn }, tx);
+                await Audit.Log(c, tx, m.UserId, m.TenantId, "member.card", id.ToString(), new { number, input.ExpiresOn });
+                await Notifications.Notifier.ToUsers(c, tx, await Notifications.Notifier.UsersOfMember(c, tx, id), "admin", "Tessera associativa assegnata",
+                    $"Numero {number}, valida fino al {DateOnly.Parse(input.ExpiresOn):dd/MM/yyyy}.", m.UserId, link: "/profilo");
+            });
+            return Results.NoContent();
+        }).RequireMember(Roles.Admin);
 
         // Dati modificabili dall'interessato (o dal genitore per il figlio)
         g.MapPut("/{id:guid}/profile", async (HttpContext ctx, Db db, Guid id, ProfileInput input) =>

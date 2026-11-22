@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Upload } from 'lucide-react'
 import type { Student } from '@/types'
 import { Button } from '@/components/ui/button'
+import { Field, Input } from '@/components/ui/input'
 import { UploadDocumentDialog } from '@/components/documents/DocumentDialogs'
 import { Card, CardContent } from '@/components/ui/card'
 import { MembershipBadge } from '@/components/common/badges'
@@ -23,6 +24,18 @@ export function AdminInfoCard({ student, asAdmin = false }: { student: Student; 
   const competitive = isCompetitive(db, student.id)
   const certificate = memberDocuments(db, student.id).find((r) => r.type.requiredForCompetitive)
   const [uploading, setUploading] = useState(false)
+  const [card, setCard] = useState<{ number: string; until: string } | null>(null)
+  const [cardError, setCardError] = useState('')
+  const saveCard = async () => {
+    try {
+      await repo.assignCard(student.id, card!.number, card!.until)
+      toast('Tessera assegnata: l’atleta è avvisata')
+      setCard(null)
+      setCardError('')
+    } catch (e) {
+      setCardError(e instanceof Error ? e.message : 'Operazione non riuscita')
+    }
+  }
   const certificateOk = certificate?.state === 'approvato' || certificate?.state === 'in_scadenza'
   const m = student.membership
   const today = todayISO()
@@ -32,8 +45,8 @@ export function AdminInfoCard({ student, asAdmin = false }: { student: Student; 
   const feeExpired = m.feePaidUntil < today
 
   const rows = [
-    { icon: IdCard, label: 'Tessera associativa', value: m.cardNumber },
-    { icon: CreditCard, label: 'Validità tessera', value: `fino al ${formatDate(m.expiresAt, { year: true })}` },
+    { icon: IdCard, label: 'Tessera associativa', value: m.cardNumber || 'da assegnare (lo fa la segreteria)', tone: m.cardNumber ? undefined : 'text-danger' },
+    { icon: CreditCard, label: 'Validità tessera', value: m.cardNumber ? `fino al ${formatDate(m.expiresAt, { year: true })}` : '—' },
     {
       icon: FileHeart,
       label: 'Certificato medico',
@@ -63,6 +76,29 @@ export function AdminInfoCard({ student, asAdmin = false }: { student: Student; 
             </div>
           ))}
         </dl>
+        {asAdmin && (
+          <div className="mt-4 rounded-2xl border border-line/70 p-3">
+            {card ? (
+              <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+                <Field label="Numero di tessera" htmlFor="card-number">
+                  <Input id="card-number" value={card.number} onChange={(e) => setCard({ ...card, number: e.target.value })} placeholder="Es. UISP-MO-02604" autoFocus />
+                </Field>
+                <Field label="Valida fino al" htmlFor="card-until">
+                  <Input id="card-until" type="date" value={card.until} onChange={(e) => setCard({ ...card, until: e.target.value })} />
+                </Field>
+                <span className="flex gap-1.5">
+                  <Button size="sm" onClick={saveCard}>Salva</Button>
+                  <Button size="sm" variant="ghost" onClick={() => { setCard(null); setCardError('') }}>Annulla</Button>
+                </span>
+                {cardError && <p className="text-sm text-danger sm:col-span-3">{cardError}</p>}
+              </div>
+            ) : (
+              <Button size="sm" variant={m.cardNumber ? 'outline' : 'primary'} onClick={() => setCard({ number: m.cardNumber, until: m.cardNumber ? m.expiresAt : defaultCardExpiry() })}>
+                <IdCard /> {m.cardNumber ? 'Modifica tessera' : 'Assegna il numero di tessera'}
+              </Button>
+            )}
+          </div>
+        )}
         <div className="mt-4 rounded-2xl bg-cipria-50 p-3">
           <label className="flex items-center gap-2.5 text-sm font-semibold text-ink">
             <input
@@ -102,4 +138,10 @@ export function AdminInfoCard({ student, asAdmin = false }: { student: Student; 
       </CardContent>
     </Card>
   )
+}
+
+/** Validità proposta: fine della stagione sportiva in corso (31 agosto) */
+function defaultCardExpiry() {
+  const now = new Date()
+  return `${now.getFullYear() + (now.getMonth() >= 8 ? 1 : 0)}-08-31`
 }

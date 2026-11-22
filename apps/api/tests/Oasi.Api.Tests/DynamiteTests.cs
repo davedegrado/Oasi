@@ -352,6 +352,25 @@ public sealed class DynamiteTests(ApiFixture api)
         Assert.DoesNotContain((await api.For(Seed.ProvaHost, Seed.ProvaTeacher).GetFromJsonAsync<JsonElement[]>("/v1/rooms"))!, r => r.GetProperty("name").GetString() == "Sala Luna");
     }
 
+    [Fact]
+    public async Task Numero_di_tessera_assegnato_dall_amministrazione_unico_nella_struttura()
+    {
+        // Atleta registrata senza tessera: l'amministrazione lo vede
+        await api.Sql("insert into app.member_admin (tenant_id, member_id) values (@t, @m) on conflict (tenant_id, member_id) do update set card_number = null",
+            new { t = OasiTenant, m = Member("stu-noemi") });
+        Assert.True((await Admin.GetFromJsonAsync<JsonElement[]>("/v1/members"))!.Single(x => x.GetProperty("id").GetGuid() == Member("stu-noemi")).GetProperty("cardMissing").GetBoolean());
+        // L'atleta non si assegna la tessera da sola
+        Assert.Equal(HttpStatusCode.Forbidden, (await As("stu-noemi").PutAsJsonAsync($"/v1/members/{Member("stu-noemi")}/card", new { cardNumber = "X-1", expiresOn = "2027-08-31" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await Admin.PutAsJsonAsync($"/v1/members/{Member("stu-noemi")}/card", new { cardNumber = "TEST-0001", expiresOn = "2027-08-31" })).StatusCode);
+        var adminData = (await As("stu-noemi").GetFromJsonAsync<JsonElement>($"/v1/members/{Member("stu-noemi")}")).GetProperty("administrative");
+        Assert.Equal("TEST-0001", adminData.GetProperty("cardNumber").GetString());
+        Assert.False((await Admin.GetFromJsonAsync<JsonElement[]>("/v1/members"))!.Single(x => x.GetProperty("id").GetGuid() == Member("stu-noemi")).GetProperty("cardMissing").GetBoolean());
+        Assert.Contains((await As("stu-noemi").GetFromJsonAsync<JsonElement[]>("/v1/notifications"))!, n => n.GetProperty("title").GetString() == "Tessera associativa assegnata");
+        // Lo stesso numero non si assegna a un'altra persona (anche cambiando maiuscole)
+        Assert.Equal("card_taken", await ErrorType(await Admin.PutAsJsonAsync($"/v1/members/{Member("stu-greta")}/card", new { cardNumber = "test-0001", expiresOn = "2027-08-31" })));
+        Assert.Equal(HttpStatusCode.BadRequest, (await Admin.PutAsJsonAsync($"/v1/members/{Member("stu-greta")}/card", new { cardNumber = "TEST-0002", expiresOn = "non è una data" })).StatusCode);
+    }
+
     // ── Sostituzioni ───────────────────────────────────────────────────
 
     [Fact]

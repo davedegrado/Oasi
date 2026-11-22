@@ -520,6 +520,19 @@ export class LocalRepository implements OasiRepository {
       classes: db.classes.map((c) => (student.classIds.includes(c.id) ? { ...c, studentIds: [...new Set([...c.studentIds, student.id])] } : c)),
     }))
 
+  assignCard: OasiRepository['assignCard'] = (studentId, cardNumber, expiresAt) =>
+    this.commit((db) => {
+      const n = cardNumber.trim()
+      if (!n) throw new Error('Scrivi il numero di tessera')
+      if (!expiresAt) throw new Error('Indica la validità della tessera')
+      const other = db.students.find((s) => s.id !== studentId && s.membership.cardNumber.trim().toLowerCase() === n.toLowerCase())
+      if (other) throw new Error(`Numero già assegnato a ${other.firstName} ${other.lastName}`)
+      return withNotifications(
+        { ...db, students: db.students.map((s) => (s.id === studentId ? { ...s, membership: { ...s.membership, cardNumber: n, expiresAt } } : s)) },
+        [{ kind: 'comunicazione', title: 'Tessera associativa assegnata', body: `Numero ${n}, valida fino al ${formatDate(expiresAt, { year: true })}.`, to: [`student:${studentId}`], link: { allieva: '/allieva/profilo' } }],
+      )
+    })
+
   addTeacher: OasiRepository['addTeacher'] = (teacher) => this.commit((db) => ({ ...db, teachers: [...db.teachers, teacher] }))
 
   saveClosure: OasiRepository['saveClosure'] = (closure) =>
