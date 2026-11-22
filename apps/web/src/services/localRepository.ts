@@ -1,10 +1,10 @@
 import type { AppNotification, MemberDocument, OasiDatabase } from '@/types'
 import { applyClosure, createSeedDatabase, DATABASE_VERSION } from '@/data/seed'
-import { addDays, formatDate, startOfWeek, todayISO } from '@/lib/dates'
+import { addDays, addMonths, formatDate, startOfWeek, todayISO } from '@/lib/dates'
 import { uid } from '@/lib/utils'
 import type { OasiRepository } from './repository'
 import { isCompetitiveClass, isLessonPast, lessonRoster, makeupCredits, makeupLevelAllowed, makeupWindow, singleLessonWindow } from './selectors'
-import { documentState, FREE_TYPE } from './documents'
+import { documentState, expiryRequired, FREE_TYPE } from './documents'
 
 const STORAGE_KEY = 'oasi-demo-db'
 
@@ -69,9 +69,20 @@ function migrateFrom6(db: OasiDatabase): OasiDatabase {
 /** v8 → v9: agonismo, classi con più discipline, brani degli eventi, soglie configurabili, piani e quote */
 const days = (n: number | undefined) => `${n ?? 0} ${n === 1 ? 'giorno' : 'giorni'}`
 
+/** v14 → v15: per Oasi la data di scadenza è obbligatoria in ogni documento */
+function migrateFrom14(db: OasiDatabase): OasiDatabase {
+  return {
+    ...db,
+    version: DATABASE_VERSION,
+    association: { ...db.association, settings: { ...db.association.settings, documentExpiryRequired: db.association.settings.documentExpiryRequired ?? true } },
+    // Documenti dimostrativi caricati senza scadenza: un anno dal caricamento
+    documents: db.documents.map((d) => (d.expiresOn ? d : { ...d, expiresOn: addMonths(d.uploadedAt.slice(0, 10), 12) })),
+  }
+}
+
 /** v13 → v14: scadenza obbligatoria per il certificato medico agonistico */
 function migrateFrom13(db: OasiDatabase): OasiDatabase {
-  return { ...db, version: DATABASE_VERSION, documentTypes: db.documentTypes.map((t) => (t.id === 'dt-agonistico' && t.expiryRequired === undefined ? { ...t, expiryRequired: true } : t)) }
+  return migrateFrom14({ ...db, version: 14, documentTypes: db.documentTypes.map((t) => (t.id === 'dt-agonistico' && t.expiryRequired === undefined ? { ...t, expiryRequired: true } : t)) })
 }
 
 /** v12 → v13: finestra dei recuperi in giorni invece che in ore (arrotondata per eccesso) */
@@ -196,6 +207,7 @@ function loadFromStorage(): OasiDatabase | null {
     if (parsed.version === 11) return migrateFrom11(parsed)
     if (parsed.version === 12) return migrateFrom12(parsed)
     if (parsed.version === 13) return migrateFrom13(parsed)
+    if (parsed.version === 14) return migrateFrom14(parsed)
     if (parsed.version !== DATABASE_VERSION) return null
     return parsed
   } catch {
@@ -248,12 +260,6 @@ const documentRecipient = (db: OasiDatabase, memberId: string) =>
 
 export const MAX_DOCUMENT_BYTES = 4 * 1024 * 1024
 export const ALLOWED_DOCUMENT_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic']
-
-function addMonths(iso: string, months: number) {
-  const d = new Date(`${iso}T12:00:00`)
-  d.setMonth(d.getMonth() + months)
-  return d.toISOString().slice(0, 10)
-}
 
 /** Nuova versione di un documento: la precedente resta nello storico, non è più "corrente" */
 function newVersion(
@@ -724,7 +730,7 @@ export class LocalRepository implements OasiRepository {
       if (input.fileSize > MAX_DOCUMENT_BYTES) throw new Error('Il file supera i 4 MB consentiti nella demo')
       if (!ALLOWED_DOCUMENT_TYPES.includes(input.fileType)) throw new Error('Formato non ammesso: carica un PDF o un’immagine')
       const today = todayISO()
-      if (type.expiryRequired && !input.expiresOn) throw new Error('Indica la data di scadenza del documento')
+      if (expiryRequired(db, type) && !input.expiresOn) throw new Error('Indica la data di scadenza del documento')
       const expiresOn = input.expiresOn || (type.validityMonths ? addMonths(today, type.validityMonths) : undefined)
       const next = newVersion(db, input.memberId, input.typeId, {
         status: 'in_verifica',
@@ -752,7 +758,7 @@ export class LocalRepository implements OasiRepository {
     this.commit((db) => {
       const doc = db.documents.find((d) => d.id === documentId)
       if (!doc || !doc.current) throw new Error('Si corregge solo la versione attuale del documento.')
-      if (!expiresOn && db.documentTypes.find((t) => t.id === doc.typeId)?.expiryRequired) throw new Error('Per questo documento la scadenza è obbligatoria')
+      if (!expiresOn && expiryRequired(db, db.documentTypes.find((t) => t.id === doc.typeId))) throw new Error('Per questo documento la scadenza è obbligatoria')
       const now = new Date().toISOString()
       const back = by !== 'admin' && doc.status === 'approvato'
       const next = {

@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Field, Input, Textarea } from '@/components/ui/input'
 import { useDatabase, useRepository } from '@/hooks/useDatabase'
 import { useToast } from '@/hooks/useToast'
-import { formatBytes, type MemberDocumentRow } from '@/services/documents'
+import { expiryRequired, formatBytes, type MemberDocumentRow } from '@/services/documents'
+import { addMonths, todayISO } from '@/lib/dates'
 import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from '@/services/localRepository'
 import type { DocumentDecision } from '@/services/repository'
 import { DOCUMENT_CATEGORY_LABEL } from '@/lib/labels'
@@ -15,15 +16,18 @@ import { ACTION_LABEL, actorName, downloadDocumentFile, fmtDay, openDocumentFile
 const errorText = (e: unknown) => (e instanceof Error ? e.message : 'Operazione non riuscita')
 
 export function UploadDocumentDialog({ row, memberId, uploadedBy, onClose }: { row: MemberDocumentRow; memberId: string; uploadedBy: string; onClose: () => void }) {
+  const db = useDatabase()
   const repo = useRepository()
   const { toast } = useToast()
   const [file, setFile] = useState<File | null>(null)
   const [signed, setSigned] = useState(false)
-  const [expires, setExpires] = useState('')
+  // Proposta: la validità tipica della tipologia (da verificare sul documento)
+  const [expires, setExpires] = useState(() => (row.type.validityMonths ? addMonths(todayISO(), row.type.validityMonths) : ''))
   const [title, setTitle] = useState(row.title ?? '')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const { type } = row
+  const mustExpire = expiryRequired(db, type)
 
   const submit = async () => {
     if (!file) return setError('Scegli un file da caricare')
@@ -31,7 +35,7 @@ export function UploadDocumentDialog({ row, memberId, uploadedBy, onClose }: { r
     if (!ALLOWED_DOCUMENT_TYPES.includes(file.type)) return setError('Formato non ammesso: carica un PDF o un’immagine (JPG, PNG)')
     if (type.signatureMode === 'caricamento_firmato' && !signed) return setError('Il modulo va caricato firmato a mano: conferma la firma')
     if (row.needsTitle && !title.trim()) return setError('Dai un titolo al documento')
-    if (type.expiryRequired && !expires) return setError('Indica la data di scadenza scritta sul documento')
+    if (mustExpire && !expires) return setError('Indica la data di scadenza del documento')
     setBusy(true)
     try {
       const fileData = await readFileAsDataUrl(file)
@@ -93,16 +97,14 @@ export function UploadDocumentDialog({ row, memberId, uploadedBy, onClose }: { r
             Confermo che il documento è firmato a mano (scansione o foto del modulo firmato).
           </label>
         )}
-        {/* La scadenza si può sempre indicare; per alcune tipologie (es. certificato agonistico) è obbligatoria */}
-        {(
-          <Field
-            label={type.expiryRequired ? 'Data di scadenza (obbligatoria)' : 'Data di scadenza (facoltativa)'}
-            htmlFor="doc-exp"
-            hint={type.expiryRequired ? 'Quella scritta sul certificato.' : type.validityMonths ? `Se vuota: ${type.validityMonths} mesi da oggi` : undefined}
-          >
-            <Input id="doc-exp" type="date" value={expires} onChange={(e) => setExpires(e.target.value)} />
-          </Field>
-        )}
+        {/* Scadenza: obbligatoria se lo chiede la struttura (Oasi: sempre) o la tipologia */}
+        <Field
+          label={mustExpire ? 'Data di scadenza (obbligatoria)' : 'Data di scadenza (facoltativa)'}
+          htmlFor="doc-exp"
+          hint={type.validityMonths ? `Proposta: ${type.validityMonths} mesi da oggi. Correggila con quella scritta sul documento.` : 'Quella scritta sul documento.'}
+        >
+          <Input id="doc-exp" type="date" required={mustExpire} value={expires} onChange={(e) => setExpires(e.target.value)} />
+        </Field>
         {row.doc && <p className="text-xs text-ink-muted">La versione attuale resta nello storico: nessun documento viene cancellato.</p>}
         {error && <p className="rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
       </div>
@@ -121,7 +123,7 @@ export function DocumentDetailDialog({ row, mode, onClose, onReplace }: { row: M
   const [editingExpiry, setEditingExpiry] = useState(false)
   const [expiry, setExpiry] = useState('')
   const saveExpiry = async () => {
-    if (type.expiryRequired && !expiry) return setError('Per questo documento la scadenza è obbligatoria')
+    if (expiryRequired(db, type) && !expiry) return setError('La data di scadenza è obbligatoria')
     try {
       await repo.setDocumentExpiry(doc!.id, expiry || null, mode === 'admin' ? 'admin' : doc!.memberId)
       toast(mode === 'admin' ? 'Scadenza salvata' : 'Scadenza salvata: la segreteria la verificherà')
@@ -173,7 +175,7 @@ export function DocumentDetailDialog({ row, mode, onClose, onReplace }: { row: M
                 </span>
               ) : (
                 <span className="flex flex-wrap items-center gap-2">
-                  {doc.expiresOn ? fmtDay(doc.expiresOn) : 'nessuna'}
+                  {doc.expiresOn ? fmtDay(doc.expiresOn) : expiryRequired(db, type) ? <span className="font-semibold text-danger">da indicare</span> : 'nessuna'}
                   {doc.current && (
                     <button type="button" className="text-xs font-semibold text-rosa-scuro" onClick={() => { setExpiry(doc.expiresOn ?? ''); setEditingExpiry(true) }}>
                       {doc.expiresOn ? 'modifica' : 'indica'}

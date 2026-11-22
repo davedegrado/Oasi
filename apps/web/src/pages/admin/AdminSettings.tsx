@@ -273,6 +273,7 @@ export function AdminSettings() {
       </Card>
 
       <BookingWindowsCard />
+      <DocumentRulesCard />
 
       <Card>
         <CardContent className="space-y-5">
@@ -410,6 +411,32 @@ function InfoDialog({ info, onClose }: { info: AssociationInfo; onClose: () => v
  * Finestre "da … a …" prima della lezione: per prenotare una lezione singola e per chiedere un recupero.
  * Il massimo dice da quando si può (vuoto = senza limite), il minimo fino a quando.
  */
+function DocumentRulesCard() {
+  const db = useDatabase()
+  const repo = useRepository()
+  const { toast } = useToast()
+  const a = db.association
+  const on = a.settings.documentExpiryRequired === true
+  const toggle = async (value: boolean) => {
+    await repo.updateAssociation({ settings: { ...a.settings, documentExpiryRequired: value } })
+    toast(value ? 'Scadenza obbligatoria per tutti i documenti' : 'Scadenza obbligatoria solo dove lo chiede la tipologia')
+  }
+  return (
+    <Card>
+      <CardContent className="space-y-2">
+        <h2 className="text-base font-bold">Documenti</h2>
+        <label className="flex items-start gap-2.5 text-sm text-ink-soft">
+          <input type="checkbox" className="mt-0.5 size-4 accent-rosa-intenso" checked={on} onChange={(e) => toggle(e.target.checked)} />
+          <span>
+            Data di scadenza obbligatoria per ogni documento caricato, di atlete e insegnanti, anche senza tipologia.
+            <span className="block text-xs text-ink-muted">Se la togli resta obbligatoria solo per le tipologie che la chiedono (es. certificato agonistico).</span>
+          </span>
+        </label>
+      </CardContent>
+    </Card>
+  )
+}
+
 function BookingWindowsCard() {
   const db = useDatabase()
   const repo = useRepository()

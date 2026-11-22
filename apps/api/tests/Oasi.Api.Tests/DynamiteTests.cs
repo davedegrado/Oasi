@@ -148,7 +148,7 @@ public sealed class DynamiteTests(ApiFixture api)
         form.Add(file, "file", fileName);
         if (typeId is { } t) form.Add(new StringContent(t.ToString()), "typeId");
         if (title is not null) form.Add(new StringContent(title), "title");
-        if (expiresOn is not null) form.Add(new StringContent(expiresOn), "expiresOn");
+        form.Add(new StringContent(expiresOn ?? "2030-12-31"), "expiresOn");   // Oasi chiede sempre la scadenza; "" = non indicata
         return form;
     }
 
@@ -218,6 +218,8 @@ public sealed class DynamiteTests(ApiFixture api)
         var chiaraId = Member("tch-chiara");
         // Né tipologia né titolo: rifiutato
         Assert.Equal(HttpStatusCode.BadRequest, (await chiara.PostAsync("/v1/documents", Upload(null, null, "x.pdf"))).StatusCode);
+        // Per Oasi la scadenza è obbligatoria in ogni documento, anche senza tipologia
+        Assert.Equal(HttpStatusCode.BadRequest, (await chiara.PostAsync("/v1/documents", Upload(null, "Brevetto istruttore", "brevetto.pdf", expiresOn: ""))).StatusCode);
         var id = await CreatedId(await chiara.PostAsync("/v1/documents", Upload(null, "Brevetto istruttore", "brevetto.pdf", expiresOn: InDays(400))));
         var doc = (await chiara.GetFromJsonAsync<JsonElement>($"/v1/documents/{id}")).GetProperty("document");
         Assert.Equal(JsonValueKind.Null, doc.GetProperty("typeId").ValueKind);
@@ -230,6 +232,7 @@ public sealed class DynamiteTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.OK, (await Admin.GetAsync($"/v1/documents/{id}/file")).StatusCode);
         // La scadenza si corregge come per gli altri documenti
         Assert.Equal(HttpStatusCode.OK, (await chiara.PutAsJsonAsync($"/v1/documents/{id}/expiry", new { expiresOn = InDays(300) })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await chiara.PutAsJsonAsync($"/v1/documents/{id}/expiry", new { expiresOn = (string?)null })).StatusCode);
         // Un'altra insegnante non lo vede
         Assert.Equal(HttpStatusCode.Forbidden, (await api.For(Seed.OasiHost, Seed.Elena).GetAsync($"/v1/documents/{id}")).StatusCode);
         // Selezione multipla: due documenti scelti, un unico ZIP (file non ricompressi)

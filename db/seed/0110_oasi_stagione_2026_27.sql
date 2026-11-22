@@ -48,7 +48,8 @@ begin
     "packages": { "consumeOn": "attendance" },
     "competitive": { "competitionFeeRangeCents": [5000, 15000] },
     "classes": { "categories": ["Bambini/Ragazzi", "Adulti/Ragazzi"], "maxDisciplines": 2 },
-    "payments": { "methods": ["bank_transfer", "cash"] }
+    "payments": { "methods": ["bank_transfer", "cash"] },
+    "documents": { "expiryRequired": true }
   }'::jsonb) where tenant_id = t;
 
   -- ── Stagione e periodi ──

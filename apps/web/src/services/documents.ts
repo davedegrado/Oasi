@@ -27,7 +27,7 @@ export const FREE_TYPE: DocumentType = {
   id: '',
   name: 'Altro documento',
   category: 'altro',
-  description: 'Un documento qualsiasi: dagli un titolo e indica la scadenza, se c’è.',
+  description: 'Un documento qualsiasi: dagli un titolo e indica la data di scadenza.',
   required: false,
   signatureMode: 'nessuna',
   sensitive: false,
@@ -56,6 +56,11 @@ export interface MemberDocumentRow {
  * per le tipologie che chiedono più documenti, una riga per documento più una per ogni mancante;
  * in fondo i documenti liberi, senza tipologia.
  */
+/** La scadenza è obbligatoria se lo chiede la struttura per tutti i documenti o la singola tipologia */
+export function expiryRequired(db: OasiDatabase, type: DocumentType | undefined): boolean {
+  return db.association.settings.documentExpiryRequired === true || type?.expiryRequired === true
+}
+
 export function memberDocuments(db: OasiDatabase, memberId: string, today = todayISO()): MemberDocumentRow[] {
   const mine = (db.documents ?? []).filter((d) => d.memberId === memberId)
   const competitive = isCompetitive(db, memberId)

@@ -22,6 +22,7 @@ public sealed class RevisionTests(ApiFixture api)
         form.Add(file, "file", fileName);
         form.Add(new StringContent(typeId.ToString()), "typeId");
         if (memberId is { } m) form.Add(new StringContent(m.ToString()), "memberId");
+        form.Add(new StringContent("2030-12-31"), "expiresOn");   // Oasi chiede sempre la scadenza
         return form;
     }
 

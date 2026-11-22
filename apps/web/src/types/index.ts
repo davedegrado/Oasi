@@ -243,6 +243,8 @@ export interface AssociationInfo {
     makeupOpensDays?: number
     /** ...e fino a N giorni prima (0 = fino all'inizio). Un giorno = 24 ore */
     makeupClosesDays?: number
+    /** Data di scadenza obbligatoria per ogni documento, di qualunque tipologia (Oasi: sì) */
+    documentExpiryRequired?: boolean
     /** Aree in cui sono organizzate le classi (Oasi: Bambini/Ragazzi, Adulti/Ragazzi) */
     classCategories?: string[]
     /** Numero massimo di discipline per classe (Oasi: 2) */

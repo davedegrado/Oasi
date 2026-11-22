@@ -29,6 +29,12 @@ export function addDays(iso: string, days: number): string {
   return toISODate(d)
 }
 
+export function addMonths(iso: string, months: number): string {
+  const d = parseISODate(iso)
+  d.setMonth(d.getMonth() + months)
+  return toISODate(d)
+}
+
 /** 1 = lunedì ... 7 = domenica */
 export function isoWeekday(iso: string): number {
   const wd = parseISODate(iso).getDay()

@@ -67,6 +67,8 @@ public sealed class TenantSettings
         public int ExpiryReminderDays { get; init; } = 30;
         /// <summary>Promemoria N giorni prima del termine di un documento richiesto (es. documenti mensili).</summary>
         public int RequestReminderDays { get; init; } = 3;
+        /// <summary>Scadenza obbligatoria per ogni documento caricato, di qualunque tipologia (Oasi: sì).</summary>
+        public bool ExpiryRequired { get; init; }
     }
 
     public sealed class PackageSettings

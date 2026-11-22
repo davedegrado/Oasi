@@ -54,7 +54,7 @@ public sealed class SaasTests(ApiFixture api)
         form.Add(file, "file", fileName);
         form.Add(new StringContent(typeId.ToString()), "typeId");
         if (memberId is { } m) form.Add(new StringContent(m.ToString()), "memberId");
-        if (expiresOn is not null) form.Add(new StringContent(expiresOn), "expiresOn");
+        form.Add(new StringContent(expiresOn ?? "2030-12-31"), "expiresOn");   // Oasi chiede sempre la scadenza; "" = non indicata
         return form;
     }
 
@@ -520,7 +520,7 @@ public sealed class SaasTests(ApiFixture api)
             Assert.Equal("certificate_required", await ErrorType(await Admin.PostAsJsonAsync($"/v1/enrollments/{enrollment}/decision", new { approve = true })));
 
             // Il certificato va caricato con la scadenza; finché non è approvato non basta
-            Assert.Equal(HttpStatusCode.BadRequest, (await greta.PostAsync("/v1/documents", Upload(certType, "agonistico.pdf", "certificato"))).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, (await greta.PostAsync("/v1/documents", Upload(certType, "agonistico.pdf", "certificato", expiresOn: ""))).StatusCode);
             var docId = await CreatedId(await greta.PostAsync("/v1/documents", Upload(certType, "agonistico.pdf", "certificato", expiresOn: InDays(300))));
             Assert.Equal("certificate_required", await ErrorType(await Admin.PostAsJsonAsync($"/v1/enrollments/{enrollment}/decision", new { approve = true })));
             Assert.Equal(HttpStatusCode.OK, (await Admin.PostAsJsonAsync($"/v1/documents/{docId}/review", new { action = "approve" })).StatusCode);

@@ -66,7 +66,8 @@ export function buildDemoDocuments(today: string): MemberDocument[] {
     return {
       ...d,
       uploadedAt,
-      expiresOn: expiresIn !== undefined ? addDays(today, expiresIn) : undefined,
+      // Oasi chiede sempre la scadenza: in mancanza di una data specifica, un anno dal caricamento
+      expiresOn: addDays(today, expiresIn ?? 365 - daysAgo),
       periodKey: monthly ? today.slice(0, 7) : undefined,
       reviewedAt: reviewedDaysAgo !== undefined ? addDays(today, -reviewedDaysAgo) : undefined,
       history,

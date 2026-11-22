@@ -28,8 +28,8 @@ Legenda: **API** = regola applicata dal backend con persistenza, permessi e test
 | 5 | Eventi gestiti dall'amministrazione, consultati da insegnanti e atlete | Sì | Sì | Stessa vista per tutti; anche insegnanti e segreteria si segnano ("I miei") |
 | 5 | Eventi collegabili a classi, discipline, insegnanti e partecipanti; notifiche | Sì | Parziale | |
 | 6 | Presenze, note della lezione, **sostituzioni** | Sì | Sì | Chi sostituisce vede la lezione e compila le presenze |
-| 6 | **Due documenti ogni 30 giorni, entro la fine del mese** | Sì | Sì | Una tipologia che ne chiede due al mese; l'insegnante dà a ciascuno un titolo libero e la scadenza, se c'è |
-| 8 | Documenti senza tipologia definita | Sì | Sì | Titolo libero e scadenza facoltativa, per atlete e insegnanti |
+| 6 | **Due documenti ogni 30 giorni, entro la fine del mese** | Sì | Sì | Una tipologia che ne chiede due al mese; l'insegnante dà a ciascuno un titolo libero e la scadenza |
+| 8 | Documenti senza tipologia definita | Sì | Sì | Titolo libero e scadenza, per atlete e insegnanti |
 | 6 | Stati in attesa / approvato / da correggere; notifiche senza duplicati | Sì | Sì | Le **push** non sono collegate a un servizio reale |
 | 6 | Lezioni: prima il calendario, poi Prossime lezioni, Storico, Richieste per tipologia e stato | — | Sì | |
 | 7 | Classi in **due aree: bambini/ragazzi e adulti/ragazzi**, categorie adattabili | Sì | Sì | Aree modificabili in Gestione |
@@ -38,6 +38,7 @@ Legenda: **API** = regola applicata dal backend con persistenza, permessi e test
 | 7 | Scheda atleta: tessera, certificati approvati, quote e pagamenti | Sì | Sì | |
 | 7 | Riepilogo presenze compatto; download singolo, per atleta, per gruppi, a selezione multipla | Sì | Sì | Più documenti: un unico ZIP senza ricompressione (PDF e foto sono già compressi) |
 | 8 | Un documento, una sola copia; stati, revisore, note | Sì | Sì | |
+| 8 | Data di scadenza obbligatoria in ogni documento | Sì | Sì | Impostazione `documents.expiryRequired` (Oasi: sì, Gestione → Associazione); altrimenti solo per le tipologie che la chiedono |
 | 8 | Caricamento di un documento firmato ≠ firma elettronica | Sì | Sì | Nessuna firma elettronica dichiarata |
 | 8 | Consensi e informative (immagini, minorenni) | Tabella presente | Parziale | Nessun flusso completo |
 | 9 | Motore piani configurabile: annuale, periodico, mensile, rate, lezioni singole, pacchetti, semiprivate | Sì | Sì | |
@@ -107,7 +108,7 @@ Casi coperti per il prompt corretto:
 
 ## 6. Migrazioni
 
-`0008`, `0009`, `0010`, `0011`, `0012`, `0013`, `0014` vanno applicate in ordine. La `0011` rende facoltativa la tipologia dei documenti (titolo libero) e aggiunge la finestra dei recuperi.
+`0008`–`0015` vanno applicate in ordine. La `0015` aggiunge l'impostazione della scadenza obbligatoria per tutti i documenti. La `0011` rende facoltativa la tipologia dei documenti (titolo libero) e aggiunge la finestra dei recuperi.
 
  La `0010`:
 - rinomina `fee_plans.booking_hours_before` in `booking_closes_hours_before`;
