@@ -533,9 +533,12 @@ export class LocalRepository implements OasiRepository {
       if (!expiresAt) throw new Error('Indica la validità della tessera')
       const other = db.students.find((s) => s.id !== studentId && s.membership.cardNumber.trim().toLowerCase() === n.toLowerCase())
       if (other) throw new Error(`Numero già assegnato a ${other.firstName} ${other.lastName}`)
+      const previous = db.students.find((s) => s.id === studentId)?.membership
+      if (previous && previous.cardNumber === n && previous.expiresAt === expiresAt) return db   // nessuna modifica, nessun avviso
+      const title = previous?.cardNumber ? 'Tessera associativa aggiornata' : 'Tessera associativa assegnata'
       return withNotifications(
         { ...db, students: db.students.map((s) => (s.id === studentId ? { ...s, membership: { ...s.membership, cardNumber: n, expiresAt } } : s)) },
-        [{ kind: 'comunicazione', title: 'Tessera associativa assegnata', body: `Numero ${n}, valida fino al ${formatDate(expiresAt, { year: true })}.`, to: [`student:${studentId}`], link: { allieva: '/allieva/profilo' } }],
+        [{ kind: 'comunicazione', title, body: `Numero ${n}, valida fino al ${formatDate(expiresAt, { year: true })}.`, to: [`student:${studentId}`], link: { allieva: '/allieva/profilo' } }],
       )
     })
 

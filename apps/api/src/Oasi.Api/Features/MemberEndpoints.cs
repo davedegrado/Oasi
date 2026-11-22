@@ -129,12 +129,17 @@ public static class MemberEndpoints
                 var owner = await c.ExecuteScalarAsync<string?>(@"select mb.first_name || ' ' || mb.last_name from app.member_admin a join app.members mb on mb.id = a.member_id
                     where lower(a.card_number) = lower(@number) and a.member_id <> @id", new { number, id }, tx);
                 if (owner is not null) throw ApiException.Conflict("card_taken", $"Numero già assegnato a {owner}.");
+                // Una correzione (numero sbagliato o validità da cambiare) segue la stessa strada, ma l'avviso lo dice
+                var previous = await c.QuerySingleOrDefaultAsync<(string? Number, DateTime? Until)?>(
+                    "select card_number, card_expires_on::timestamp from app.member_admin where member_id = @id", new { id }, tx);
+                if (previous is { Number: var pn, Until: var pu } && pn == number && pu is { } d && DateOnly.FromDateTime(d) == DateOnly.Parse(input.ExpiresOn)) return;
+                var correcting = previous?.Number is not null;
                 await c.ExecuteAsync(@"insert into app.member_admin (tenant_id, member_id, card_number, card_expires_on)
                     values (app.current_tenant(), @id, @number, @ExpiresOn::date)
                     on conflict (tenant_id, member_id) do update set card_number = excluded.card_number, card_expires_on = excluded.card_expires_on",
                     new { id, number, input.ExpiresOn }, tx);
-                await Audit.Log(c, tx, m.UserId, m.TenantId, "member.card", id.ToString(), new { number, input.ExpiresOn });
-                await Notifications.Notifier.ToUsers(c, tx, await Notifications.Notifier.UsersOfMember(c, tx, id), "admin", "Tessera associativa assegnata",
+                await Audit.Log(c, tx, m.UserId, m.TenantId, "member.card", id.ToString(), new { number, input.ExpiresOn, previous = previous?.Number });
+                await Notifications.Notifier.ToUsers(c, tx, await Notifications.Notifier.UsersOfMember(c, tx, id), "admin", correcting ? "Tessera associativa aggiornata" : "Tessera associativa assegnata",
                     $"Numero {number}, valida fino al {DateOnly.Parse(input.ExpiresOn):dd/MM/yyyy}.", m.UserId, link: "/profilo");
             });
             return Results.NoContent();

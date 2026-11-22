@@ -369,6 +369,12 @@ public sealed class DynamiteTests(ApiFixture api)
         // Lo stesso numero non si assegna a un'altra persona (anche cambiando maiuscole)
         Assert.Equal("card_taken", await ErrorType(await Admin.PutAsJsonAsync($"/v1/members/{Member("stu-greta")}/card", new { cardNumber = "test-0001", expiresOn = "2027-08-31" })));
         Assert.Equal(HttpStatusCode.BadRequest, (await Admin.PutAsJsonAsync($"/v1/members/{Member("stu-greta")}/card", new { cardNumber = "TEST-0002", expiresOn = "non è una data" })).StatusCode);
+        // Numero sbagliato: l'amministrazione lo corregge e l'atleta riceve l'avviso di aggiornamento
+        Assert.Equal(HttpStatusCode.NoContent, (await Admin.PutAsJsonAsync($"/v1/members/{Member("stu-noemi")}/card", new { cardNumber = "TEST-0010", expiresOn = "2027-08-31" })).StatusCode);
+        Assert.Equal("TEST-0010", (await As("stu-noemi").GetFromJsonAsync<JsonElement>($"/v1/members/{Member("stu-noemi")}")).GetProperty("administrative").GetProperty("cardNumber").GetString());
+        Assert.Contains((await As("stu-noemi").GetFromJsonAsync<JsonElement[]>("/v1/notifications"))!, n => n.GetProperty("title").GetString() == "Tessera associativa aggiornata");
+        // Il vecchio numero torna libero
+        Assert.Equal(HttpStatusCode.NoContent, (await Admin.PutAsJsonAsync($"/v1/members/{Member("stu-greta")}/card", new { cardNumber = "TEST-0001", expiresOn = "2027-08-31" })).StatusCode);
     }
 
     // ── Sostituzioni ───────────────────────────────────────────────────

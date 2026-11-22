@@ -28,8 +28,9 @@ export function AdminInfoCard({ student, asAdmin = false }: { student: Student; 
   const [cardError, setCardError] = useState('')
   const saveCard = async () => {
     try {
+      const correcting = !!student.membership.cardNumber
       await repo.assignCard(student.id, card!.number, card!.until)
-      toast('Tessera assegnata: l’atleta è avvisata')
+      toast(correcting ? 'Tessera aggiornata: l’atleta è avvisata' : 'Tessera assegnata: l’atleta è avvisata')
       setCard(null)
       setCardError('')
     } catch (e) {
