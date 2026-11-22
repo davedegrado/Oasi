@@ -88,7 +88,6 @@ DocumentEndpoints.Map(app);
 NotificationEndpoints.Map(app);
 SettingsEndpoints.Map(app);
 MemberEndpoints.Map(app);
-SeasonEndpoints.Map(app);
 PlanEndpoints.Map(app);
 BookingEndpoints.Map(app);
 RoomEndpoints.Map(app);

@@ -3,7 +3,7 @@ import { addDays, addMonths } from '@/lib/dates'
 
 /**
  * Listino iniziale di Oasi Metropolitana per la stagione 2026/2027.
- * Sono DATI di questa palestra (gli stessi di db/seed/0110_oasi_stagione_2026_27.sql),
+ * Sono DATI di questa palestra (gli stessi di db/seed/0110_oasi_configurazione_2026_27.sql),
  * modificabili da Gestione → Piani: non sono regole dell'applicazione.
  * L'atleta sceglie il piano quando chiede l'iscrizione a una classe.
  */

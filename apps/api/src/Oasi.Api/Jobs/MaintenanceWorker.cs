@@ -66,9 +66,7 @@ public sealed class MaintenanceWorker(Db db, IFileStorage storage, IConfiguratio
             await PlanEndpoints.ExpirePlans(c, tx);
             await MakeupCredits.ExpireOld(c, tx);
             await DocumentReminders(c, tx, settings);
-            await PaymentReminders(c, tx);
             await GenerateLessons(c, tx);
-            await SeasonReminder(c, tx);
         }, ct);
     }
 
@@ -124,17 +122,7 @@ public sealed class MaintenanceWorker(Db db, IFileStorage storage, IConfiguratio
                 await Notifier.ToUsers(c, tx, admins, "documents", $"Documento mancante: {r.TypeName}", $"{r.MemberName} non l'ha ancora caricato.", null, link: "/archivio");
     }
 
-    private static async Task PaymentReminders(IDbConnection c, IDbTransaction tx)
-    {
-        var overdue = await c.QueryAsync<(Guid Id, Guid MemberId, string Description, DateTime DueOn)>(@"
-            select ch.id, ch.member_id, ch.description, ch.due_on::timestamp from app.member_charges ch
-            where ch.status = 'open' and ch.due_on < app.tenant_today()", transaction: tx);
-        foreach (var o in overdue)
-            await Notifier.Once(c, tx, $"charge:{o.Id}:overdue", await Notifier.UsersOfMember(c, tx, o.MemberId), "payments",
-                "Quota scaduta", $"{o.Description}, scadenza {o.DueOn:dd/MM/yyyy}. Il pagamento si effettua in segreteria.", "/profilo/quote");
-    }
-
-    /// <summary>Lezioni delle prossime 8 settimane: mai oltre la stagione attiva; le chiusure le annullano.</summary>
+    /// <summary>Lezioni delle prossime 8 settimane; le chiusure le annullano.</summary>
     private static async Task GenerateLessons(IDbConnection c, IDbTransaction tx)
     {
         await c.ExecuteAsync(@"
@@ -143,24 +131,11 @@ public sealed class MaintenanceWorker(Db db, IFileStorage storage, IConfiguratio
             from app.classes cl
             cross join generate_series(app.tenant_today(), app.tenant_today() + 55, interval '1 day') d
             where cl.is_active and extract(isodow from d) = cl.weekday
-              and (not exists (select 1 from app.seasons where status = 'active')
-                   or exists (select 1 from app.seasons s where s.status = 'active' and d::date between s.start_date and s.end_date))
             on conflict (tenant_id, class_id, date) do nothing", transaction: tx);
         await c.ExecuteAsync(@"
             update app.lessons l set status = 'cancelled', closure_id = x.id,
               note = case when x.note = '' then x.title else x.title || ': ' || x.note end
             from app.closures x
             where l.date between x.start_date and x.end_date and l.status = 'scheduled' and l.closure_id is null and l.date >= app.tenant_today()", transaction: tx);
-    }
-
-    private static async Task SeasonReminder(IDbConnection c, IDbTransaction tx)
-    {
-        var season = await c.QuerySingleOrDefaultAsync<(Guid Id, string Name, int DaysLeft)?>(
-            "select id, name, (end_date - app.tenant_today())::int from app.seasons where status = 'active'", transaction: tx);
-        if (season is not { } s || s.DaysLeft > 60) return;
-        var hasNext = await c.ExecuteScalarAsync<bool>("select exists(select 1 from app.seasons where status = 'draft' and start_date > app.tenant_today())", transaction: tx);
-        if (hasNext) return;
-        await Notifier.Once(c, tx, $"season:{s.Id}:setup-next", await Notifier.UsersWithRoles(c, tx, Roles.Admin), "admin",
-            "Configura la nuova stagione", $"La stagione {s.Name} termina tra {Math.Max(s.DaysLeft, 0)} giorni: imposta date, periodi, chiusure e piani della prossima.", "/gestione/stagioni");
     }
 }

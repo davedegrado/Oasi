@@ -147,18 +147,16 @@ public static class ClosureEndpoints
         await c.ExecuteAsync(@"
             update app.makeup_credits k set status = 'cancelled'
             from app.lessons l where l.id = k.source_lesson_id and l.closure_id = @closureId and k.status = 'available'", new { closureId }, tx);
-        // Le prenotazioni di lezioni singole in quei giorni vengono annullate senza consumare ingressi
-        var booked = await c.QueryAsync<(Guid MemberId, Guid? PlanId, bool Consumed, Guid? ChargeId)>(@"
+        // Le prenotazioni ("ci sarò") in quei giorni vengono annullate senza consumare ingressi
+        var booked = await c.QueryAsync<(Guid MemberId, Guid? PlanId, bool Consumed)>(@"
             update app.lesson_bookings b set status = 'cancelled', cancelled_at = now(), entry_consumed = false, note = trim(b.note || ' [Annullata: palestra chiusa]')
-            from app.lessons l, (select id, member_plan_id, entry_consumed, charge_id from app.lesson_bookings) prev
+            from app.lessons l, (select id, member_plan_id, entry_consumed from app.lesson_bookings) prev
             where l.id = b.lesson_id and prev.id = b.id and l.closure_id = @closureId and b.status = 'booked'
-            returning b.member_id, prev.member_plan_id, prev.entry_consumed, prev.charge_id", new { closureId }, tx);
+            returning b.member_id, prev.member_plan_id, prev.entry_consumed", new { closureId }, tx);
         foreach (var b in booked)
         {
             if (b.Consumed && b.PlanId is not null)
                 await c.ExecuteAsync("update app.member_plans set entries_used = greatest(entries_used - 1, 0) where id = @id", new { id = b.PlanId }, tx);
-            if (b.ChargeId is not null)
-                await c.ExecuteAsync("update app.member_charges set status = 'cancelled' where id = @id and status = 'open'", new { id = b.ChargeId }, tx);
         }
         members = members.Concat(booked.Select(b => b.MemberId));
         foreach (var memberId in members.Distinct())

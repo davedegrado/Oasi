@@ -231,7 +231,8 @@ public static class DocumentEndpoints
                 if (type is not null && !m.IsAdmin && !await c.ExecuteScalarAsync<bool>("select app.document_type_applies(@memberId, @audience)", new { memberId, audience = type.Audience }, tx))
                     throw ApiException.Invalid("Questa tipologia di documento non riguarda questo profilo.");
                 if (type is not null && type.RequiredCount > 1 && title.Length == 0) throw ApiException.Invalid($"Dai un titolo al documento: per «{type.Name}» ne servono {type.RequiredCount}.");
-                if (expires is null && (type?.ExpiryRequired == true || (await TenantSettings.Load(c, tx)).Documents.ExpiryRequired))
+                // Scadenza obbligatoria se la chiede la tipologia; i documenti liberi (senza tipologia) la chiedono sempre
+                if (expires is null && (type is null || type.ExpiryRequired))
                     throw ApiException.Invalid("Indica la data di scadenza del documento.");
                 if (expires is null && type?.ValidityMonths is { } months)
                     expires = DateOnly.FromDateTime(await c.ExecuteScalarAsync<DateTime>("select app.tenant_today()::timestamp", transaction: tx)).AddMonths(months);
@@ -328,11 +329,11 @@ public static class DocumentEndpoints
             var status = await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
             {
                 var d = await c.QuerySingleOrDefaultAsync<(Guid MemberId, bool IsCurrent, string Status, bool ExpiryRequired)?>(@"
-                    select d.member_id, d.is_current, d.status, coalesce(t.expiry_required, false) from app.documents d left join app.document_types t on t.id = d.type_id
+                    select d.member_id, d.is_current, d.status, coalesce(t.expiry_required, d.type_id is null) from app.documents d left join app.document_types t on t.id = d.type_id
                     where d.id = @id for update of d", new { id }, tx) ?? throw ApiException.NotFound("Documento");
                 if (!m.IsAdmin) await Relations.EnsureCanActFor(c, tx, m, d.MemberId, "consents");
                 if (!d.IsCurrent) throw ApiException.Conflict("not_current", "È una versione precedente: correggi quella attuale.");
-                if (expires is null && (d.ExpiryRequired || (await TenantSettings.Load(c, tx)).Documents.ExpiryRequired))
+                if (expires is null && d.ExpiryRequired)
                     throw ApiException.Invalid("La data di scadenza è obbligatoria.");
                 // Se la corregge l'interessato, un documento già approvato torna in verifica
                 var next = m.IsAdmin || d.Status != "approved" ? d.Status : "pending_review";

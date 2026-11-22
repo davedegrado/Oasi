@@ -6,8 +6,7 @@ namespace Oasi.Api.Features;
 
 /// <summary>
 /// Diritti di recupero. Un diritto nasce da un'assenza valida a una lezione
-/// della propria classe e vale fino alla scadenza del piano che lo ha generato
-/// (in mancanza di un piano collegato, fino alla fine della stagione attiva).
+/// della propria classe e vale fino alla scadenza del piano che copre quella lezione.
 /// Quale assenza sia "valida" è un'impostazione della struttura (makeups.creditOn).
 /// </summary>
 public static class MakeupCredits
@@ -33,34 +32,23 @@ public static class MakeupCredits
     private static async Task Grant(IDbConnection c, IDbTransaction tx, TenantSettings s, LessonRules.LessonInfo lesson, Guid memberId)
     {
         if (lesson.Status == "cancelled") return;   // una lezione annullata (es. chiusura) non genera recuperi
-        // Solo le lezioni della propria classe: un recupero o una lezione singola non generano altri recuperi
-        var enrollment = await c.QuerySingleOrDefaultAsync<(Guid? PlanId, DateTime? ValidFrom, DateTime? ValidUntil, bool? GrantsMakeups, string? PlanStatus)?>(@"
-            select e.member_plan_id, mp.valid_from::timestamp, mp.valid_until::timestamp, p.grants_makeups, mp.status
-            from app.enrollments e
-            left join app.member_plans mp on mp.id = e.member_plan_id
-            left join app.fee_plans p on p.id = mp.plan_id
-            where e.class_id = @classId and e.member_id = @memberId and e.status = 'approved'", new { classId = lesson.ClassId, memberId }, tx);
-        if (enrollment is not { } e) return;
-
-        DateTime? expires;
-        if (e.PlanId is not null)
+        // Solo le lezioni della propria classe: un recupero o una prenotazione non generano altri recuperi
+        var enrolled = await c.ExecuteScalarAsync<bool>("select exists(select 1 from app.enrollments where class_id = @classId and member_id = @memberId and status = 'approved')",
+            new { classId = lesson.ClassId, memberId }, tx);
+        if (!enrolled) return;
+        // Il diritto vale fino alla scadenza del piano dell'atleta che copre la lezione (se il piano prevede recuperi)
+        var plan = await c.QuerySingleOrDefaultAsync<(Guid Id, DateTime Until, bool Grants)?>(@"
+            select mp.id, mp.valid_until::timestamp, p.grants_makeups from app.member_plans mp join app.fee_plans p on p.id = mp.plan_id
+            where mp.member_id = @memberId and (mp.class_id is null or mp.class_id = @classId) and mp.status = 'active' and @d::date between mp.valid_from and mp.valid_until
+            order by mp.created_at desc, mp.valid_until desc limit 1", new { memberId, classId = lesson.ClassId, d = lesson.Date }, tx);
+        if (plan is not { Grants: true } e) return;   // nessun piano valido per quella lezione, o piano senza recuperi
+        var expires = e.Until;
+        if (s.Makeups.MaxPerPlan is { } max)
         {
-            if (e.GrantsMakeups != true || e.PlanStatus != "active") return;
-            if (lesson.Date < e.ValidFrom || lesson.Date > e.ValidUntil) return;   // lezione fuori dalla validità del piano
-            expires = e.ValidUntil;
-            if (s.Makeups.MaxPerPlan is { } max)
-            {
-                var n = await c.ExecuteScalarAsync<int>(
-                    "select count(*) from app.makeup_credits where member_plan_id = @plan and status <> 'cancelled' and source_lesson_id <> @lesson",
-                    new { plan = e.PlanId, lesson = lesson.Id }, tx);
-                if (n >= max) return;
-            }
-        }
-        else
-        {
-            expires = await c.ExecuteScalarAsync<DateTime?>(
-                "select end_date::timestamp from app.seasons where status = 'active' and @d::date between start_date and end_date", new { d = lesson.Date }, tx);
-            if (expires is null) return;   // nessun piano e nessuna stagione attiva: nessun diritto
+            var n = await c.ExecuteScalarAsync<int>(
+                "select count(*) from app.makeup_credits where member_plan_id = @plan and status <> 'cancelled' and source_lesson_id <> @lesson",
+                new { plan = e.Id, lesson = lesson.Id }, tx);
+            if (n >= max) return;
         }
 
         await c.ExecuteAsync(@"
@@ -69,7 +57,7 @@ public static class MakeupCredits
             on conflict (tenant_id, member_id, source_lesson_id) do update
               set status = 'available', expires_on = excluded.expires_on, member_plan_id = excluded.member_plan_id
               where app.makeup_credits.status = 'cancelled'",
-            new { memberId, lesson = lesson.Id, plan = e.PlanId, expires }, tx);
+            new { memberId, lesson = lesson.Id, plan = e.Id, expires }, tx);
     }
 
     /// <summary>Ritira il diritto non ancora utilizzato (l'assenza non c'è più).</summary>

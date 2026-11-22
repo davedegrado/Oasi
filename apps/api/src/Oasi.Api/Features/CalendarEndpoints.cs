@@ -10,7 +10,9 @@ public static class CalendarEndpoints
 {
     public sealed record LessonDto(Guid Id, Guid ClassId, string ClassName, Guid DisciplineId, string Date, string StartTime, string EndTime,
         string Status, string? OriginalStartTime, string? OriginalEndTime, string? Note, bool IsMakeup, string? Declared, string? Actual,
-        Guid? SubstituteMemberId = null, string? SubstituteName = null, string? SubstitutionNote = null);
+        Guid? SubstituteMemberId = null, string? SubstituteName = null, string? SubstitutionNote = null,
+        /// <summary>Per le lezioni della propria classe: auto (atteso), confirm (serve "ci sarò"), none (piano scaduto: lezione non disponibile)</summary>
+        string? PlanAccess = null, bool IsBooked = false);
 
     public sealed record RosterEntry(Guid MemberId, string FirstName, string LastName, bool IsMakeup, bool IsBooking, bool IsCompetitive, string? Declared, string? Actual);
 
@@ -47,10 +49,12 @@ public static class CalendarEndpoints
                            to_char(l.start_time, 'HH24:MI') as start_time, to_char(l.end_time, 'HH24:MI') as end_time, l.status,
                            to_char(l.original_start_time, 'HH24:MI') as original_start_time, to_char(l.original_end_time, 'HH24:MI') as original_end_time,
                            l.note,
-                           (exists(select 1 from app.makeup_requests r where r.target_lesson_id = l.id and r.member_id = @subject and r.status = 'approved')
-                            or exists(select 1 from app.lesson_bookings b where b.lesson_id = l.id and b.member_id = @subject and b.status = 'booked')) as is_makeup,
+                           exists(select 1 from app.makeup_requests r where r.target_lesson_id = l.id and r.member_id = @subject and r.status = 'approved') as is_makeup,
                            a.declared, a.actual,
-                           l.substitute_member_id, sb.first_name || ' ' || sb.last_name as substitute_name, l.substitution_note
+                           l.substitute_member_id, sb.first_name || ' ' || sb.last_name as substitute_name, l.substitution_note,
+                           case when exists(select 1 from app.enrollments e where e.class_id = l.class_id and e.member_id = @subject and e.status = 'approved')
+                                then app.plan_access(@subject, l.class_id, l.date) end as plan_access,
+                           exists(select 1 from app.lesson_bookings b where b.lesson_id = l.id and b.member_id = @subject and b.status = 'booked') as is_booked
                     from app.lessons l
                     left join app.members sb on sb.id = l.substitute_member_id
                     join app.classes c on c.id = l.class_id
@@ -140,7 +144,8 @@ public static class CalendarEndpoints
             return Results.NoContent();
         }).RequireMember(Roles.Admin, Roles.Teacher);
 
-        // Elenco della lezione: iscritte + recuperi approvati, con presenza dichiarata ed effettiva
+        // Elenco della lezione: iscritti attesi secondo il piano (partecipazione automatica valida quel giorno),
+        // "ci sarò" dei piani senza partecipazione automatica, recuperi approvati; con presenza dichiarata ed effettiva
         g.MapGet("/{id:guid}/roster", async (HttpContext ctx, Db db, Guid id) =>
         {
             var m = ctx.Member();
@@ -150,7 +155,12 @@ public static class CalendarEndpoints
                 await Relations.EnsureCanManageLesson(c, tx, m, lesson.Id, lesson.ClassId);
                 return await c.QueryAsync<RosterEntry>(@"
                     with people as (
-                      select e.member_id, false as is_makeup, false as is_booking from app.enrollments e where e.class_id = @classId and e.status = 'approved'
+                      select e.member_id, false as is_makeup, false as is_booking from app.enrollments e
+                      where e.class_id = @classId and e.status = 'approved' and app.plan_access(e.member_id, e.class_id, @date::date) = 'auto'
+                      union
+                      select a.member_id, false, false from app.attendance a where a.lesson_id = @id and a.actual is not null
+                        and not exists (select 1 from app.lesson_bookings b where b.lesson_id = @id and b.member_id = a.member_id and b.status = 'booked')
+                        and not exists (select 1 from app.makeup_requests r where r.target_lesson_id = @id and r.member_id = a.member_id and r.status = 'approved')
                       union
                       select r.member_id, true, false from app.makeup_requests r where r.target_lesson_id = @id and r.status = 'approved'
                       union
@@ -159,7 +169,7 @@ public static class CalendarEndpoints
                     select p.member_id, mb.first_name, mb.last_name, p.is_makeup, p.is_booking, mb.is_competitive, a.declared, a.actual
                     from people p join app.members mb on mb.id = p.member_id
                     left join app.attendance a on a.lesson_id = @id and a.member_id = p.member_id
-                    order by mb.last_name, mb.first_name", new { id, classId = lesson.ClassId }, tx);
+                    order by mb.last_name, mb.first_name", new { id, classId = lesson.ClassId, date = lesson.Date }, tx);
             });
         }).RequireMember(Roles.Admin, Roles.Teacher).RequireModule("attendance");
 
@@ -216,10 +226,11 @@ public static class CalendarEndpoints
     private static async Task EnsureInRoster(IDbConnection c, IDbTransaction tx, LessonRules.LessonInfo lesson, Guid memberId)
     {
         var ok = await c.ExecuteScalarAsync<bool>(@"select
-            exists(select 1 from app.enrollments where class_id = @classId and member_id = @memberId and status = 'approved')
+            exists(select 1 from app.enrollments where class_id = @classId and member_id = @memberId and status = 'approved'
+                   and app.plan_access(@memberId, @classId, @date::date) = 'auto')
             or exists(select 1 from app.makeup_requests where target_lesson_id = @id and member_id = @memberId and status = 'approved')
             or exists(select 1 from app.lesson_bookings where lesson_id = @id and member_id = @memberId and status = 'booked')",
-            new { classId = lesson.ClassId, id = lesson.Id, memberId }, tx);
-        if (!ok) throw ApiException.Conflict("not_in_roster", "La persona non è iscritta a questa lezione.");
+            new { classId = lesson.ClassId, id = lesson.Id, memberId, date = lesson.Date }, tx);
+        if (!ok) throw ApiException.Conflict("not_in_roster", "La persona non è attesa a questa lezione (piano non valido, o serve \"ci sarò\").");
     }
 }

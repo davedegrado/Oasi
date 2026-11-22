@@ -92,7 +92,7 @@ function oasiSeed(db: OasiDatabase): string {
   push(`insert into app.members (tenant_id, id, user_id, first_name, last_name, birth_date, email, phone, level_id, main_discipline_id, bio, goals, joined_on, is_demo) values\n  ${memberRows.join(',\n  ')};`)
   push(`insert into app.memberships (tenant_id, user_id, member_id, roles, status) values\n  ${membershipRows.join(',\n  ')};`)
   push(`insert into app.member_admin (tenant_id, member_id, membership_status, card_number, card_expires_on, medical_certificate_expires, fee_plan_label, fee_paid_until) values\n  ${db.students
-    .map((s) => `(${q(T)}, ${q(memberId(s.id))}, ${q(MEMBERSHIP_MAP[s.membership.status])}, ${q(s.membership.cardNumber)}, ${rel(s.membership.expiresAt)}, ${rel(s.membership.medicalCertificateExpiresAt)}, ${q(s.membership.feePlan)}, ${rel(s.membership.feePaidUntil)})`)
+    .map((s) => `(${q(T)}, ${q(memberId(s.id))}, ${q(MEMBERSHIP_MAP[s.membership.status])}, ${q(s.membership.cardNumber)}, ${rel(s.membership.expiresAt)}, ${rel(s.membership.medicalCertificateExpiresAt)}, null, null)`)
     .join(',\n  ')};`)
 
   // Classi, insegnanti, iscrizioni
@@ -158,6 +158,7 @@ function testTenantSeed(): string {
   const l = uuid('prova:level:base')
   const c = uuid('prova:class:pole-base')
   const teacher = uuid('prova:member:teacher')
+  const plan = uuid('prova:plan:annual')
   const s1 = uuid('prova:member:s1')
   const s2 = uuid('prova:member:s2')
   const f1 = uuid('prova:figure:fireman')
@@ -189,6 +190,12 @@ insert into app.class_teachers (tenant_id, class_id, member_id) values (${q(T)},
 insert into app.enrollments (tenant_id, class_id, member_id, status) values (${q(T)}, ${q(c)}, ${q(s1)}, 'approved'), (${q(T)}, ${q(c)}, ${q(s2)}, 'approved');
 insert into app.lessons (tenant_id, class_id, date, start_time, end_time) select ${q(T)}, ${q(c)}, d::date, '20:00', '21:00' from generate_series(current_date - 14, current_date + 21, interval '7 days') d;
 insert into app.figures (tenant_id, id, discipline_id, apparatus, name, level_id, difficulty, description, author_member_id) values (${q(T)}, ${q(f1)}, ${q(d)}, 'Palo statico', 'Fireman spin', ${q(l)}, 1, 'Prima rotazione attorno al palo.', ${q(teacher)});
+-- Un piano per frequentare (prezzo informativo) e un piano valido per ogni iscrizione dimostrativa
+insert into app.fee_plans (tenant_id, id, name, kind, amount_cents, validity_mode, validity_months, auto_attendance)
+values (${q(T)}, ${q(plan)}, 'Abbonamento 12 mesi', 'subscription', 50000, 'months', 12, true);
+insert into app.member_plans (tenant_id, member_id, plan_id, class_id, valid_from, valid_until)
+select e.tenant_id, e.member_id, ${q(plan)}, e.class_id, current_date - 120, current_date + 240
+from app.enrollments e where e.tenant_id = ${q(T)} and e.status = 'approved';
 commit;
 `
 }

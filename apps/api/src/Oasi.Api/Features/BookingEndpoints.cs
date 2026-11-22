@@ -82,53 +82,35 @@ public static class BookingEndpoints
                 if (lesson.Status == "cancelled" || lesson.Started) throw ApiException.Conflict("lesson_unavailable", "La lezione non è prenotabile.");
                 var exception = input.Override == true && m.IsAdmin;   // eccezione registrata dall'amministrazione
 
-                var inClass = await c.ExecuteScalarAsync<bool>(@"select
-                    exists(select 1 from app.enrollments where class_id = @classId and member_id = @subject and status = 'approved')
-                    or exists(select 1 from app.lesson_bookings where lesson_id = @lessonId and member_id = @subject and status = 'booked')",
-                    new { classId = lesson.ClassId, lessonId = lesson.Id, subject }, tx);
-                if (inClass) throw ApiException.Conflict("already_in_lesson", "Sei già in questa lezione.");
+                if (await c.ExecuteScalarAsync<bool>("select exists(select 1 from app.lesson_bookings where lesson_id = @lessonId and member_id = @subject and status = 'booked')",
+                        new { lessonId = lesson.Id, subject }, tx))
+                    throw ApiException.Conflict("already_in_lesson", "Sei già in elenco per questa lezione.");
 
-                Guid? memberPlanId = null, chargeId = null;
-                int? opens;
-                int closes;
+                // "Ci sarò": serve un piano valido quel giorno per la classe, senza partecipazione automatica
+                PlanEndpoints.CoveringPlan plan;
                 if (input.MemberPlanId is { } mpId)
                 {
-                    // Ingresso di un pacchetto: si blocca la riga del piano per scalare il saldo senza doppi utilizzi
-                    var mp = await c.QuerySingleOrDefaultAsync<PackRow>(@"
-                        select mp.id, mp.member_id, mp.status, mp.valid_from::timestamp as valid_from, mp.valid_until::timestamp as valid_until,
-                               mp.entries_total, mp.entries_used, p.booking_opens_hours_before, p.booking_closes_hours_before, p.lesson_minutes, p.age_min_months, p.age_max_months,
+                    plan = await c.QuerySingleOrDefaultAsync<PlanEndpoints.CoveringPlan?>(@"
+                        select mp.id, p.auto_attendance, mp.entries_total, mp.entries_used, p.booking_opens_hours_before, p.booking_closes_hours_before, p.lesson_minutes, p.age_min_months, p.age_max_months,
                                (select count(*)::int from app.lesson_bookings b where b.member_plan_id = mp.id and b.status = 'booked' and not b.entry_consumed and b.consumed_by is distinct from 'refunded') as entries_reserved
-                        from app.member_plans mp join app.fee_plans p on p.id = mp.plan_id where mp.id = @mpId for update of mp", new { mpId }, tx)
-                        ?? throw ApiException.NotFound("Pacchetto");
-                    if (mp.MemberId != subject) throw ApiException.Forbidden("Il pacchetto appartiene a un'altra persona.");
-                    if (mp.EntriesTotal is null) throw ApiException.Conflict("not_a_package", "Questo piano non è un pacchetto a ingressi.");
-                    if (mp.Status != "active" || lesson.Date < mp.ValidFrom || lesson.Date > mp.ValidUntil)
-                        throw ApiException.Conflict("package_expired", "Il pacchetto non è valido per la data della lezione.");
-                    // Saldo: ingressi già consumati più quelli impegnati da prenotazioni in corso
-                    if (mp.EntriesUsed + mp.EntriesReserved >= mp.EntriesTotal) throw ApiException.Conflict("package_exhausted", "Il pacchetto non ha più ingressi disponibili.");
-                    if (mp.LessonMinutes is { Length: > 0 } allowed && !allowed.Contains((short)lesson.Minutes))
-                        throw ApiException.Conflict("lesson_not_covered", "Il pacchetto non copre lezioni di questa durata.");
-                    await EnsureAgeMonths(c, tx, subject, mp.AgeMinMonths, mp.AgeMaxMonths);
-                    opens = mp.BookingOpensHoursBefore;   // pacchetto: solo la finestra configurata sul piano
-                    closes = mp.BookingClosesHoursBefore ?? settings.Booking.ClosesHoursBefore;
-                    memberPlanId = mp.Id;
+                        from app.member_plans mp join app.fee_plans p on p.id = mp.plan_id
+                        where mp.id = @mpId and mp.member_id = @subject and (mp.class_id is null or mp.class_id = @classId) and mp.status = 'active'
+                          and @d::date between mp.valid_from and mp.valid_until for update of mp", new { mpId, subject, classId = lesson.ClassId, d = lesson.Date }, tx)
+                        ?? throw ApiException.Conflict("no_valid_plan", "Il piano indicato non copre questa lezione.");
                 }
                 else
-                {
-                    // Lezione singola: serve una tariffa configurata dalla struttura (nessun prezzo nel codice)
-                    var plan = await c.QuerySingleOrDefaultAsync<(Guid Id, string Name, int AmountCents, short? Opens, short? Closes)?>(@"
-                        select id, name, amount_cents, booking_opens_hours_before, booking_closes_hours_before from app.fee_plans
-                        where kind = 'single_lesson' and is_active and (@planId::uuid is null or id = @planId)
-                          and (valid_from is null or @d::date >= valid_from) and (valid_until is null or @d::date <= valid_until)
-                        order by position, name limit 1", new { planId = input.PlanId, d = lesson.Date }, tx);
-                    if (plan is not { } p) throw ApiException.Conflict("single_lesson_not_configured", "La struttura non ha configurato la tariffa per le lezioni singole.");
-                    opens = p.Opens ?? settings.Booking.OpensHoursBefore;
-                    closes = p.Closes ?? settings.Booking.ClosesHoursBefore;
-                    chargeId = await c.ExecuteScalarAsync<Guid>(@"
-                        insert into app.member_charges (tenant_id, member_id, fee_plan_id, description, amount_cents, due_on, kind)
-                        values (app.current_tenant(), @subject, @plan, @description, @amount, @due::date, 'plan') returning id",
-                        new { subject, plan = p.Id, description = $"{p.Name} del {lesson.Date:dd/MM/yyyy}", amount = p.AmountCents, due = lesson.Date }, tx);
-                }
+                    plan = await PlanEndpoints.Covering(c, tx, subject, lesson.ClassId, lesson.Date)
+                        ?? throw ApiException.Conflict("no_valid_plan", "Il tuo piano non copre questa lezione (scaduto o di un'altra classe): scegline uno nuovo.");
+                if (plan.AutoAttendance) throw ApiException.Conflict("already_in_lesson", "Con il tuo piano sei già atteso a ogni lezione: disdici solo se non vieni.");
+                // Lezioni del piano: già consumate più quelle impegnate da altri "ci sarò"
+                if (plan.EntriesTotal is { } total && plan.EntriesUsed + plan.EntriesReserved >= total)
+                    throw ApiException.Conflict("package_exhausted", "Hai usato tutte le lezioni del tuo piano: scegline uno nuovo.");
+                if (plan.LessonMinutes is { Length: > 0 } allowed && !allowed.Contains((short)lesson.Minutes))
+                    throw ApiException.Conflict("lesson_not_covered", "Il piano non copre lezioni di questa durata.");
+                await EnsureAgeMonths(c, tx, subject, plan.AgeMinMonths, plan.AgeMaxMonths);
+                Guid? memberPlanId = plan.Id;
+                int? opens = plan.BookingOpensHoursBefore ?? settings.Booking.OpensHoursBefore;
+                int closes = plan.BookingClosesHoursBefore ?? settings.Booking.ClosesHoursBefore;
 
                 if (!exception && opens is { } o && lesson.HoursToStart > o)
                 {
@@ -142,13 +124,13 @@ public static class BookingEndpoints
                 await LessonRules.EnsureSeat(c, tx, lesson);   // i posti si rispettano anche nelle eccezioni
 
                 // Ingresso consumato subito solo se la struttura scala alla prenotazione; altrimenti alla presenza
-                var consumeNow = memberPlanId is not null && settings.Packages.ConsumeOn == "booking";
+                var consumeNow = plan.EntriesTotal is not null && settings.Packages.ConsumeOn == "booking";
                 if (consumeNow)
                     await c.ExecuteAsync("update app.member_plans set entries_used = entries_used + 1 where id = @id", new { id = memberPlanId }, tx);
                 var newId = await c.ExecuteScalarAsync<Guid>(@"
-                    insert into app.lesson_bookings (tenant_id, lesson_id, member_id, member_plan_id, charge_id, entry_consumed, consumed_by, booked_by, note)
-                    values (app.current_tenant(), @lesson, @subject, @memberPlanId, @chargeId, @consumed, @by, @user, @note) returning id",
-                    new { lesson = lesson.Id, subject, memberPlanId, chargeId, consumed = consumeNow, by = consumeNow ? "booking" : null, user = m.UserId,
+                    insert into app.lesson_bookings (tenant_id, lesson_id, member_id, member_plan_id, entry_consumed, consumed_by, booked_by, note)
+                    values (app.current_tenant(), @lesson, @subject, @memberPlanId, @consumed, @by, @user, @note) returning id",
+                    new { lesson = lesson.Id, subject, memberPlanId, consumed = consumeNow, by = consumeNow ? "booking" : null, user = m.UserId,
                           note = (exception ? "[Eccezione dell'amministrazione] " : "") + (input.Note ?? "") }, tx);
                 if (exception) await Audit.Log(c, tx, m.UserId, m.TenantId, "booking.override", newId.ToString(), new { lesson = lesson.Id, subject });
                 return newId;
@@ -162,8 +144,8 @@ public static class BookingEndpoints
             var m = ctx.Member();
             var result = await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
             {
-                var b = await c.QuerySingleOrDefaultAsync<(Guid MemberId, Guid LessonId, string Status, Guid? MemberPlanId, Guid? ChargeId, bool EntryConsumed)?>(
-                    "select member_id, lesson_id, status, member_plan_id, charge_id, entry_consumed from app.lesson_bookings where id = @id for update", new { id }, tx)
+                var b = await c.QuerySingleOrDefaultAsync<(Guid MemberId, Guid LessonId, string Status, Guid? MemberPlanId, bool EntryConsumed)?>(
+                    "select member_id, lesson_id, status, member_plan_id, entry_consumed from app.lesson_bookings where id = @id for update", new { id }, tx)
                     ?? throw ApiException.NotFound("Prenotazione");
                 await Relations.EnsureCanActFor(c, tx, m, b.MemberId, "enroll");
                 if (b.Status != "booked") throw ApiException.Conflict("not_active", "La prenotazione non è più attiva.");
@@ -180,13 +162,8 @@ public static class BookingEndpoints
                 await c.ExecuteAsync(@"update app.lesson_bookings set status = @s, cancelled_at = now(), entry_consumed = @consumed,
                     consumed_by = case when not @consumed then null when @lateBy::text is not null then @lateBy else consumed_by end where id = @id",
                     new { id, s = late ? "late_cancelled" : "cancelled", consumed = stillConsumed, lateBy = consumeLate ? "late_cancel" : null }, tx);
-                if (!keepCost)
-                {
-                    if (b.EntryConsumed && b.MemberPlanId is not null)
-                        await c.ExecuteAsync("update app.member_plans set entries_used = greatest(entries_used - 1, 0) where id = @id", new { id = b.MemberPlanId }, tx);
-                    if (b.ChargeId is not null)
-                        await c.ExecuteAsync("update app.member_charges set status = 'cancelled' where id = @id and status = 'open'", new { id = b.ChargeId }, tx);
-                }
+                if (!keepCost && b.EntryConsumed && b.MemberPlanId is not null)
+                    await c.ExecuteAsync("update app.member_plans set entries_used = greatest(entries_used - 1, 0) where id = @id", new { id = b.MemberPlanId }, tx);
                 return new { id, status = late ? "late_cancelled" : "cancelled", entryRefunded = !keepCost };
             });
             return Results.Ok(result);

@@ -75,12 +75,19 @@ public sealed class FeatureTests(ApiFixture api)
     public async Task Iscrizione_richiesta_approvata_dall_insegnante_con_controllo_capienza()
     {
         var giulia = api.For(Seed.OasiHost, Seed.Giulia);
-        var req = await giulia.PostAsJsonAsync("/v1/enrollments", new { classId = Seed.ClassCerchioBase, note = "Vorrei ripassare le basi" });
+        // Con la richiesta l'atleta sceglie il piano tra quelli previsti per la classe
+        Assert.Equal(HttpStatusCode.BadRequest, (await giulia.PostAsJsonAsync("/v1/enrollments", new { classId = Seed.ClassCerchioBase })).StatusCode);
+        var choices = await giulia.GetFromJsonAsync<JsonElement[]>($"/v1/plans?classId={Seed.ClassCerchioBase}");
+        Assert.DoesNotContain(choices!, p => p.GetProperty("name").GetString()!.StartsWith("Baby/Teen"));   // area Bambini/Ragazzi: non per questa classe
+        var planId = choices!.First(p => p.GetProperty("name").GetString() == "Adulti/Teen · 1x · mensile").GetProperty("id").GetGuid();
+        var babyPlan = await api.Scalar<Guid>("select id from app.fee_plans where name like 'Baby/Teen%' limit 1");
+        Assert.Equal(HttpStatusCode.Conflict, (await giulia.PostAsJsonAsync("/v1/enrollments", new { classId = Seed.ClassCerchioBase, planId = babyPlan })).StatusCode);
+        var req = await giulia.PostAsJsonAsync("/v1/enrollments", new { classId = Seed.ClassCerchioBase, note = "Vorrei ripassare le basi", planId });
         Assert.Equal(HttpStatusCode.Created, req.StatusCode);
         var id = (await req.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
 
         // Una seconda richiesta uguale è un duplicato
-        Assert.Equal(HttpStatusCode.Conflict, (await giulia.PostAsJsonAsync("/v1/enrollments", new { classId = Seed.ClassCerchioBase })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await giulia.PostAsJsonAsync("/v1/enrollments", new { classId = Seed.ClassCerchioBase, planId })).StatusCode);
         // Elena non insegna Cerchio Base: non può decidere
         Assert.Equal(HttpStatusCode.Forbidden, (await api.For(Seed.OasiHost, Seed.Elena).PostAsJsonAsync($"/v1/enrollments/{id}/decision", new { approve = true })).StatusCode);
 
@@ -97,8 +104,13 @@ public sealed class FeatureTests(ApiFixture api)
         await api.Sql("update app.classes set capacity = 8 where id = @c", new { c = Seed.ClassCerchioBase });
         var ok = await chiara.PostAsJsonAsync($"/v1/enrollments/{id}/decision", new { approve = true });
         Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        // Il piano parte dall'accettazione: un mese, lezioni con partecipazione automatica
+        var mine = await giulia.GetFromJsonAsync<JsonElement[]>("/v1/member-plans");
+        var sub = mine!.Single(p => p.GetProperty("classId").ValueKind == JsonValueKind.String && p.GetProperty("classId").GetGuid() == Seed.ClassCerchioBase);
+        Assert.Equal(DateTime.Now.ToString("yyyy-MM-dd"), sub.GetProperty("validFrom").GetString());
+        Assert.Equal(DateOnly.FromDateTime(DateTime.Now).AddMonths(1).AddDays(-1).ToString("yyyy-MM-dd"), sub.GetProperty("validUntil").GetString());
         var lessons = await giulia.GetFromJsonAsync<JsonElement[]>($"/v1/lessons?from={InDays(1)}&to={InDays(14)}");
-        Assert.Contains(lessons!, l => l.GetProperty("classId").GetGuid() == Seed.ClassCerchioBase);
+        Assert.Contains(lessons!, l => l.GetProperty("classId").GetGuid() == Seed.ClassCerchioBase && l.GetProperty("planAccess").GetString() == "auto");
     }
 
     [Fact]

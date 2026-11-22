@@ -127,17 +127,16 @@ begin
   insert into results values ('16. RLS forzata su tutte le tabelle app', missing is null, coalesce(missing, 'tutte protette'));
 end $$;
 
--- 17. Piani, quote e stagioni di un tenant non sono visibili dall'altro
+-- 17. Piani e piani sottoscritti di un tenant non sono visibili dall'altro
 do $$
 declare n int;
 begin
   perform set_config('app.tenant_id', 'aaaaaaaa-0000-0000-0000-000000000001', true);
-  insert into app.seasons (tenant_id, id, name, start_date, end_date) values ('aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0005-000000000001', 'Stagione A', '2026-09-01', '2027-06-30');
-  insert into app.fee_plans (tenant_id, id, name, kind, amount_cents) values ('aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0006-000000000001', 'Piano A', 'subscription', 1000);
-  insert into app.member_charges (tenant_id, member_id, description, amount_cents, due_on) values ('aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0003-000000000001', 'Quota A', 1000, '2026-10-01');
+  insert into app.fee_plans (tenant_id, id, name, kind, amount_cents, validity_mode, validity_months) values ('aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0006-000000000001', 'Piano A', 'subscription', 1000, 'months', 3);
+  insert into app.member_plans (tenant_id, member_id, plan_id, valid_from, valid_until) values ('aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0003-000000000001', 'aaaaaaaa-0000-0000-0006-000000000001', '2026-10-01', '2026-12-31');
   perform set_config('app.tenant_id', 'bbbbbbbb-0000-0000-0000-000000000002', true);
-  select (select count(*) from app.seasons) + (select count(*) from app.fee_plans) + (select count(*) from app.member_charges) into n;
-  insert into results values ('17. piani, quote e stagioni isolati', n = 0, n || ' righe visibili');
+  select (select count(*) from app.fee_plans) + (select count(*) from app.member_plans) into n;
+  insert into results values ('17. piani e piani sottoscritti isolati', n = 0, n || ' righe visibili');
 end $$;
 
 -- 18. Un piano acquistato non può riferirsi al piano di un altro tenant

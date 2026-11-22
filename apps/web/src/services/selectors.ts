@@ -330,11 +330,11 @@ export function nextMainEvent(db: OasiDatabase) {
 }
 
 // ── Piani sottoscritti: validità, lezioni consumate, accesso alle lezioni ──
-/** Piano dell'atleta per la classe che copre la data della lezione (il più recente) */
+/** Piano dell'atleta per la classe che copre la data della lezione (l'ultimo scelto) */
 export function memberPlanFor(db: OasiDatabase, studentId: string, classId: string, date: string): MemberPlan | undefined {
   return db.memberPlans
     .filter((p) => p.studentId === studentId && (!p.classId || p.classId === classId) && p.validFrom <= date && date <= p.validUntil)
-    .sort((a, b) => b.validUntil.localeCompare(a.validUntil))[0]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.validUntil.localeCompare(a.validUntil))[0]
 }
 
 /** Piani dell'atleta per la classe, dal più recente */

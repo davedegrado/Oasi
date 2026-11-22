@@ -19,10 +19,6 @@ public sealed class TenantSettings
     public DocumentSettings Documents { get; init; } = new();
     public PackageSettings Packages { get; init; } = new();
     public ClassSettings Classes { get; init; } = new();
-    public PaymentSettings Payments { get; init; } = new();
-
-    /// <summary>Metodi di pagamento che la piattaforma sa registrare. Se ne possono aggiungere altri in futuro.</summary>
-    public static readonly string[] KnownPaymentMethods = ["cash", "bank_transfer", "pos", "other"];
 
     public sealed class BookingSettings
     {
@@ -67,8 +63,6 @@ public sealed class TenantSettings
         public int ExpiryReminderDays { get; init; } = 30;
         /// <summary>Promemoria N giorni prima del termine di un documento richiesto (es. documenti mensili).</summary>
         public int RequestReminderDays { get; init; } = 3;
-        /// <summary>Scadenza obbligatoria per ogni documento caricato, di qualunque tipologia (Oasi: sì).</summary>
-        public bool ExpiryRequired { get; init; }
     }
 
     public sealed class PackageSettings
@@ -83,12 +77,6 @@ public sealed class TenantSettings
         public string[] Categories { get; init; } = [];
         /// <summary>Numero massimo di discipline per classe (null = nessun limite). Oasi: 2.</summary>
         public int? MaxDisciplines { get; init; }
-    }
-
-    public sealed class PaymentSettings
-    {
-        /// <summary>Metodi accettati dalla struttura, tra quelli che la piattaforma sa registrare.</summary>
-        public string[] Methods { get; init; } = ["cash", "bank_transfer"];
     }
 
     /// <summary>Le finestre "da … a …" devono essere coerenti: l'apertura non può essere più vicina della chiusura.</summary>
@@ -133,12 +121,6 @@ public sealed class TenantSettings
             throw ApiException.Invalid("makeups.creditOn deve essere declared_in_time oppure any_absence.");
         if (patch["packages"]?["consumeOn"] is { } consume && consume.GetValue<string>() is not ("attendance" or "booking"))
             throw ApiException.Invalid("packages.consumeOn deve essere attendance oppure booking.");
-        if (patch["payments"]?["methods"] is { } methods)
-        {
-            var list = methods.AsArray().Select(m => m?.GetValue<string>()).ToArray();
-            if (list.Length == 0 || list.Any(m => m is null || !KnownPaymentMethods.Contains(m)))
-                throw ApiException.Invalid($"Metodi di pagamento ammessi: {string.Join(", ", KnownPaymentMethods)}.");
-        }
         if (patch["classes"]?["categories"] is { } cats && cats.AsArray().Any(c => string.IsNullOrWhiteSpace(c?.GetValue<string>())))
             throw ApiException.Invalid("Le categorie di classe non possono essere vuote.");
         if (patch["makeups"]?["maxPerPlan"] is { } maxPerPlan && maxPerPlan.GetValueKind() == JsonValueKind.Number && maxPerPlan.GetValue<int>() < 0)

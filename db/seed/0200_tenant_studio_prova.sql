@@ -26,4 +26,10 @@ insert into app.class_teachers (tenant_id, class_id, member_id) values ('12c2e24
 insert into app.enrollments (tenant_id, class_id, member_id, status) values ('12c2e24b-e305-57f6-9665-05f6de5195ed', 'e4727316-e848-5e2b-be10-85c3b32f35a3', 'b59f6d04-7985-5561-86bd-3453c1174cdb', 'approved'), ('12c2e24b-e305-57f6-9665-05f6de5195ed', 'e4727316-e848-5e2b-be10-85c3b32f35a3', '92156629-b127-56db-a4fe-c93a2c3f9137', 'approved');
 insert into app.lessons (tenant_id, class_id, date, start_time, end_time) select '12c2e24b-e305-57f6-9665-05f6de5195ed', 'e4727316-e848-5e2b-be10-85c3b32f35a3', d::date, '20:00', '21:00' from generate_series(current_date - 14, current_date + 21, interval '7 days') d;
 insert into app.figures (tenant_id, id, discipline_id, apparatus, name, level_id, difficulty, description, author_member_id) values ('12c2e24b-e305-57f6-9665-05f6de5195ed', '3e05dbfe-f9e0-5322-8c46-d83462e3c288', '9fa6e61c-c6e5-5438-b731-b331760cda51', 'Palo statico', 'Fireman spin', 'ee312e72-a586-5bf3-b4ea-b97871bd3470', 1, 'Prima rotazione attorno al palo.', '558cc837-f398-5fc0-98c5-9afa7e297c64');
+-- Un piano per frequentare (prezzo informativo) e un piano valido per ogni iscrizione dimostrativa
+insert into app.fee_plans (tenant_id, id, name, kind, amount_cents, validity_mode, validity_months, auto_attendance)
+values ('12c2e24b-e305-57f6-9665-05f6de5195ed', 'ef93ee2b-8598-544b-88f2-428cc8220d70', 'Abbonamento 12 mesi', 'subscription', 50000, 'months', 12, true);
+insert into app.member_plans (tenant_id, member_id, plan_id, class_id, valid_from, valid_until)
+select e.tenant_id, e.member_id, 'ef93ee2b-8598-544b-88f2-428cc8220d70', e.class_id, current_date - 120, current_date + 240
+from app.enrollments e where e.tenant_id = '12c2e24b-e305-57f6-9665-05f6de5195ed' and e.status = 'approved';
 commit;
