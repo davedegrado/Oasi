@@ -4,8 +4,9 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Avatar } from '@/components/ui/avatar'
 import { StatCard } from '@/components/common/StatCard'
 import { SectionTitle } from '@/components/common/PageHeader'
-import { Donut, Legend, MiniBars } from '@/components/common/Charts'
+import { Donut, Legend } from '@/components/common/Charts'
 import { MembershipBadge } from '@/components/common/badges'
+import { AttendanceChart } from '@/components/common/AttendanceChart'
 import { STATUS_COLOR } from '@/lib/statusStyle'
 import { EventCard } from '@/components/events/EventCard'
 import { RequestsPanel } from '@/components/requests/RequestsPanel'
@@ -22,6 +23,7 @@ export function AdminDashboard() {
   const { config } = useTenant()
   const activeStudents = db.students.filter((s) => s.membership.status !== 'sospesa')
   const recent = recentAttendance(db, sortLessons(db.lessons), 8).reverse()
+  const recentChart = recentAttendance(db, sortLessons(db.lessons), 14).reverse()
   const recentPresent = recent.reduce((s, r) => s + r.present, 0)
   const recentTotal = recent.reduce((s, r) => s + r.total, 0)
 
@@ -89,15 +91,11 @@ export function AdminDashboard() {
         <Card>
           <CardContent>
             <h2 className="text-base font-bold">Presenze ultime lezioni</h2>
-            <p className="text-sm text-ink-muted">Atlete presenti per lezione</p>
-            <MiniBars className="mt-5" data={recent.map((r) => ({ label: `${formatDateShort(r.lesson.date)}`, value: r.present }))} max={Math.max(...recent.map((r) => r.total), 1)} />
-            <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-ink-muted">
-              {recent.slice(-4).map((r) => (
-                <span key={r.lesson.id}>
-                  {formatDateShort(r.lesson.date)}: {r.cls?.name} ({r.present}/{r.total})
-                </span>
-              ))}
-            </div>
+            <p className="text-sm text-ink-muted">Percentuale di atlete presenti su quelle attese, lezione per lezione</p>
+            <AttendanceChart
+              className="mt-4"
+              points={recentChart.map((r) => ({ key: r.lesson.id, label: formatDateShort(r.lesson.date), detail: r.cls?.name ?? '', present: r.present, total: r.total }))}
+            />
           </CardContent>
         </Card>
         <Card>
