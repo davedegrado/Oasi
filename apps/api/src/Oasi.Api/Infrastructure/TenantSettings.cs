@@ -48,6 +48,10 @@ public sealed class TenantSettings
         public bool AllowLowerLevel { get; init; } = true;
         public bool SameDisciplineOnly { get; init; }
         public int? MaxPerPlan { get; init; }
+        /// <summary>Un recupero si può chiedere al massimo N ore prima della lezione scelta (null = nessun limite).</summary>
+        public int? RequestOpensHoursBefore { get; init; }
+        /// <summary>...e al minimo N ore prima (0 = fino all'inizio).</summary>
+        public int RequestClosesHoursBefore { get; init; }
     }
 
     public sealed class CompetitiveSettings
@@ -85,6 +89,15 @@ public sealed class TenantSettings
         public string[] Methods { get; init; } = ["cash", "bank_transfer"];
     }
 
+    /// <summary>Le finestre "da … a …" devono essere coerenti: l'apertura non può essere più vicina della chiusura.</summary>
+    public void EnsureConsistent()
+    {
+        if (Booking.OpensHoursBefore is { } o && o <= Booking.ClosesHoursBefore)
+            throw ApiException.Invalid($"Lezioni singole: l'apertura ({o} ore prima) deve precedere la chiusura ({Booking.ClosesHoursBefore} ore prima).");
+        if (Makeups.RequestOpensHoursBefore is { } m && m <= Makeups.RequestClosesHoursBefore)
+            throw ApiException.Invalid($"Recuperi: l'apertura ({m} ore prima) deve precedere la chiusura ({Makeups.RequestClosesHoursBefore} ore prima).");
+    }
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     public static async Task<TenantSettings> Load(IDbConnection c, IDbTransaction tx)
@@ -105,10 +118,11 @@ public sealed class TenantSettings
                  {
                      ("booking", "opensHoursBefore", 1, 24 * 60), ("booking", "closesHoursBefore", 0, 24 * 30), ("booking", "cancelHoursBefore", 0, 24 * 30),
                      ("documents", "replacedRetentionDays", 0, 3650), ("documents", "expiryReminderDays", 0, 365), ("classes", "maxDisciplines", 1, 20),
+                     ("makeups", "requestOpensHoursBefore", 1, 24 * 60), ("makeups", "requestClosesHoursBefore", 0, 24 * 30),
                  })
         {
             // null è ammesso dove significa "nessun limite"
-            if (patch[section] is JsonObject o && o.ContainsKey(key) && o[key] is null && key is "opensHoursBefore" or "replacedRetentionDays" or "maxDisciplines") continue;
+            if (patch[section] is JsonObject o && o.ContainsKey(key) && o[key] is null && key is "opensHoursBefore" or "replacedRetentionDays" or "maxDisciplines" or "requestOpensHoursBefore") continue;
             if (patch[section]?[key] is not { } v) continue;
             if (v.GetValueKind() != JsonValueKind.Number || v.GetValue<int>() < min || v.GetValue<int>() > max)
                 throw ApiException.Invalid($"Valore non valido per {section}.{key} (da {min} a {max}).");

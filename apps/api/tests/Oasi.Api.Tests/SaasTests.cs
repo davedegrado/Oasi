@@ -268,7 +268,9 @@ public sealed class SaasTests(ApiFixture api)
             Assert.Equal("open", await api.Scalar<string>("select ch.status from app.member_charges ch join app.lesson_bookings b on b.charge_id = ch.id where b.id = @late", new { late }));
 
             // Termine di chiusura delle prenotazioni (es. Circo Baby: almeno 24 ore prima)
-            await Settings(new { booking = new { closesHoursBefore = (int)Math.Ceiling(hours) + 1, cancelHoursBefore = 6 } });
+            await Settings(new { booking = new { opensHoursBefore = (int)Math.Ceiling(hours) + 10, closesHoursBefore = (int)Math.Ceiling(hours) + 1, cancelHoursBefore = 6 } });
+            // Una finestra incoerente (apertura più vicina della chiusura) non si può salvare
+            Assert.Equal(HttpStatusCode.BadRequest, (await Admin.PutAsJsonAsync("/v1/settings", new { booking = new { opensHoursBefore = 2, closesHoursBefore = 24 } })).StatusCode);
             Assert.Equal("too_late_to_book", await ErrorType(await As("stu-sara").PostAsJsonAsync("/v1/bookings", new { lessonId = far })));
         }
         finally { await Settings(new { booking = new { opensHoursBefore = 48, closesHoursBefore = 0, cancelHoursBefore = 6 } }); }

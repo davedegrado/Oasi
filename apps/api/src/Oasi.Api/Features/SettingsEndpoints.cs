@@ -33,6 +33,7 @@ public static class SettingsEndpoints
                 await c.ExecuteAsync(@"
                     insert into app.tenant_settings (tenant_id, settings) values (app.current_tenant(), @valid::jsonb)
                     on conflict (tenant_id) do update set settings = app.jsonb_deep_merge(app.tenant_settings.settings, excluded.settings)", new { valid }, tx);
+                (await TenantSettings.Load(c, tx)).EnsureConsistent();   // altrimenti la transazione viene annullata
                 await Audit.Log(c, tx, m.UserId, m.TenantId, "settings.update", null, new { keys = patch.Select(p => p.Key).ToArray() });
                 return await c.ExecuteScalarAsync<string>("select app.settings()::text", transaction: tx);
             });

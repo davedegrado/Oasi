@@ -127,73 +127,123 @@ public sealed class DynamiteTests(ApiFixture api)
 
     // ── Documenti mensili degli insegnanti ─────────────────────────────
 
+    private static MultipartFormDataContent Upload(Guid? typeId, string? title, string fileName, string? expiresOn = null)
+    {
+        var form = new MultipartFormDataContent();
+        var file = new ByteArrayContent(Encoding.UTF8.GetBytes("contenuto " + fileName));
+        file.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
+        form.Add(file, "file", fileName);
+        if (typeId is { } t) form.Add(new StringContent(t.ToString()), "typeId");
+        if (title is not null) form.Add(new StringContent(title), "title");
+        if (expiresOn is not null) form.Add(new StringContent(expiresOn), "expiresOn");
+        return form;
+    }
+
     [Fact]
-    public async Task Insegnanti_due_documenti_ogni_mese_entro_fine_mese_con_stati_e_notifiche_uniche()
+    public async Task Insegnanti_due_documenti_ogni_mese_con_titolo_libero_entro_fine_mese()
     {
         var elena = api.For(Seed.OasiHost, Seed.Elena);
         var elenaId = Member("tch-elena");
-        var types = (await Admin.GetFromJsonAsync<JsonElement[]>("/v1/document-types"))!
-            .Where(t => t.GetProperty("recurrence").GetString() == "monthly").ToList();
-        Assert.Equal(2, types.Count);
+        // Una tipologia che chiede due documenti al mese: quali siano lo decide chi li carica (titolo libero)
+        var type = (await Admin.GetFromJsonAsync<JsonElement[]>("/v1/document-types"))!.Single(t => t.GetProperty("recurrence").GetString() == "monthly");
+        var typeId = type.GetProperty("id").GetGuid();
+        Assert.Equal(2, type.GetProperty("requiredCount").GetInt32());
+        Assert.Equal("teachers", type.GetProperty("audience").GetString());
         var today = DateOnly.FromDateTime(DateTime.Now);
         var endOfMonth = new DateOnly(today.Year, today.Month, DateTime.DaysInMonth(today.Year, today.Month)).ToString("yyyy-MM-dd");
-        Assert.All(types, t =>
-        {
-            Assert.Equal("teachers", t.GetProperty("audience").GetString());
-            Assert.Equal(today.ToString("yyyy-MM"), t.GetProperty("currentPeriod").GetString());
-            Assert.Equal(endOfMonth, t.GetProperty("currentDue").GetString());
-        });
-        // Non riguardano le allieve
-        var forStudent = await As("stu-anna").GetFromJsonAsync<JsonElement[]>("/v1/document-types");
-        Assert.DoesNotContain(forStudent!, t => t.GetProperty("recurrence").GetString() == "monthly");
+        Assert.Equal(endOfMonth, type.GetProperty("currentDue").GetString());
+        Assert.DoesNotContain((await As("stu-anna").GetFromJsonAsync<JsonElement[]>("/v1/document-types"))!, t => t.GetProperty("id").GetGuid() == typeId);
 
-        // Il lavoro pianificato crea le richieste del mese (una per documento) e avvisa una sola volta
+        // Il lavoro pianificato crea la richiesta del mese e avvisa una sola volta
         await RunJobs();
         await RunJobs();
-        var requests = (await elena.GetFromJsonAsync<JsonElement[]>("/v1/document-requests?status=open"))!
-            .Where(r => types.Any(t => t.GetProperty("id").GetGuid() == r.GetProperty("typeId").GetGuid())).ToList();
-        Assert.Equal(2, requests.Count);
-        Assert.All(requests, r => Assert.Equal(endOfMonth, r.GetProperty("dueOn").GetString()));
-        var notes = await elena.GetFromJsonAsync<JsonElement[]>("/v1/notifications");
-        Assert.Single(notes!, n => n.GetProperty("title").GetString() == "Documento da caricare: Documento mensile insegnanti 1");
-        Assert.Contains((await elena.GetFromJsonAsync<JsonElement>($"/v1/members/{elenaId}/documents")).GetProperty("missing").EnumerateArray(),
-            t => t.GetProperty("id").GetGuid() == types[0].GetProperty("id").GetGuid());
+        var request = (await elena.GetFromJsonAsync<JsonElement[]>("/v1/document-requests?status=open"))!.Single(r => r.GetProperty("typeId").GetGuid() == typeId);
+        Assert.Equal(endOfMonth, request.GetProperty("dueOn").GetString());
+        Assert.Single((await elena.GetFromJsonAsync<JsonElement[]>("/v1/notifications"))!, n => n.GetProperty("title").GetString() == "Documento da caricare: Documenti mensili insegnanti");
 
-        // Caricamento: la richiesta del mese è evasa, il documento è "in attesa" e il periodo è quello corrente
-        var type1 = types.Single(t => t.GetProperty("name").GetString() == "Documento mensile insegnanti 1").GetProperty("id").GetGuid();
-        var form = new MultipartFormDataContent();
-        var file = new ByteArrayContent(Encoding.UTF8.GetBytes("documento del mese"));
-        file.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
-        form.Add(file, "file", "novembre.pdf");
-        form.Add(new StringContent(type1.ToString()), "typeId");
-        var docId = await CreatedId(await elena.PostAsync("/v1/documents", form));
-        Assert.Equal(today.ToString("yyyy-MM"), await api.Scalar<string>("select period_key from app.documents where id = @docId", new { docId }));
-        Assert.Equal("fulfilled", await api.Scalar<string>("select status from app.document_requests where document_id = @docId", new { docId }));
+        // Senza titolo non si distingue quale dei due documenti sia
+        Assert.Equal(HttpStatusCode.BadRequest, (await elena.PostAsync("/v1/documents", Upload(typeId, null, "x.pdf"))).StatusCode);
+        // Primo documento: la richiesta resta aperta finché non ci sono entrambi
+        var first = await CreatedId(await elena.PostAsync("/v1/documents", Upload(typeId, "Ricevuta compensi novembre", "ricevuta.pdf")));
+        Assert.Equal("open", await api.Scalar<string>("select status from app.document_requests where id = @id", new { id = request.GetProperty("id").GetGuid() }));
+        Assert.Contains((await elena.GetFromJsonAsync<JsonElement>($"/v1/members/{elenaId}/documents")).GetProperty("missing").EnumerateArray(), t => t.GetProperty("id").GetGuid() == typeId);
+        // Secondo documento, con una sua scadenza: richiesta evasa, nulla manca
+        var second = await CreatedId(await elena.PostAsync("/v1/documents", Upload(typeId, "Attestato formazione", "attestato.pdf", expiresOn: InDays(200))));
+        Assert.Equal("fulfilled", await api.Scalar<string>("select status from app.document_requests where id = @id", new { id = request.GetProperty("id").GetGuid() }));
         var area = await elena.GetFromJsonAsync<JsonElement>($"/v1/members/{elenaId}/documents");
-        Assert.Equal("pending", area.GetProperty("documents").EnumerateArray().Single(d => d.GetProperty("id").GetGuid() == docId).GetProperty("state").GetString());
-        Assert.DoesNotContain(area.GetProperty("missing").EnumerateArray(), t => t.GetProperty("id").GetGuid() == type1);
+        Assert.DoesNotContain(area.GetProperty("missing").EnumerateArray(), t => t.GetProperty("id").GetGuid() == typeId);
+        var docs = area.GetProperty("documents").EnumerateArray().Where(d => d.GetProperty("typeId").ValueKind != JsonValueKind.Null && d.GetProperty("typeId").GetGuid() == typeId).ToList();
+        Assert.Equal(2, docs.Count);
+        Assert.Contains(docs, d => d.GetProperty("title").GetString() == "Attestato formazione" && d.GetProperty("expiresOn").GetString() == InDays(200));
+        Assert.All(docs, d => Assert.Equal(today.ToString("yyyy-MM"), d.GetProperty("periodKey").GetString()));
+        // Ricaricare lo stesso titolo crea una nuova versione, non un terzo documento
+        var again = await CreatedId(await elena.PostAsync("/v1/documents", Upload(typeId, "Ricevuta compensi novembre", "ricevuta-corretta.pdf")));
+        Assert.Equal(first, await api.Scalar<Guid>("select replaces_document_id from app.documents where id = @again", new { again }));
 
-        // L'amministrazione chiede una correzione: stato "da correggere", notifica con collegamento
-        Assert.Equal(HttpStatusCode.OK, (await Admin.PostAsJsonAsync($"/v1/documents/{docId}/review", new { action = "request_replacement", note = "Manca la firma" })).StatusCode);
+        // Stati: l'amministrazione chiede una correzione → "da correggere", con notifica
+        Assert.Equal(HttpStatusCode.OK, (await Admin.PostAsJsonAsync($"/v1/documents/{second}/review", new { action = "request_replacement", note = "Manca la firma" })).StatusCode);
         area = await elena.GetFromJsonAsync<JsonElement>($"/v1/members/{elenaId}/documents");
-        Assert.Equal("to_fix", area.GetProperty("documents").EnumerateArray().Single(d => d.GetProperty("id").GetGuid() == docId).GetProperty("state").GetString());
-        Assert.Contains((await elena.GetFromJsonAsync<JsonElement[]>("/v1/notifications"))!, n => n.GetProperty("title").GetString() == "Sostituisci il documento: Documento mensile insegnanti 1");
+        Assert.Equal("to_fix", area.GetProperty("documents").EnumerateArray().Single(d => d.GetProperty("id").GetGuid() == second).GetProperty("state").GetString());
+        Assert.Contains((await elena.GetFromJsonAsync<JsonElement[]>("/v1/notifications"))!, n => n.GetProperty("title").GetString() == "Sostituisci il documento: Attestato formazione");
 
-        // Il secondo documento del mese manca: compare nel riepilogo dell'amministrazione
-        var overview = await Admin.GetFromJsonAsync<JsonElement>("/v1/reports/overview");
-        Assert.Contains(overview.GetProperty("missingDocuments").EnumerateArray(),
-            m => m.GetProperty("memberId").GetGuid() == elenaId && m.GetProperty("typeName").GetString() == "Documento mensile insegnanti 2");
-
-        // Termine passato: avviso all'insegnante e all'amministrazione, una volta sola
-        await api.Sql("update app.document_requests set due_on = current_date - 1 where member_id = @elenaId and status = 'open' and period_key is not null", new { elenaId });
+        // Chiara non ha caricato nulla: termine passato → avviso a lei e all'amministrazione, una volta sola
+        var chiaraId = Member("tch-chiara");
+        await api.Sql("update app.document_requests set due_on = current_date - 1 where member_id = @chiaraId and status = 'open' and period_key is not null", new { chiaraId });
         await RunJobs();
         await RunJobs();
-        Assert.Single((await elena.GetFromJsonAsync<JsonElement[]>("/v1/notifications"))!, n => n.GetProperty("title").GetString() == "Documento mancante: Documento mensile insegnanti 2");
-        Assert.Contains((await Admin.GetFromJsonAsync<JsonElement[]>("/v1/notifications"))!, n => n.GetProperty("title").GetString() == "Documento mancante: Documento mensile insegnanti 2");
+        Assert.Single((await api.For(Seed.OasiHost, Seed.Chiara).GetFromJsonAsync<JsonElement[]>("/v1/notifications"))!, n => n.GetProperty("title").GetString() == "Documento mancante: Documenti mensili insegnanti");
+        Assert.Contains((await Admin.GetFromJsonAsync<JsonElement[]>("/v1/notifications"))!, n => n.GetProperty("title").GetString() == "Documento mancante: Documenti mensili insegnanti");
 
-        // Mese successivo: il documento di questo mese resta nello storico, non vale per il nuovo periodo
         Assert.Equal("2026-12", await api.Scalar<string>("select app.period_key('monthly', null, date '2026-12-03')"));
         Assert.Equal(new DateOnly(2027, 2, 28), await api.Scalar<DateOnly>("select app.period_due('monthly', null, null, date '2027-02-10')"));
+    }
+
+    [Fact]
+    public async Task Documento_libero_senza_tipologia_con_scadenza()
+    {
+        var chiara = api.For(Seed.OasiHost, Seed.Chiara);
+        var chiaraId = Member("tch-chiara");
+        // Né tipologia né titolo: rifiutato
+        Assert.Equal(HttpStatusCode.BadRequest, (await chiara.PostAsync("/v1/documents", Upload(null, null, "x.pdf"))).StatusCode);
+        var id = await CreatedId(await chiara.PostAsync("/v1/documents", Upload(null, "Brevetto istruttore", "brevetto.pdf", expiresOn: InDays(400))));
+        var doc = (await chiara.GetFromJsonAsync<JsonElement>($"/v1/documents/{id}")).GetProperty("document");
+        Assert.Equal(JsonValueKind.Null, doc.GetProperty("typeId").ValueKind);
+        Assert.Equal("Brevetto istruttore", doc.GetProperty("title").GetString());
+        Assert.Equal(InDays(400), doc.GetProperty("expiresOn").GetString());
+        Assert.Equal("pending", doc.GetProperty("state").GetString());
+        // Compare nell'archivio dell'amministrazione, che lo può approvare e scaricare
+        Assert.Contains((await Admin.GetFromJsonAsync<JsonElement[]>("/v1/documents"))!, d => d.GetProperty("id").GetGuid() == id);
+        Assert.Equal(HttpStatusCode.OK, (await Admin.PostAsJsonAsync($"/v1/documents/{id}/review", new { action = "approve" })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Admin.GetAsync($"/v1/documents/{id}/file")).StatusCode);
+        // La scadenza si corregge come per gli altri documenti
+        Assert.Equal(HttpStatusCode.OK, (await chiara.PutAsJsonAsync($"/v1/documents/{id}/expiry", new { expiresOn = InDays(300) })).StatusCode);
+        // Un'altra insegnante non lo vede
+        Assert.Equal(HttpStatusCode.Forbidden, (await api.For(Seed.OasiHost, Seed.Elena).GetAsync($"/v1/documents/{id}")).StatusCode);
+        _ = chiaraId;
+    }
+
+    [Fact]
+    public async Task Recupero_richiedibile_solo_nella_finestra_impostata_dall_amministrazione()
+    {
+        var sara = As("stu-sara");               // Cerchio Intermedio
+        await Seed.DeclareAbsence(api, sara, Seed.ClassCerchioInt);
+        var target = (await Lessons(Seed.ClassCerchioBase, fromDays: 3))[0];
+        var hours = (await Admin.GetFromJsonAsync<JsonElement[]>("/v1/bookings/lessons"))!.Single(l => l.GetProperty("id").GetGuid() == target).GetProperty("hoursToStart").GetDouble();
+        try
+        {
+            // Massimo: si chiede a partire da N ore prima
+            await Settings(new { makeups = new { requestOpensHoursBefore = (int)Math.Floor(hours) - 1, requestClosesHoursBefore = 0 } });
+            Assert.Equal("makeup_not_open", await ErrorType(await sara.PostAsJsonAsync("/v1/makeups", new { targetLessonId = target })));
+            // Minimo: entro N ore prima
+            await Settings(new { makeups = new { requestOpensHoursBefore = (int)Math.Ceiling(hours) + 10, requestClosesHoursBefore = (int)Math.Ceiling(hours) + 1 } });
+            Assert.Equal("makeup_too_late", await ErrorType(await sara.PostAsJsonAsync("/v1/makeups", new { targetLessonId = target })));
+            // Intervallo incoerente: non si salva
+            Assert.Equal(HttpStatusCode.BadRequest, (await Admin.PutAsJsonAsync("/v1/settings", new { makeups = new { requestOpensHoursBefore = 5, requestClosesHoursBefore = 10 } })).StatusCode);
+            // Dentro la finestra: accettato
+            await Settings(new { makeups = new { requestOpensHoursBefore = (int)Math.Ceiling(hours) + 1, requestClosesHoursBefore = 0 } });
+            Assert.Equal(HttpStatusCode.Created, (await sara.PostAsJsonAsync("/v1/makeups", new { targetLessonId = target })).StatusCode);
+        }
+        finally { await Settings(new { makeups = new { requestOpensHoursBefore = (int?)null, requestClosesHoursBefore = 0 } }); }
     }
 
     // ── Classi: due aree, al massimo due discipline ────────────────────

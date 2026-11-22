@@ -43,6 +43,8 @@ public static class DocumentEndpoints
         public short? RecurrenceDays { get; init; }
         /// <summary>Giorno del mese entro cui caricarlo (null = ultimo giorno del mese)</summary>
         public short? DueDayOfMonth { get; init; }
+        /// <summary>Quanti documenti di questa tipologia servono (per periodo, se ricorrente). Oasi: 2 al mese per gli insegnanti.</summary>
+        public short RequiredCount { get; init; } = 1;
         /// <summary>Periodo corrente e sua scadenza (solo per le tipologie ricorrenti)</summary>
         public string? CurrentPeriod { get; init; }
         public string? CurrentDue { get; init; }
@@ -53,11 +55,15 @@ public static class DocumentEndpoints
         public Guid Id { get; init; }
         public Guid MemberId { get; init; }
         public string MemberName { get; init; } = "";
-        public Guid TypeId { get; init; }
+        /// <summary>null = documento libero, senza tipologia</summary>
+        public Guid? TypeId { get; init; }
         public string TypeName { get; init; } = "";
         public string Category { get; init; } = "";
         public short Version { get; init; }
         public Guid? ReplacesDocumentId { get; init; }
+        /// <summary>Titolo dato da chi carica (documenti senza tipologia, o più documenti della stessa tipologia)</summary>
+        public string? Title { get; init; }
+        public string? PeriodKey { get; init; }
         public string Status { get; init; } = "";
         /// <summary>Stato per l'interfaccia: pending (in attesa) · approved · to_fix (da correggere) · expired (scaduto)</summary>
         public string State { get; init; } = "";
@@ -77,7 +83,7 @@ public static class DocumentEndpoints
 
     public sealed record TypeInput(string Name, string Category, string? Description, bool? IsRequired, string? SignatureMode, short? ValidityMonths, bool? IsSensitive, bool? IsActive,
         string? Audience = null, bool? RequiredForCompetitive = null, bool? ExpiryRequired = null,
-        string? Recurrence = null, short? RecurrenceDays = null, short? DueDayOfMonth = null);
+        string? Recurrence = null, short? RecurrenceDays = null, short? DueDayOfMonth = null, short? RequiredCount = null);
 
     /// <summary>Colonne della tipologia più periodo corrente e scadenza (per le ricorrenti)</summary>
     internal const string TypeColumns = @"t.*, app.period_key(t.recurrence, t.recurrence_days, app.tenant_today()) as current_period,
@@ -87,8 +93,9 @@ public static class DocumentEndpoints
     public sealed record ReviewInput(string Action, string? Note);
 
     private const string SelectDocuments = @"
-        select d.id, d.member_id, m.first_name || ' ' || m.last_name as member_name, d.type_id, t.name as type_name, t.category,
-               d.version, d.replaces_document_id, d.status,
+        select d.id, d.member_id, m.first_name || ' ' || m.last_name as member_name, d.type_id,
+               coalesce(t.name, 'Altro documento') as type_name, coalesce(t.category, 'other') as category,
+               d.version, d.replaces_document_id, d.title, d.period_key, d.status,
                case when d.expires_on < app.tenant_today() then 'expired'
                     when d.status = 'approved' then 'approved'
                     when d.status = 'pending_review' then 'pending' else 'to_fix' end as state,
@@ -98,7 +105,7 @@ public static class DocumentEndpoints
                coalesce(d.expires_on < app.tenant_today(), false) as is_expired,
                coalesce(d.expires_on between app.tenant_today() and app.tenant_today() + coalesce((app.settings() -> 'documents' ->> 'expiryReminderDays')::int, 30), false) as expires_soon,
                d.review_note, d.reviewed_at
-        from app.documents d join app.members m on m.id = d.member_id join app.document_types t on t.id = d.type_id";
+        from app.documents d join app.members m on m.id = d.member_id left join app.document_types t on t.id = d.type_id";
 
     public static void Map(WebApplication app)
     {
@@ -118,11 +125,11 @@ public static class DocumentEndpoints
             var m = ctx.Member();
             var id = await db.InTenant(m.TenantId, m.UserId, (c, tx) => c.ExecuteScalarAsync<Guid>(@"
                 insert into app.document_types (tenant_id, name, category, description, is_required, signature_mode, validity_months, is_sensitive,
-                                                audience, required_for_competitive, expiry_required, recurrence, recurrence_days, due_day_of_month)
+                                                audience, required_for_competitive, expiry_required, recurrence, recurrence_days, due_day_of_month, required_count)
                 values (app.current_tenant(), @Name, @Category, coalesce(@Description, ''), coalesce(@IsRequired, false), coalesce(@SignatureMode, 'none'),
                         @ValidityMonths, coalesce(@IsSensitive, @Category = 'medical'),
                         coalesce(@Audience, 'students'), coalesce(@RequiredForCompetitive, false), coalesce(@ExpiryRequired, false),
-                        coalesce(@Recurrence, 'none'), @RecurrenceDays, @DueDayOfMonth) returning id", input, tx));
+                        coalesce(@Recurrence, 'none'), @RecurrenceDays, @DueDayOfMonth, coalesce(@RequiredCount, 1)) returning id", input, tx));
             return Results.Created($"/v1/document-types/{id}", new { id });
         }).RequireMember(Roles.Admin);
 
@@ -136,9 +143,10 @@ public static class DocumentEndpoints
                   is_sensitive = coalesce(@IsSensitive, @Category = 'medical'), is_active = coalesce(@IsActive, true),
                   audience = coalesce(@Audience, audience), required_for_competitive = coalesce(@RequiredForCompetitive, required_for_competitive),
                   expiry_required = coalesce(@ExpiryRequired, expiry_required),
-                  recurrence = coalesce(@Recurrence, recurrence), recurrence_days = coalesce(@RecurrenceDays, recurrence_days), due_day_of_month = @DueDayOfMonth
+                  recurrence = coalesce(@Recurrence, recurrence), recurrence_days = coalesce(@RecurrenceDays, recurrence_days), due_day_of_month = @DueDayOfMonth,
+                  required_count = coalesce(@RequiredCount, required_count)
                 where id = @id", new { id, input.Name, input.Category, input.Description, input.IsRequired, input.SignatureMode, input.ValidityMonths, input.IsSensitive, input.IsActive,
-                                       input.Audience, input.RequiredForCompetitive, input.ExpiryRequired, input.Recurrence, input.RecurrenceDays, input.DueDayOfMonth }, tx));
+                                       input.Audience, input.RequiredForCompetitive, input.ExpiryRequired, input.Recurrence, input.RecurrenceDays, input.DueDayOfMonth, input.RequiredCount }, tx));
             return n == 0 ? Results.NotFound() : Results.NoContent();
         }).RequireMember(Roles.Admin);
 
@@ -182,7 +190,7 @@ public static class DocumentEndpoints
                 where (@includeHistory or d.is_current)
                   and (@q::text is null or (m.first_name || ' ' || m.last_name) ilike '%' || @q || '%')
                   and (@typeId::uuid is null or d.type_id = @typeId)
-                  and (@category::text is null or t.category = @category)
+                  and (@category::text is null or coalesce(t.category, 'other') = @category)
                   and (@status::text is null or d.status = @status or (@status = 'expired' and d.expires_on < app.tenant_today()))
                   and (@uploadedFrom::date is null or d.uploaded_at >= @uploadedFrom::date)
                   and (@uploadedTo::date is null or d.uploaded_at < @uploadedTo::date + 1)
@@ -199,7 +207,11 @@ public static class DocumentEndpoints
             var file = form.Files.GetFile("file") ?? throw ApiException.Invalid("Allega il file del documento.");
             if (file.Length == 0 || file.Length > MaxBytes) throw ApiException.Invalid("Il file deve pesare al massimo 10 MB.");
             if (!AllowedTypes.Contains(file.ContentType)) throw ApiException.Invalid("Formato non ammesso: usa PDF, JPG, PNG, WEBP o HEIC.");
-            if (!Guid.TryParse(form["typeId"], out var typeId)) throw ApiException.Invalid("Indica la tipologia del documento.");
+            // Tipologia facoltativa: senza tipologia serve un titolo (documento libero)
+            Guid? typeId = Guid.TryParse(form["typeId"], out var tid) ? tid : null;
+            var title = form["title"].ToString().Trim();
+            if (title.Length > 120) throw ApiException.Invalid("Il titolo può avere al massimo 120 caratteri.");
+            if (typeId is null && title.Length == 0) throw ApiException.Invalid("Indica la tipologia del documento oppure un titolo.");
             var memberId = Guid.TryParse(form["memberId"], out var mid) ? mid : m.MemberId;
             var signedUpload = form["signed"] == "true";
             DateOnly? expires = DateOnly.TryParse(form["expiresOn"], out var e) ? e : null;
@@ -213,19 +225,24 @@ public static class DocumentEndpoints
             var id = await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
             {
                 await Relations.EnsureCanActFor(c, tx, m, memberId, "consents");
-                var type = await c.QuerySingleOrDefaultAsync<DocumentTypeDto>("select * from app.document_types where id = @typeId and is_active", new { typeId }, tx)
-                    ?? throw ApiException.Invalid("Tipologia di documento non disponibile.");
-                if (!m.IsAdmin && !await c.ExecuteScalarAsync<bool>("select app.document_type_applies(@memberId, @audience)", new { memberId, audience = type.Audience }, tx))
+                var type = typeId is null ? null
+                    : await c.QuerySingleOrDefaultAsync<DocumentTypeDto>("select * from app.document_types where id = @typeId and is_active", new { typeId }, tx)
+                      ?? throw ApiException.Invalid("Tipologia di documento non disponibile.");
+                if (type is not null && !m.IsAdmin && !await c.ExecuteScalarAsync<bool>("select app.document_type_applies(@memberId, @audience)", new { memberId, audience = type.Audience }, tx))
                     throw ApiException.Invalid("Questa tipologia di documento non riguarda questo profilo.");
-                if (expires is null && type.ExpiryRequired) throw ApiException.Invalid("Indica la data di scadenza del documento.");
-                if (expires is null && type.ValidityMonths is { } months)
+                if (type is not null && type.RequiredCount > 1 && title.Length == 0) throw ApiException.Invalid($"Dai un titolo al documento: per «{type.Name}» ne servono {type.RequiredCount}.");
+                if (expires is null && type?.ExpiryRequired == true) throw ApiException.Invalid("Indica la data di scadenza del documento.");
+                if (expires is null && type?.ValidityMonths is { } months)
                     expires = DateOnly.FromDateTime(await c.ExecuteScalarAsync<DateTime>("select app.tenant_today()::timestamp", transaction: tx)).AddMonths(months);
                 buffer.Position = 0;
                 await storage.PutAsync(path, buffer, file.ContentType);
+                // Stesso "posto" = stessa versione: per i documenti liberi e le tipologie che ne chiedono più d'uno conta il titolo
+                var slot = type is null || type.RequiredCount > 1 ? title.ToLowerInvariant() : "";
                 return await InsertVersion(c, tx, m, memberId, typeId, new
                 {
                     file_path = path, file_name = safeName, content_type = file.ContentType, bytes = file.Length, sha,
-                    signature_method = signedUpload || type.SignatureMode == "upload_signed" ? "upload_signed" : null,
+                    signature_method = signedUpload || type?.SignatureMode == "upload_signed" ? "upload_signed" : null,
+                    title = title.Length > 0 ? title : null, slot,
                     expires = expires?.ToString("yyyy-MM-dd"),
                 }, "uploaded", status: "pending_review");
             });
@@ -244,8 +261,9 @@ public static class DocumentEndpoints
                     select e.action, e.at, e.note, coalesce(mb.first_name || ' ' || mb.last_name, 'Sistema') as actor
                     from app.document_events e
                     left join app.members mb on mb.user_id = e.actor_user
-                    where e.document_id in (select x.id from app.documents x where x.member_id = @member and x.type_id = @type)
-                    order by e.at desc", new { member = d.MemberId, type = d.TypeId }, tx);
+                    where e.document_id in (select x.id from app.documents x join app.documents y on y.id = @id
+                                            where x.member_id = y.member_id and x.type_id is not distinct from y.type_id and x.slot = y.slot)
+                    order by e.at desc", new { id }, tx);
                 return new { document = d, events };
             });
         }).RequireMember();
@@ -282,7 +300,7 @@ public static class DocumentEndpoints
             await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
             {
                 var d = await c.QuerySingleOrDefaultAsync<(Guid MemberId, string TypeName, bool IsCurrent)?>(
-                    "select d.member_id, t.name, d.is_current from app.documents d join app.document_types t on t.id = d.type_id where d.id = @id for update of d", new { id }, tx)
+                    "select d.member_id, coalesce(d.title, t.name), d.is_current from app.documents d left join app.document_types t on t.id = d.type_id where d.id = @id for update of d", new { id }, tx)
                     ?? throw ApiException.NotFound("Documento");
                 if (!d.IsCurrent) throw ApiException.Conflict("not_current", "È una versione precedente: verifica quella attuale.");
                 await c.ExecuteAsync("update app.documents set status = @next, reviewed_by = @user, reviewed_at = now(), review_note = @Note where id = @id",
@@ -309,7 +327,7 @@ public static class DocumentEndpoints
             var status = await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
             {
                 var d = await c.QuerySingleOrDefaultAsync<(Guid MemberId, bool IsCurrent, string Status, bool ExpiryRequired)?>(@"
-                    select d.member_id, d.is_current, d.status, t.expiry_required from app.documents d join app.document_types t on t.id = d.type_id
+                    select d.member_id, d.is_current, d.status, coalesce(t.expiry_required, false) from app.documents d left join app.document_types t on t.id = d.type_id
                     where d.id = @id for update of d", new { id }, tx) ?? throw ApiException.NotFound("Documento");
                 if (!m.IsAdmin) await Relations.EnsureCanActFor(c, tx, m, d.MemberId, "consents");
                 if (!d.IsCurrent) throw ApiException.Conflict("not_current", "È una versione precedente: correggi quella attuale.");
@@ -382,11 +400,11 @@ public static class DocumentEndpoints
             var rows = (await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
             {
                 var list = (await c.QueryAsync<(Guid Id, string Path, string Name, string Member, string TypeName)>(@"
-                    select d.id, d.file_path, d.file_name, mb.last_name || '_' || mb.first_name, t.name
-                    from app.documents d join app.members mb on mb.id = d.member_id join app.document_types t on t.id = d.type_id
+                    select d.id, d.file_path, d.file_name, mb.last_name || '_' || mb.first_name, coalesce(d.title, t.name)
+                    from app.documents d join app.members mb on mb.id = d.member_id left join app.document_types t on t.id = d.type_id
                     where d.is_current and d.file_path is not null
                       and (@memberId::uuid is null or d.member_id = @memberId) and (@typeId::uuid is null or d.type_id = @typeId)
-                      and (@category::text is null or t.category = @category)
+                      and (@category::text is null or coalesce(t.category, 'other') = @category)
                       and (@status::text is null or d.status = @status or (@status = 'expired' and d.expires_on < app.tenant_today()))
                       and (@expiresBefore::date is null or d.expires_on <= @expiresBefore::date)
                     order by mb.last_name, mb.first_name, t.name limit 300", new { memberId, typeId, category, status, expiresBefore }, tx)).ToList();
@@ -461,14 +479,16 @@ public static class DocumentEndpoints
     /// Inserisce la nuova versione: la precedente resta nello storico (non corrente)
     /// e viene collegata, così il documento aggiornato resta sullo stesso profilo.
     /// </summary>
-    private static async Task<Guid> InsertVersion(IDbConnection c, IDbTransaction tx, Member actor, Guid memberId, Guid typeId, dynamic f,
+    private static async Task<Guid> InsertVersion(IDbConnection c, IDbTransaction tx, Member actor, Guid memberId, Guid? typeId, dynamic f,
         string action, string status)
     {
         // Tipologie ricorrenti (es. documenti mensili): il documento appartiene al periodo corrente
         var periodKey = await c.ExecuteScalarAsync<string?>(
             "select app.period_key(recurrence, recurrence_days, app.tenant_today()) from app.document_types where id = @typeId", new { typeId }, tx);
-        var previous = await c.QuerySingleOrDefaultAsync<(Guid Id, short Version, string? PeriodKey)?>(
-            "select id, version, period_key from app.documents where member_id = @memberId and type_id = @typeId and is_current for update", new { memberId, typeId }, tx);
+        string slot = (string)f.slot;
+        var previous = await c.QuerySingleOrDefaultAsync<(Guid Id, short Version, string? PeriodKey)?>(@"
+            select id, version, period_key from app.documents
+            where member_id = @memberId and type_id is not distinct from @typeId and slot = @slot and is_current for update", new { memberId, typeId, slot }, tx);
         if (previous is { } p)
         {
             if (p.PeriodKey is not null && p.PeriodKey != periodKey)
@@ -488,12 +508,12 @@ public static class DocumentEndpoints
         }
         var id = await c.ExecuteScalarAsync<Guid>(@"
             insert into app.documents (tenant_id, member_id, type_id, version, replaces_document_id, status, file_path, file_name, content_type, bytes, file_sha256,
-                                       signature_method, uploaded_by, expires_on, period_key)
+                                       signature_method, uploaded_by, expires_on, period_key, title, slot)
             values (app.current_tenant(), @memberId, @typeId, @version, @replaces, @status, @file_path, @file_name, @content_type, @bytes, @sha,
-                    @signature_method, @user, @expires::date, @periodKey) returning id",
+                    @signature_method, @user, @expires::date, @periodKey, @title, @slot) returning id",
             new
             {
-                memberId, typeId, periodKey, version = (short)((previous?.Version ?? 0) + 1),
+                memberId, typeId, periodKey, title = (string?)f.title, slot, version = (short)((previous?.Version ?? 0) + 1),
                 replaces = previous is { } prev && (prev.PeriodKey == periodKey || prev.PeriodKey is null) ? prev.Id : (Guid?)null, status,
                 file_path = (string?)f.file_path, file_name = (string?)f.file_name, content_type = (string?)f.content_type, bytes = (long?)f.bytes, sha = (string)f.sha,
                 signature_method = (string?)f.signature_method,
@@ -501,8 +521,11 @@ public static class DocumentEndpoints
             }, tx);
         await c.ExecuteAsync("insert into app.document_events (tenant_id, document_id, action, actor_user) values (app.current_tenant(), @id, @action, @user)", new { id, action, user = actor.UserId }, tx);
         // Il caricamento soddisfa l'eventuale richiesta aperta dell'amministrazione
-        await c.ExecuteAsync(@"update app.document_requests set status = 'fulfilled', document_id = @id
-            where member_id = @memberId and type_id = @typeId and status = 'open' and (period_key is null or period_key = @periodKey)", new { id, memberId, typeId, periodKey }, tx);
+        // (per le tipologie che chiedono più documenti, solo quando sono stati caricati tutti)
+        if (typeId is not null)
+            await c.ExecuteAsync(@"update app.document_requests set status = 'fulfilled', document_id = @id
+                where member_id = @memberId and type_id = @typeId and status = 'open' and (period_key is null or period_key = @periodKey)
+                  and app.document_satisfied(@memberId, @typeId)", new { id, memberId, typeId, periodKey }, tx);
         if (status == "pending_review")
         {
             var admins = await Notifier.UsersWithRoles(c, tx, Roles.Admin);
@@ -533,6 +556,7 @@ public static class DocumentEndpoints
         if (i.Recurrence is not (null or "none" or "monthly" or "every_n_days")) throw ApiException.Invalid("Cadenza non valida: none, monthly o every_n_days.");
         if (i.Recurrence == "every_n_days" && i.RecurrenceDays is null or <= 0) throw ApiException.Invalid("Indica ogni quanti giorni va caricato il documento.");
         if (i.DueDayOfMonth is < 1 or > 31) throw ApiException.Invalid("Giorno di scadenza non valido.");
+        if (i.RequiredCount is < 1 or > 20) throw ApiException.Invalid("Numero di documenti richiesti non valido.");
     }
 
     private static string SafeFileName(string name)

@@ -75,8 +75,8 @@ public sealed class MaintenanceWorker(Db db, IFileStorage storage, IConfiguratio
     private static async Task DocumentReminders(IDbConnection c, IDbTransaction tx, TenantSettings s)
     {
         var docs = await c.QueryAsync<(Guid Id, Guid MemberId, string TypeName, DateTime ExpiresOn, bool Expired)>(@"
-            select d.id, d.member_id, t.name, d.expires_on::timestamp, d.expires_on < app.tenant_today()
-            from app.documents d join app.document_types t on t.id = d.type_id
+            select d.id, d.member_id, coalesce(d.title, t.name), d.expires_on::timestamp, d.expires_on < app.tenant_today()
+            from app.documents d left join app.document_types t on t.id = d.type_id
             where d.is_current and d.status = 'approved' and d.expires_on is not null and d.expires_on <= app.tenant_today() + @days", new { days = s.Documents.ExpiryReminderDays }, tx);
         var admins = await Notifier.UsersWithRoles(c, tx, Roles.Admin);
         foreach (var d in docs)

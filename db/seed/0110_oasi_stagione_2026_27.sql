@@ -20,7 +20,7 @@
 --     48 ore è applicata alla lezione singola e al pacchetto 5 lezioni; Circo
 --     Baby ha solo il termine "almeno 24 ore prima".
 --  6. I due documenti mensili degli insegnanti non sono nominati nel prompt:
---     le tipologie hanno un nome provvisorio da cambiare in Archivio.
+--     una tipologia ne chiede due al mese e l'insegnante li intitola liberamente.
 --  7. Categorie di piano: Baby/Teen, Circo Baby e Preagonismo Baby → classi
 --     Bambini/Ragazzi; Adulti/Teen → Adulti/Ragazzi; Genitori & Figli e
 --     Agonismo Teen senza vincolo di categoria.
@@ -44,6 +44,7 @@ begin
   update app.tenant_settings set settings = app.jsonb_deep_merge(settings, '{
     "timezone": "Europe/Rome",
     "booking": { "opensHoursBefore": 48, "closesHoursBefore": 0, "cancelHoursBefore": 6 },
+    "makeups": { "requestOpensHoursBefore": null, "requestClosesHoursBefore": 0 },
     "packages": { "consumeOn": "attendance" },
     "competitive": { "competitionFeeRangeCents": [5000, 15000] },
     "classes": { "categories": ["Bambini/Ragazzi", "Adulti/Ragazzi"], "maxDisciplines": 2 },
@@ -148,11 +149,11 @@ begin
   on conflict (tenant_id, name) do nothing;
 
   -- ── Insegnanti: due documenti amministrativi ogni mese, entro l'ultimo giorno del mese ──
-  -- I nomi sono provvisori (il prompt non li indica): l'amministrazione li rinomina in Archivio.
-  insert into app.document_types (tenant_id, name, category, description, is_required, signature_mode, is_sensitive, audience, recurrence)
-  values
-    (t, 'Documento mensile insegnanti 1', 'other', 'Primo dei due documenti richiesti ogni mese per pagamenti e adempimenti. Da caricare entro la fine del mese.', true, 'none', false, 'teachers', 'monthly'),
-    (t, 'Documento mensile insegnanti 2', 'other', 'Secondo dei due documenti richiesti ogni mese per pagamenti e adempimenti. Da caricare entro la fine del mese.', true, 'none', false, 'teachers', 'monthly')
+  -- Il prompt non dice quali documenti siano: una sola tipologia che ne chiede due al mese,
+  -- e l'insegnante dà a ciascuno il titolo che vuole (con la scadenza, se serve).
+  insert into app.document_types (tenant_id, name, category, description, is_required, signature_mode, is_sensitive, audience, recurrence, required_count)
+  values (t, 'Documenti mensili insegnanti', 'other', 'Due documenti da caricare ogni mese, entro la fine del mese, per pagamenti e adempimenti. Indica tu il titolo di ciascuno.',
+          true, 'none', false, 'teachers', 'monthly', 2)
   on conflict (tenant_id, name) do nothing;
 
   -- ── Classi esistenti: categoria (dati dimostrativi: sono tutte classi per adulti) ──
