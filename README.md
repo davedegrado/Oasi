@@ -5,7 +5,7 @@ Piattaforma gestionale per associazioni, palestre e scuole: un unico codice e un
 | Cartella | Contenuto | Stato |
 | --- | --- | --- |
 | [`apps/web`](apps/web) | Web App / PWA React + TypeScript + Vite + Tailwind | Completa in modalità demo; white-label da configurazione; collegamento alle API in corso |
-| [`apps/api`](apps/api) | API ASP.NET Core (.NET 10) multi-tenant | Core, calendario, presenze, iscrizioni, recuperi con diritto residuo, lezioni singole, stagioni, piani e pagamenti registrati, agonismo, documenti, eventi, Super Admin — 54 test |
+| [`apps/api`](apps/api) | API ASP.NET Core (.NET 10) multi-tenant | Core, calendario, presenze, iscrizioni, recuperi con diritto residuo, lezioni singole, stagioni, piani e pagamenti registrati, agonismo, documenti, eventi, Super Admin — 55 test |
 | [`db`](db) | Migrazioni PostgreSQL/Supabase con Row Level Security, seed, test di isolamento | Pronto |
 | `native` | App iOS/Android con Capacitor | Da fare (fase 7 del piano) |
 

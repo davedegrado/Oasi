@@ -329,6 +329,25 @@ public sealed class DynamiteTests(ApiFixture api)
         })).StatusCode);
     }
 
+    [Fact]
+    public async Task Sale_create_rinominate_ed_eliminate_solo_se_libere()
+    {
+        var rooms = await Admin.GetFromJsonAsync<JsonElement[]>("/v1/rooms");
+        var luna = rooms!.Single(r => r.GetProperty("name").GetString() == "Sala Luna");
+        Assert.True(luna.GetProperty("classes").GetInt32() > 0);
+        // Le atlete non gestiscono le sale; nomi duplicati rifiutati
+        Assert.Equal(HttpStatusCode.Forbidden, (await As("stu-anna").PostAsJsonAsync("/v1/rooms", new { name = "Sala X" })).StatusCode);
+        Assert.Equal("room_exists", await ErrorType(await Admin.PostAsJsonAsync("/v1/rooms", new { name = "sala luna" })));
+        var id = await CreatedId(await Admin.PostAsJsonAsync("/v1/rooms", new { name = "Test · Sala Sole" }));
+        Assert.Equal(HttpStatusCode.NoContent, (await Admin.PutAsJsonAsync($"/v1/rooms/{id}", new { name = "Test · Sala Sole grande" })).StatusCode);
+        Assert.Contains((await Admin.GetFromJsonAsync<JsonElement[]>("/v1/rooms"))!, r => r.GetProperty("name").GetString() == "Test · Sala Sole grande");
+        // Una sala usata da una classe non si elimina; una libera sì
+        Assert.Equal("room_in_use", await ErrorType(await Admin.DeleteAsync($"/v1/rooms/{luna.GetProperty("id").GetGuid()}")));
+        Assert.Equal(HttpStatusCode.NoContent, (await Admin.DeleteAsync($"/v1/rooms/{id}")).StatusCode);
+        // Le sale di Oasi non esistono per Studio Prova
+        Assert.DoesNotContain((await api.For(Seed.ProvaHost, Seed.ProvaTeacher).GetFromJsonAsync<JsonElement[]>("/v1/rooms"))!, r => r.GetProperty("name").GetString() == "Sala Luna");
+    }
+
     // ── Sostituzioni ───────────────────────────────────────────────────
 
     [Fact]

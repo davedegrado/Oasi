@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { ListEditor } from '@/components/common/ListEditor'
+import { RoomsManager } from '@/components/management/RoomsManager'
 import { SharedDocumentsCard } from '@/components/documents/SharedDocumentsCard'
 import { Wallet, ArrowRight, Building2, Database, Sparkles, Download, Mail, MapPin, Pencil, Phone, RotateCcw, Globe } from 'lucide-react'
 import type { AssociationInfo } from '@/types'
@@ -275,6 +276,7 @@ export function AdminSettings() {
 
       <Card>
         <CardContent className="space-y-5">
+          <RoomsManager />
           <div>
             <h2 className="mb-1 text-base font-bold">Aree delle classi</h2>
             <p className="mb-3 text-sm text-ink-muted">Le classi sono organizzate in queste aree (es. bambini/ragazzi e adulti/ragazzi). Puoi rinominarle o aggiungerne.</p>

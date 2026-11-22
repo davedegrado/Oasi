@@ -761,6 +761,33 @@ export class LocalRepository implements OasiRepository {
   deleteSharedDocument: OasiRepository['deleteSharedDocument'] = (id) =>
     this.commit((db) => ({ ...db, sharedDocuments: db.sharedDocuments.filter((d) => d.id !== id) }))
 
+  addRoom: OasiRepository['addRoom'] = (name) =>
+    this.commit((db) => {
+      const n = name.trim()
+      if (!n) throw new Error('Scrivi il nome della sala')
+      if (db.association.rooms.some((r) => r.toLowerCase() === n.toLowerCase())) throw new Error('Esiste già una sala con questo nome')
+      return { ...db, association: { ...db.association, rooms: [...db.association.rooms, n] } }
+    })
+
+  renameRoom: OasiRepository['renameRoom'] = (from, to) =>
+    this.commit((db) => {
+      const n = to.trim()
+      if (!n) throw new Error('Scrivi il nome della sala')
+      if (n !== from && db.association.rooms.some((r) => r.toLowerCase() === n.toLowerCase())) throw new Error('Esiste già una sala con questo nome')
+      return {
+        ...db,
+        association: { ...db.association, rooms: db.association.rooms.map((r) => (r === from ? n : r)) },
+        classes: db.classes.map((c) => (c.room === from ? { ...c, room: n } : c)),
+      }
+    })
+
+  deleteRoom: OasiRepository['deleteRoom'] = (name) =>
+    this.commit((db) => {
+      const used = db.classes.filter((c) => c.room === name)
+      if (used.length) throw new Error(`La sala è usata da: ${used.map((c) => c.name).join(', ')}. Sposta prima le classi.`)
+      return { ...db, association: { ...db.association, rooms: db.association.rooms.filter((r) => r !== name) } }
+    })
+
   updateAssociation: OasiRepository['updateAssociation'] = (patch) =>
     this.commit((db) => ({ ...db, association: { ...db.association, ...patch } }))
 

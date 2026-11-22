@@ -65,7 +65,7 @@ Legenda: **API** = regola applicata dal backend con persistenza, permessi e test
 
 ## 3. Verifiche eseguite
 
-- `dotnet test`: **54 test superati**, di cui 7 in `DynamiteTests.cs`.
+- `dotnet test`: **55 test superati**, di cui 7 in `DynamiteTests.cs`.
 - `db/tests/isolation.sql`: **19 controlli superati**.
 - Web App: lint e build senza errori; pagine principali aperte in un browser con i tre ruoli, nessun errore in console. Nessun test automatico dell'interfaccia.
 

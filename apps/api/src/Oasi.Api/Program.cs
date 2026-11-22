@@ -91,6 +91,7 @@ MemberEndpoints.Map(app);
 SeasonEndpoints.Map(app);
 PlanEndpoints.Map(app);
 BookingEndpoints.Map(app);
+RoomEndpoints.Map(app);
 
 app.Run();
 

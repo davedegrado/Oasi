@@ -94,6 +94,13 @@ export interface OasiRepository {
   saveSharedDocument(doc: SharedDocument): Promise<void>
   deleteSharedDocument(id: string): Promise<void>
 
+  // Sale della palestra
+  addRoom(name: string): Promise<void>
+  /** Rinomina la sala anche nelle classi che la usano */
+  renameRoom(from: string, to: string): Promise<void>
+  /** Rifiuta se la sala è usata da una classe */
+  deleteRoom(name: string): Promise<void>
+
   // Associazione
   updateAssociation(patch: Partial<AssociationInfo>): Promise<void>
 

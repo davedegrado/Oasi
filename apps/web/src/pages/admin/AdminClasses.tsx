@@ -333,7 +333,7 @@ function ClassDialog({ initial, isNew, onClose }: { initial: ClassGroup; isNew: 
           <Field label="Fine" htmlFor="c-end">
             <Input id="c-end" type="time" value={cls.endTime} onChange={(e) => set('endTime', e.target.value)} />
           </Field>
-          <Field label="Sala" htmlFor="c-room">
+          <Field label="Sala" htmlFor="c-room" hint="Le sale si gestiscono in Gestione → Associazione">
             <Select id="c-room" value={cls.room} onChange={(e) => set('room', e.target.value)}>
               {db.association.rooms.map((r) => (
                 <option key={r}>{r}</option>
