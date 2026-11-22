@@ -398,6 +398,9 @@ public static class DocumentEndpoints
         docs.MapGet("/documents/export", async (HttpContext ctx, Db db, IFileStorage storage, Guid? memberId, Guid? typeId, string? category, string? status, string? expiresBefore,
             [Microsoft.AspNetCore.Mvc.FromQuery] Guid[]? ids) =>
         {
+            // Mai l'intero archivio in un colpo: il traffico in uscita è il costo reale dei download
+            if (ids is not { Length: > 0 } && memberId is null && typeId is null && category is null && status is null && expiresBefore is null)
+                throw ApiException.Invalid("Scegli i documenti o almeno un filtro (persona, tipologia, categoria, stato o scadenza).");
             var m = ctx.Member();
             var rows = (await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
             {

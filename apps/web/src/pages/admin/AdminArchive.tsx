@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog } from '@/components/ui/dialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/input'
 import { Segmented } from '@/components/ui/segmented'
+import { addDays, todayISO } from '@/lib/dates'
 import { MemberDocumentsPanel } from '@/components/documents/MemberDocumentsPanel'
 import { Avatar } from '@/components/ui/avatar'
 import { DocumentStateBadge } from '@/components/documents/DocumentBits'
@@ -104,6 +105,18 @@ function DocumentsTab() {
   }, [db, q, category, typeId, status, from, to, expiresBefore, history])
 
   const row: MemberDocumentRow | undefined = open ? memberDocuments(db, open.memberId).find((r) => r.doc?.id === open.docId || r.previous.some((p) => p.id === open.docId)) : undefined
+  // Filtri rapidi: scaricare solo ciò che serve riduce il traffico (il costo reale dei download)
+  const today = todayISO()
+  const presets = [
+    { key: 'verifica', label: 'Da verificare', apply: () => { reset(); setStatus('in_verifica') }, active: status === 'in_verifica' && !from && !expiresBefore },
+    { key: 'scadenza', label: 'In scadenza (30 giorni)', apply: () => { reset(); setStatus('in_scadenza') }, active: status === 'in_scadenza' },
+    { key: 'scaduti', label: 'Scaduti', apply: () => { reset(); setStatus('scaduto') }, active: status === 'scaduto' },
+    { key: 'recenti', label: 'Caricati negli ultimi 30 giorni', apply: () => { reset(); setFrom(addDays(today, -30)) }, active: !status && from === addDays(today, -30) },
+  ]
+  const anyFilter = !!(q.trim() || category || typeId || status || from || to || expiresBefore)
+  const selectedRows = rows.filter((r) => selected.has(r.d.id))
+  const selectedBytes = selectedRows.reduce((sum, r) => sum + (r.d.fileSize ?? 0), 0)
+  const megabytes = (b: number) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`)
   const reset = () => {
     setQ(''); setCategory(''); setTypeId(''); setStatus(''); setFrom(''); setTo(''); setExpiresBefore('')
   }
@@ -145,6 +158,22 @@ function DocumentsTab() {
         </CardContent>
       </Card>
 
+      {/* Filtri rapidi prima di scaricare */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold text-ink-muted">Scarica solo ciò che serve:</span>
+        {presets.map((p) => (
+          <button
+            key={p.key}
+            type="button"
+            aria-pressed={p.active}
+            onClick={() => { setSelected(new Set()); if (p.active) reset(); else p.apply() }}
+            className={cn('rounded-full border px-3 py-1.5 text-xs font-semibold transition', p.active ? 'border-ink bg-ink text-white' : 'border-line bg-white text-ink-soft hover:bg-cipria-50')}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
       {rows.length > 0 && (
         <div className="sticky top-2 z-10 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-white/95 p-2.5 shadow-soft backdrop-blur">
           <label className="flex items-center gap-2 text-sm font-semibold text-ink-soft">
@@ -152,13 +181,17 @@ function DocumentsTab() {
               type="checkbox"
               className="size-4 accent-rosa-intenso"
               checked={rows.length > 0 && rows.every((r) => selected.has(r.d.id))}
+              disabled={!anyFilter}
               onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((r) => r.d.id)) : new Set())}
             />
-            Seleziona tutti
+            {anyFilter ? `Seleziona tutti i ${rows.length} filtrati` : 'Seleziona tutti (scegli prima un filtro)'}
           </label>
-          <Button size="sm" disabled={selected.size === 0} onClick={() => downloadSelected(rows.filter((r) => selected.has(r.d.id)))}>
-            <Download /> {selected.size > 1 ? `Scarica ${selected.size} documenti (ZIP)` : selected.size === 1 ? 'Scarica il documento' : 'Scarica selezionati'}
-          </Button>
+          <span className="flex flex-wrap items-center gap-2">
+            {selected.size > 0 && <span className="text-xs text-ink-muted">{megabytes(selectedBytes)} da scaricare</span>}
+            <Button size="sm" disabled={selected.size === 0} onClick={() => downloadSelected(selectedRows)}>
+              <Download /> {selected.size > 1 ? `Scarica ${selected.size} documenti (ZIP)` : selected.size === 1 ? 'Scarica il documento' : 'Scarica selezionati'}
+            </Button>
+          </span>
         </div>
       )}
 

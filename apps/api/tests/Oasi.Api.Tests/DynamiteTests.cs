@@ -242,6 +242,8 @@ public sealed class DynamiteTests(ApiFixture api)
             Assert.All(archive.Entries, e => Assert.Equal(e.Length, e.CompressedLength));
         }
         Assert.Equal(HttpStatusCode.Forbidden, (await chiara.GetAsync($"/v1/documents/export?ids={id}")).StatusCode);
+        // Senza alcun filtro né selezione non si scarica l'intero archivio
+        Assert.Equal(HttpStatusCode.BadRequest, (await Admin.GetAsync("/v1/documents/export")).StatusCode);
         _ = chiaraId;
     }
 
