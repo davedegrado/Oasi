@@ -239,10 +239,10 @@ export interface AssociationInfo {
     bookingOpensHours?: number
     /** ...e fino a N ore prima (minimo; 0 = fino all'inizio) */
     bookingClosesHours?: number
-    /** Recuperi: si chiedono a partire da N ore prima della lezione scelta (vuoto = senza limite) */
-    makeupOpensHours?: number
-    /** ...e fino a N ore prima (0 = fino all'inizio) */
-    makeupClosesHours?: number
+    /** Recuperi: si chiedono a partire da N giorni prima della lezione scelta (vuoto = senza limite) */
+    makeupOpensDays?: number
+    /** ...e fino a N giorni prima (0 = fino all'inizio). Un giorno = 24 ore */
+    makeupClosesDays?: number
     /** Aree in cui sono organizzate le classi (Oasi: Bambini/Ragazzi, Adulti/Ragazzi) */
     classCategories?: string[]
     /** Numero massimo di discipline per classe (Oasi: 2) */

@@ -268,23 +268,27 @@ public sealed class DynamiteTests(ApiFixture api)
     {
         var sara = As("stu-sara");               // Cerchio Intermedio
         await Seed.DeclareAbsence(api, sara, Seed.ClassCerchioInt);
-        var target = (await Lessons(Seed.ClassCerchioBase, fromDays: 3))[0];
+        var target = (await Lessons(Seed.ClassCerchioBase, fromDays: 4))[0];
         var hours = (await Admin.GetFromJsonAsync<JsonElement[]>("/v1/bookings/lessons"))!.Single(l => l.GetProperty("id").GetGuid() == target).GetProperty("hoursToStart").GetDouble();
+        var days = hours / 24;
         try
         {
-            // Massimo: si chiede a partire da N ore prima
-            await Settings(new { makeups = new { requestOpensHoursBefore = (int)Math.Floor(hours) - 1, requestClosesHoursBefore = 0 } });
-            Assert.Equal("makeup_not_open", await ErrorType(await sara.PostAsJsonAsync("/v1/makeups", new { targetLessonId = target })));
-            // Minimo: entro N ore prima
-            await Settings(new { makeups = new { requestOpensHoursBefore = (int)Math.Ceiling(hours) + 10, requestClosesHoursBefore = (int)Math.Ceiling(hours) + 1 } });
+            // Massimo: si chiede a partire da N giorni prima
+            await Settings(new { makeups = new { requestOpensDaysBefore = (int)Math.Floor(days) - 1, requestClosesDaysBefore = 0 } });
+            var early = await Json(await sara.PostAsJsonAsync("/v1/makeups", new { targetLessonId = target }));
+            Assert.Equal("makeup_not_open", early.GetProperty("type").GetString());
+            Assert.Contains("giorni prima", early.GetProperty("title").GetString());
+            // Minimo: entro N giorni prima
+            await Settings(new { makeups = new { requestOpensDaysBefore = (int)Math.Ceiling(days) + 10, requestClosesDaysBefore = (int)Math.Ceiling(days) + 1 } });
             Assert.Equal("makeup_too_late", await ErrorType(await sara.PostAsJsonAsync("/v1/makeups", new { targetLessonId = target })));
-            // Intervallo incoerente: non si salva
-            Assert.Equal(HttpStatusCode.BadRequest, (await Admin.PutAsJsonAsync("/v1/settings", new { makeups = new { requestOpensHoursBefore = 5, requestClosesHoursBefore = 10 } })).StatusCode);
+            // Intervallo incoerente: non si salva; valori in ore non più accettati come giorni fuori scala
+            Assert.Equal(HttpStatusCode.BadRequest, (await Admin.PutAsJsonAsync("/v1/settings", new { makeups = new { requestOpensDaysBefore = 2, requestClosesDaysBefore = 5 } })).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, (await Admin.PutAsJsonAsync("/v1/settings", new { makeups = new { requestOpensDaysBefore = 1000 } })).StatusCode);
             // Dentro la finestra: accettato
-            await Settings(new { makeups = new { requestOpensHoursBefore = (int)Math.Ceiling(hours) + 1, requestClosesHoursBefore = 0 } });
+            await Settings(new { makeups = new { requestOpensDaysBefore = (int)Math.Ceiling(days) + 1, requestClosesDaysBefore = 0 } });
             Assert.Equal(HttpStatusCode.Created, (await sara.PostAsJsonAsync("/v1/makeups", new { targetLessonId = target })).StatusCode);
         }
-        finally { await Settings(new { makeups = new { requestOpensHoursBefore = (int?)null, requestClosesHoursBefore = 0 } }); }
+        finally { await Settings(new { makeups = new { requestOpensDaysBefore = (int?)null, requestClosesDaysBefore = 0 } }); }
     }
 
     // ── Classi: due aree, al massimo due discipline ────────────────────

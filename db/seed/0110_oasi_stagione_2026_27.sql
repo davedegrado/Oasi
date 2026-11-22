@@ -44,7 +44,7 @@ begin
   update app.tenant_settings set settings = app.jsonb_deep_merge(settings, '{
     "timezone": "Europe/Rome",
     "booking": { "opensHoursBefore": 48, "closesHoursBefore": 0, "cancelHoursBefore": 6 },
-    "makeups": { "requestOpensHoursBefore": null, "requestClosesHoursBefore": 0 },
+    "makeups": { "requestOpensDaysBefore": null, "requestClosesDaysBefore": 0 },
     "packages": { "consumeOn": "attendance" },
     "competitive": { "competitionFeeRangeCents": [5000, 15000] },
     "classes": { "categories": ["Bambini/Ragazzi", "Adulti/Ragazzi"], "maxDisciplines": 2 },

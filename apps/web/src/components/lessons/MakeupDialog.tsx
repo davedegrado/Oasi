@@ -79,11 +79,11 @@ export function MakeupDialog({ lesson, studentId, onClose }: { lesson: Lesson; s
         {error && <p className="rounded-2xl bg-danger-soft p-3 text-sm text-danger">{error}</p>}
         {credits.available > 0 && mWindow.tooEarly && mWindow.openAt && (
           <p className="rounded-2xl bg-cipria-50 p-3 text-sm text-ink-soft">
-            Il recupero per questa lezione si chiede a partire da {db.association.settings.makeupOpensHours} ore prima: dal {formatDate(mWindow.openAt.toISOString().slice(0, 10))} alle {mWindow.openAt.toTimeString().slice(0, 5)}.
+            Il recupero per questa lezione si chiede a partire da {db.association.settings.makeupOpensDays} {db.association.settings.makeupOpensDays === 1 ? 'giorno' : 'giorni'} prima: dal {formatDate(mWindow.openAt.toISOString().slice(0, 10))} alle {mWindow.openAt.toTimeString().slice(0, 5)}.
           </p>
         )}
         {credits.available > 0 && mWindow.tooLate && window.hours > 0 && (
-          <p className="rounded-2xl bg-warn-soft p-3 text-sm text-ink-soft">Il recupero va chiesto almeno {db.association.settings.makeupClosesHours} ore prima della lezione.</p>
+          <p className="rounded-2xl bg-warn-soft p-3 text-sm text-ink-soft">Il recupero va chiesto almeno {db.association.settings.makeupClosesDays} {db.association.settings.makeupClosesDays === 1 ? 'giorno' : 'giorni'} prima della lezione.</p>
         )}
         {single && window.tooEarly && window.openAt && (
           <p className="rounded-2xl bg-cipria-50 p-3 text-sm text-ink-soft">

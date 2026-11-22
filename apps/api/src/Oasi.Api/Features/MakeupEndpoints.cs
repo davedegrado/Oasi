@@ -82,10 +82,11 @@ public static class MakeupEndpoints
                 if (target.Status == "cancelled" || target.Started)
                     throw ApiException.Conflict("lesson_unavailable", "La lezione scelta non è disponibile per un recupero.");
                 // Finestra impostata dall'amministrazione: da quante ore prima a quante ore prima della lezione
-                if (settings.Makeups.RequestOpensHoursBefore is { } opens && target.HoursToStart > opens)
-                    throw ApiException.Conflict("makeup_not_open", $"Il recupero per questa lezione si può chiedere a partire da {opens} ore prima.");
-                if (target.HoursToStart < settings.Makeups.RequestClosesHoursBefore)
-                    throw ApiException.Conflict("makeup_too_late", $"Il recupero va chiesto almeno {settings.Makeups.RequestClosesHoursBefore} ore prima della lezione.");
+                // Finestra in giorni (un giorno = 24 ore prima dell'inizio della lezione)
+                if (settings.Makeups.RequestOpensDaysBefore is { } opens && target.HoursToStart > opens * 24)
+                    throw ApiException.Conflict("makeup_not_open", $"Il recupero per questa lezione si può chiedere a partire da {opens} {(opens == 1 ? "giorno" : "giorni")} prima.");
+                if (settings.Makeups.RequestClosesDaysBefore is var closes and > 0 && target.HoursToStart < closes * 24)
+                    throw ApiException.Conflict("makeup_too_late", $"Il recupero va chiesto almeno {closes} {(closes == 1 ? "giorno" : "giorni")} prima della lezione.");
 
                 // Diritto residuo: quello dell'assenza indicata, oppure il più vicino alla scadenza
                 await MakeupCredits.ExpireOld(c, tx);

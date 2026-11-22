@@ -120,7 +120,8 @@ export function singleLessonWindow(db: OasiDatabase, lesson: Lesson, now = new D
 /** Recupero: si chiede dentro la finestra impostata dall'amministrazione (da N a M ore prima della lezione) */
 export function makeupWindow(db: OasiDatabase, lesson: Lesson, now = new Date()) {
   const s = db.association.settings
-  return lessonWindow(lesson, s.makeupOpensHours, s.makeupClosesHours ?? 0, now)
+  // In giorni: un giorno = 24 ore prima dell'inizio della lezione
+  return lessonWindow(lesson, s.makeupOpensDays !== undefined ? s.makeupOpensDays * 24 : undefined, (s.makeupClosesDays ?? 0) * 24, now)
 }
 
 function lessonWindow(lesson: Lesson, opens: number | undefined, closes: number, now: Date) {

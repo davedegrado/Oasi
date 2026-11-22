@@ -28,7 +28,7 @@ const SETTINGS_META: { key: keyof AssociationInfo['settings']; label: string; de
   { key: 'remindersEnabled', label: 'Promemoria lezioni', description: 'Notifica alle atlete il giorno prima della lezione (simulato)', type: 'toggle' },
   { key: 'progressVisibleToTeachers', label: 'Progressi visibili alle insegnanti', description: 'Le insegnanti vedono stati e note delle atlete', type: 'toggle' },
   { key: 'trialLessonEnabled', label: 'Lezione di prova', description: 'Consente iscrizioni in stato “Lezione di prova”', type: 'toggle' },
-  { key: 'maxStudentsPerClass', label: 'Capienza standard per classe', description: 'Valore predefinito per le nuove classi', type: 'number', suffix: 'allieve' },
+  { key: 'maxStudentsPerClass', label: 'Capienza standard per classe', description: 'Valore predefinito per le nuove classi', type: 'number', suffix: 'atlete' },
   { key: 'maxDisciplines', label: 'Discipline per classe', description: 'Numero massimo di discipline selezionabili per una classe', type: 'number', suffix: 'max' },
   { key: 'makeupLowerLevelAllowed', label: 'Recupero in livello inferiore', description: 'Consenti il recupero in classi di livello inferiore (mai superiore)', type: 'toggle' },
 ]
@@ -419,8 +419,8 @@ function BookingWindowsCard() {
     bookingOpensHours: a.settings.bookingOpensHours?.toString() ?? '',
     bookingClosesHours: (a.settings.bookingClosesHours ?? 0).toString(),
     absenceNoticeHours: a.settings.absenceNoticeHours.toString(),
-    makeupOpensHours: a.settings.makeupOpensHours?.toString() ?? '',
-    makeupClosesHours: (a.settings.makeupClosesHours ?? 0).toString(),
+    makeupOpensDays: a.settings.makeupOpensDays?.toString() ?? '',
+    makeupClosesDays: (a.settings.makeupClosesDays ?? 0).toString(),
   }))
   const [error, setError] = useState('')
   const num = (v: string) => (v.trim() === '' ? undefined : Math.max(0, Math.round(Number(v))))
@@ -429,12 +429,12 @@ function BookingWindowsCard() {
       bookingOpensHours: num(form.bookingOpensHours),
       bookingClosesHours: num(form.bookingClosesHours) ?? 0,
       absenceNoticeHours: num(form.absenceNoticeHours) ?? 0,
-      makeupOpensHours: num(form.makeupOpensHours),
-      makeupClosesHours: num(form.makeupClosesHours) ?? 0,
+      makeupOpensDays: num(form.makeupOpensDays),
+      makeupClosesDays: num(form.makeupClosesDays) ?? 0,
     }
     if (Object.values(v).some((x) => x !== undefined && Number.isNaN(x))) return setError('Inserisci numeri di ore validi.')
     if (v.bookingOpensHours !== undefined && v.bookingOpensHours <= v.bookingClosesHours) return setError('Lezioni singole: il massimo deve essere maggiore del minimo.')
-    if (v.makeupOpensHours !== undefined && v.makeupOpensHours <= v.makeupClosesHours) return setError('Recuperi: il massimo deve essere maggiore del minimo.')
+    if (v.makeupOpensDays !== undefined && v.makeupOpensDays <= v.makeupClosesDays) return setError('Recuperi: il massimo deve essere maggiore del minimo.')
     setError('')
     await repo.updateAssociation({ settings: { ...a.settings, ...v } })
     toast('Finestre salvate')
@@ -449,10 +449,10 @@ function BookingWindowsCard() {
       <CardContent className="space-y-5">
         <div>
           <h2 className="mb-1 text-base font-bold">Prenotazioni e recuperi</h2>
-          <p className="text-sm text-ink-muted">Ore prima dell’inizio della lezione. Il massimo indica da quando si può, il minimo fino a quando. Lascia vuoto il massimo per non porre limiti.</p>
+          <p className="text-sm text-ink-muted">Lezioni singole in ore, recuperi in giorni (un giorno = 24 ore prima dell’inizio). Il massimo indica da quando si può, il minimo fino a quando. Lascia vuoto il massimo per non porre limiti.</p>
         </div>
         <div>
-          <p className="mb-2 text-sm font-semibold text-ink">Lezioni singole</p>
+          <p className="mb-2 text-sm font-semibold text-ink">Lezioni singole (in ore)</p>
           <div className="grid gap-3 sm:grid-cols-3">
             {field('bookingOpensHours', 'Prenotabile da (ore prima, massimo)', 'Senza limite')}
             {field('bookingClosesHours', 'Prenotabile fino a (ore prima, minimo)')}
@@ -460,10 +460,10 @@ function BookingWindowsCard() {
           </div>
         </div>
         <div>
-          <p className="mb-2 text-sm font-semibold text-ink">Richieste di recupero</p>
+          <p className="mb-2 text-sm font-semibold text-ink">Richieste di recupero (in giorni)</p>
           <div className="grid gap-3 sm:grid-cols-3">
-            {field('makeupOpensHours', 'Richiedibile da (ore prima, massimo)', 'Senza limite')}
-            {field('makeupClosesHours', 'Richiedibile fino a (ore prima, minimo)')}
+            {field('makeupOpensDays', 'Richiedibile da (giorni prima, massimo)', 'Senza limite')}
+            {field('makeupClosesDays', 'Richiedibile fino a (giorni prima, minimo)')}
           </div>
         </div>
         {error && <p className="rounded-2xl bg-danger-soft p-3 text-sm text-danger">{error}</p>}

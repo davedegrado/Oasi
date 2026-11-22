@@ -152,7 +152,7 @@ export const demoAssociation: AssociationInfo = {
     absenceNoticeHours: 6,
     bookingOpensHours: 48,
     bookingClosesHours: 0,
-    makeupClosesHours: 0,
+    makeupClosesDays: 0,
     classCategories: ['Bambini/Ragazzi', 'Adulti/Ragazzi'],
     maxDisciplines: 2,
     paymentMethods: ['bonifico', 'contanti'],

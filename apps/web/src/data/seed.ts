@@ -21,7 +21,7 @@ import { demoFigureSeeds, photo } from './figures'
 import { demoStudentSeeds, demoTeachers } from './people'
 import { buildDemoAccounts, demoPlans, demoSeason } from './plans'
 
-export const DATABASE_VERSION = 12
+export const DATABASE_VERSION = 13
 
 /** Hash deterministico: la demo genera sempre gli stessi dati per lo stesso giorno */
 function hash(text: string): number {

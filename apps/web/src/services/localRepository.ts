@@ -67,18 +67,37 @@ function migrateFrom6(db: OasiDatabase): OasiDatabase {
 }
 
 /** v8 → v9: agonismo, classi con più discipline, brani degli eventi, soglie configurabili, piani e quote */
+const days = (n: number | undefined) => `${n ?? 0} ${n === 1 ? 'giorno' : 'giorni'}`
+
+/** v12 → v13: finestra dei recuperi in giorni invece che in ore (arrotondata per eccesso) */
+function migrateFrom12(db: OasiDatabase): OasiDatabase {
+  const { makeupOpensHours, makeupClosesHours, ...settings } = db.association.settings as typeof db.association.settings & { makeupOpensHours?: number; makeupClosesHours?: number }
+  return {
+    ...db,
+    version: DATABASE_VERSION,
+    association: {
+      ...db.association,
+      settings: {
+        ...settings,
+        makeupOpensDays: makeupOpensHours !== undefined ? Math.ceil(makeupOpensHours / 24) : settings.makeupOpensDays,
+        makeupClosesDays: Math.ceil((makeupClosesHours ?? 0) / 24),
+      },
+    },
+  }
+}
+
 /** v11 → v12: finestre configurabili per i recuperi; i due documenti mensili diventano una tipologia che ne chiede due, con titolo libero */
 function migrateFrom11(db: OasiDatabase): OasiDatabase {
   const seed = createSeedDatabase()
   const monthly = seed.documentTypes.find((t) => t.id === 'dt-mensili')!
   const old = ['dt-mensile-1', 'dt-mensile-2']
-  return {
+  return migrateFrom12({
     ...db,
-    version: DATABASE_VERSION,
-    association: { ...db.association, settings: { bookingClosesHours: 0, makeupClosesHours: 0, ...db.association.settings } },
+    version: 12,
+    association: { ...db.association, settings: { bookingClosesHours: 0, makeupClosesDays: 0, ...db.association.settings } },
     documentTypes: [...db.documentTypes.filter((t) => !old.includes(t.id) && t.id !== monthly.id), monthly],
     documents: db.documents.map((d) => (old.includes(d.typeId) ? { ...d, typeId: monthly.id, title: d.title ?? `Documento ${old.indexOf(d.typeId) + 1}` } : d)),
-  }
+  })
 }
 
 /** v10 → v11: prompt DY DYNAMITE (aree delle classi, due discipline, finestra di prenotazione, documenti mensili degli insegnanti) */
@@ -170,6 +189,7 @@ function loadFromStorage(): OasiDatabase | null {
     if (parsed.version === 9) return migrateFrom9(parsed)
     if (parsed.version === 10) return migrateFrom10(parsed)
     if (parsed.version === 11) return migrateFrom11(parsed)
+    if (parsed.version === 12) return migrateFrom12(parsed)
     if (parsed.version !== DATABASE_VERSION) return null
     return parsed
   } catch {
@@ -397,8 +417,8 @@ export class LocalRepository implements OasiRepository {
       if (!lesson || !cls || lesson.status === 'annullata' || isLessonPast(lesson)) throw new Error('La lezione scelta non è disponibile per un recupero.')
       // Finestra impostata dall'amministrazione
       const mw = makeupWindow(db, lesson)
-      if (mw.tooEarly) throw new Error(`Il recupero per questa lezione si può chiedere a partire da ${db.association.settings.makeupOpensHours} ore prima.`)
-      if (mw.tooLate) throw new Error(`Il recupero va chiesto almeno ${db.association.settings.makeupClosesHours ?? 0} ore prima della lezione.`)
+      if (mw.tooEarly) throw new Error(`Il recupero per questa lezione si può chiedere a partire da ${days(db.association.settings.makeupOpensDays)} prima.`)
+      if (mw.tooLate) throw new Error(`Il recupero va chiesto almeno ${days(db.association.settings.makeupClosesDays)} prima della lezione.`)
       if (!makeupLevelAllowed(db, studentId, cls)) throw new Error('Puoi recuperare solo in classi del tuo livello o, se consentito, di livello inferiore.')
       const pending = db.makeupRequests.filter((r) => r.targetLessonId === targetLessonId && r.status === 'in_attesa').length
       if (lessonRoster(db, lesson).length + pending >= cls.capacity) throw new Error('La lezione non ha più posti disponibili.')
