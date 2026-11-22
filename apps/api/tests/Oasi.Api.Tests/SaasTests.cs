@@ -705,7 +705,7 @@ public sealed class SaasTests(ApiFixture api)
     // ── Eventi e brani ─────────────────────────────────────────────────
 
     [Fact]
-    public async Task Evento_in_home_con_brani_delle_performance_e_notifiche_solo_agli_interessati()
+    public async Task Evento_in_home_gruppi_con_canzone_promemoria_e_notifiche_solo_agli_interessati()
     {
         var sara = As("stu-sara");              // Cerchio Intermedio
         var body = new
@@ -734,49 +734,53 @@ public sealed class SaasTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.NoContent, (await Admin.PutAsJsonAsync($"/v1/events/{id}", body with { date = InDays(21) })).StatusCode);
         Assert.Single((await sara.GetFromJsonAsync<JsonElement[]>("/v1/notifications"))!, n => n.GetProperty("title").GetString() == "Evento aggiornato: Test · Saggio d'inverno");
 
-        // Musica della performance: la gestisce l'amministrazione; gli insegnanti consultano, non modificano
+        // Gruppi dell'evento: li organizzano gli insegnanti (e l'amministrazione), non gli atleti
         var chiara = api.For(Seed.OasiHost, Seed.Chiara);
-        Assert.Equal(HttpStatusCode.Forbidden, (await chiara.PostAsJsonAsync($"/v1/events/{id}/tracks", new { title = "Experience", classId = Seed.ClassCerchioInt })).StatusCode);
-        Assert.Equal(HttpStatusCode.Forbidden, (await sara.PostAsJsonAsync($"/v1/events/{id}/tracks", new { title = "No" })).StatusCode);
-        var track = await CreatedId(await Admin.PostAsJsonAsync($"/v1/events/{id}/tracks", new { title = "Experience", artist = "Ludovico Einaudi", groupLabel = "Gruppo cerchio", classId = Seed.ClassCerchioInt, linkUrl = "https://example.com/brano" }));
-        await CreatedId(await Admin.PostAsJsonAsync($"/v1/events/{id}/tracks", new { title = "Nuvole bianche", classId = Seed.ClassCerchioInt }));
-        Assert.Equal(HttpStatusCode.BadRequest, (await Admin.PostAsJsonAsync($"/v1/events/{id}/tracks", new { title = " " })).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await Admin.PostAsJsonAsync($"/v1/events/{id}/tracks", new { title = "x", linkUrl = "http://non-sicuro.example" })).StatusCode);
+        var sara_ = Member("stu-sara");
+        Assert.Equal(HttpStatusCode.Forbidden, (await sara.PostAsJsonAsync($"/v1/events/{id}/groups", new { name = "No" })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await chiara.PostAsJsonAsync($"/v1/events/{id}/groups", new { name = " " })).StatusCode);
+        var duo = await CreatedId(await chiara.PostAsJsonAsync($"/v1/events/{id}/groups", new { name = "Duo cerchio", songTitle = "Experience · Ludovico Einaudi", memberIds = new[] { sara_ } }));
+        // Lo stesso atleta può stare in più gruppi dello stesso evento
+        var tutti = await CreatedId(await Admin.PostAsJsonAsync($"/v1/events/{id}/groups", new { name = "Finale tutti insieme", songTitle = "Nuvole bianche", memberIds = new[] { sara_ } }));
+        // Solo partecipanti: Anna non partecipa (ancora)
+        Assert.Equal(HttpStatusCode.BadRequest, (await chiara.PostAsJsonAsync($"/v1/events/{id}/groups", new { name = "Trio", memberIds = new[] { Member("stu-anna") } })).StatusCode);
+        var groups = await sara.GetFromJsonAsync<JsonElement[]>($"/v1/events/{id}/groups");
+        Assert.Equal(["Duo cerchio", "Finale tutti insieme"], groups!.Select(x => x.GetProperty("name").GetString()!).ToArray());
+        Assert.All(groups!, x => Assert.True(x.GetProperty("mine").GetBoolean()));
+        Assert.Equal("Experience · Ludovico Einaudi", groups![0].GetProperty("songTitle").GetString());
 
-        // File audio caricato dall'amministrazione, ascoltabile da chi partecipa (Sara: classe collegata) e dallo staff
-        var audio = new MultipartFormDataContent();
-        var bytes = new ByteArrayContent(Encoding.UTF8.GetBytes("ID3 finto mp3"));
-        bytes.Headers.ContentType = new MediaTypeHeaderValue("audio/mpeg");
-        audio.Add(bytes, "file", "experience.mp3");
-        Assert.Equal(HttpStatusCode.NoContent, (await Admin.PostAsync($"/v1/events/{id}/tracks/{track}/audio", audio)).StatusCode);
-        var tracks = await sara.GetFromJsonAsync<JsonElement[]>($"/v1/events/{id}/tracks");
-        Assert.Equal(["Experience", "Nuvole bianche"], tracks!.Select(t => t.GetProperty("title").GetString()!).ToArray());
-        Assert.True(tracks![0].GetProperty("hasAudio").GetBoolean());
-        Assert.Equal("https://example.com/brano", tracks[0].GetProperty("linkUrl").GetString());
-        var song = await sara.GetAsync($"/v1/events/{id}/tracks/{track}/audio");
-        Assert.Equal(HttpStatusCode.OK, song.StatusCode);
-        Assert.Equal("audio/mpeg", song.Content.Headers.ContentType!.MediaType);
-        Assert.Equal(HttpStatusCode.OK, (await chiara.GetAsync($"/v1/events/{id}/tracks/{track}/audio")).StatusCode);
-        // Chi non partecipa vede il titolo ma non ascolta, né vede l'elenco dei partecipanti
+        // Promemoria in home: l'evento a cui Sara partecipa, con i suoi due gruppi
+        var reminders = await sara.GetFromJsonAsync<JsonElement[]>("/v1/events/reminders");
+        var reminder = Assert.Single(reminders!, r => r.GetProperty("event").GetProperty("id").GetGuid() == id);
+        Assert.Equal(2, reminder.GetProperty("groups").GetArrayLength());
+
+        // Chi non partecipa non vede gruppi né partecipanti, e non ha il promemoria
         var anna = As("stu-anna");
-        var annaTracks = await anna.GetFromJsonAsync<JsonElement[]>($"/v1/events/{id}/tracks");
-        Assert.False(annaTracks![0].GetProperty("hasAudio").GetBoolean());
-        Assert.Equal(JsonValueKind.Null, annaTracks[0].GetProperty("linkUrl").ValueKind);
-        Assert.Equal(HttpStatusCode.Forbidden, (await anna.GetAsync($"/v1/events/{id}/tracks/{track}/audio")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await anna.GetAsync($"/v1/events/{id}/groups")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await anna.GetAsync($"/v1/events/{id}/participants")).StatusCode);
+        Assert.DoesNotContain((await anna.GetFromJsonAsync<JsonElement[]>("/v1/events/reminders"))!, r => r.GetProperty("event").GetProperty("id").GetGuid() == id);
         // Elenco dei partecipanti: le allieve della classe collegata e le persone assegnate
         var participants = await sara.GetFromJsonAsync<JsonElement[]>($"/v1/events/{id}/participants");
-        Assert.Contains(participants!, p => p.GetProperty("memberId").GetGuid() == Member("stu-sara"));
+        Assert.Contains(participants!, p => p.GetProperty("memberId").GetGuid() == sara_);
         Assert.DoesNotContain(participants!, p => p.GetProperty("memberId").GetGuid() == Member("stu-anna"));
         Assert.Equal(HttpStatusCode.NoContent, (await Admin.PutAsJsonAsync($"/v1/events/{id}", body with { date = InDays(21), memberIds = new[] { Member("stu-anna") }, notify = false })).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await anna.GetAsync($"/v1/events/{id}/participants")).StatusCode);
-        // Solo l'amministrazione elimina i brani
-        Assert.Equal(HttpStatusCode.Forbidden, (await chiara.DeleteAsync($"/v1/events/{id}/tracks/{track}")).StatusCode);
-        Assert.Equal(HttpStatusCode.NoContent, (await Admin.DeleteAsync($"/v1/events/{id}/tracks/{track}")).StatusCode);
+        // Ora Anna partecipa: l'insegnante la aggiunge al duo, che diventa un trio
+        Assert.Equal(HttpStatusCode.NoContent, (await chiara.PutAsJsonAsync($"/v1/events/{id}/groups/{duo}", new { name = "Trio cerchio", songTitle = "Experience", memberIds = new[] { sara_, Member("stu-anna") } })).StatusCode);
+        var annaGroups = await anna.GetFromJsonAsync<JsonElement[]>($"/v1/events/{id}/groups");
+        Assert.True(annaGroups!.Single(x => x.GetProperty("id").GetGuid() == duo).GetProperty("mine").GetBoolean());
+        Assert.False(annaGroups!.Single(x => x.GetProperty("id").GetGuid() == tutti).GetProperty("mine").GetBoolean());
+        Assert.Equal(HttpStatusCode.Forbidden, (await anna.DeleteAsync($"/v1/events/{id}/groups/{tutti}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await chiara.DeleteAsync($"/v1/events/{id}/groups/{tutti}")).StatusCode);
 
-        // La musica riguarda solo le performance
+        // Workshop: anche qui gruppi; gli eventi sociali no
         var workshop = await CreatedId(await Admin.PostAsJsonAsync("/v1/events", body with { type = "workshop", title = "Test · Workshop", isFeatured = false, notify = false }));
-        Assert.Equal("not_a_performance", await ErrorType(await Admin.PostAsJsonAsync($"/v1/events/{workshop}/tracks", new { title = "x" })));
+        Assert.Equal(HttpStatusCode.NoContent, (await As("stu-anna").PostAsync($"/v1/events/{workshop}/signup", null)).StatusCode);
+        var gruppoA = await CreatedId(await chiara.PostAsJsonAsync($"/v1/events/{workshop}/groups", new { name = "Gruppo A", memberIds = new[] { Member("stu-anna") } }));
+        Assert.Equal(HttpStatusCode.NoContent, (await As("stu-anna").DeleteAsync($"/v1/events/{workshop}/signup")).StatusCode);
+        Assert.Equal(0, (await chiara.GetFromJsonAsync<JsonElement[]>($"/v1/events/{workshop}/groups"))!.Single(x => x.GetProperty("id").GetGuid() == gruppoA).GetProperty("members").GetArrayLength());
+        var social = await CreatedId(await Admin.PostAsJsonAsync("/v1/events", body with { type = "social", title = "Test · Cena", isFeatured = false, notify = false }));
+        Assert.Equal("no_groups", await ErrorType(await chiara.PostAsJsonAsync($"/v1/events/{social}/groups", new { name = "x" })));
 
         // Evento non pubblicato: invisibile alle allieve
         var draft = await CreatedId(await Admin.PostAsJsonAsync("/v1/events", body with { title = "Test · Bozza", isPublished = false, isFeatured = false }));
@@ -784,6 +788,6 @@ public sealed class SaasTests(ApiFixture api)
         Assert.Contains((await chiara.GetFromJsonAsync<JsonElement[]>("/v1/events"))!, e => e.GetProperty("id").GetGuid() == draft);
         // Gli eventi di Oasi non esistono per Studio Prova
         Assert.DoesNotContain((await api.For(Seed.ProvaHost, Seed.Laura).GetFromJsonAsync<JsonElement[]>("/v1/events"))!, e => e.GetProperty("id").GetGuid() == id);
-        Assert.NotEqual(HttpStatusCode.Created, (await api.For(Seed.ProvaHost, Seed.ProvaTeacher).PostAsJsonAsync($"/v1/events/{id}/tracks", new { title = "x" })).StatusCode);
+        Assert.NotEqual(HttpStatusCode.Created, (await api.For(Seed.ProvaHost, Seed.ProvaTeacher).PostAsJsonAsync($"/v1/events/{id}/groups", new { name = "x" })).StatusCode);
     }
 }

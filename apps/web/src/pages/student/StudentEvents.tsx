@@ -3,7 +3,7 @@ import type { EventType } from '@/types'
 import { PageHeader, SectionTitle } from '@/components/common/PageHeader'
 import { Segmented } from '@/components/ui/segmented'
 import { EmptyState } from '@/components/common/EmptyState'
-import { EventTracksButton } from '@/components/events/EventTracks'
+import { EventGroupsButton } from '@/components/events/EventGroups'
 import { EventCard } from '@/components/events/EventCard'
 import { EventSignupButton } from '@/components/events/EventSignupButton'
 import { useDatabase } from '@/hooks/useDatabase'
@@ -41,7 +41,7 @@ export function StudentEvents() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {shown.map((e) => (
-            <EventCard key={e.id} event={e} footer={<><EventSignupButton event={e} studentId={student.id} /><EventTracksButton event={e} viewerId={student.id} /></>} />
+            <EventCard key={e.id} event={e} footer={<><EventSignupButton event={e} studentId={student.id} /><EventGroupsButton event={e} viewerId={student.id} /></>} />
           ))}
         </div>
       )}

@@ -3,7 +3,7 @@ import { applyClosure, createSeedDatabase, DATABASE_VERSION } from '@/data/seed'
 import { addDays, addMonths, formatDate, startOfWeek, todayISO } from '@/lib/dates'
 import { uid } from '@/lib/utils'
 import type { OasiRepository } from './repository'
-import { isCompetitiveClass, isLessonPast, lessonRoster, makeupCredits, makeupLevelAllowed, makeupWindow, singleLessonWindow } from './selectors'
+import { eventParticipants, isCompetitiveClass, isLessonPast, lessonRoster, makeupCredits, makeupLevelAllowed, makeupWindow, singleLessonWindow } from './selectors'
 import { documentState, expiryRequired, FREE_TYPE } from './documents'
 
 const STORAGE_KEY = 'oasi-demo-db'
@@ -69,15 +69,43 @@ function migrateFrom6(db: OasiDatabase): OasiDatabase {
 /** v8 → v9: agonismo, classi con più discipline, brani degli eventi, soglie configurabili, piani e quote */
 const days = (n: number | undefined) => `${n ?? 0} ${n === 1 ? 'giorno' : 'giorni'}`
 
-/** v14 → v15: per Oasi la data di scadenza è obbligatoria in ogni documento */
-function migrateFrom14(db: OasiDatabase): OasiDatabase {
+/** Brano della versione ≤ 15 (sostituito dai gruppi) */
+type LegacyTrack = { id: string; title: string; artist?: string; group?: string; classId?: string; addedBy?: string }
+
+/** v15 → v16: i brani diventano gruppi con la loro canzone (solo il titolo, niente file audio) */
+function migrateFrom15(db: OasiDatabase): OasiDatabase {
+  const seed = createSeedDatabase()
   return {
     ...db,
     version: DATABASE_VERSION,
+    events: db.events.map((e) => {
+      const { tracks, ...rest } = e as typeof e & { tracks?: LegacyTrack[] }
+      if (e.groups) return rest
+      if (e.id === 'evt-natale') return { ...rest, groups: seed.events.find((x) => x.id === e.id)?.groups }
+      const participants = new Set(e.participantIds)
+      return {
+        ...rest,
+        groups: (tracks ?? []).map((t) => ({
+          id: t.id,
+          name: t.group || db.classes.find((c) => c.id === t.classId)?.name || t.title,
+          song: t.artist ? `${t.title} · ${t.artist}` : t.title,
+          memberIds: (db.classes.find((c) => c.id === t.classId)?.studentIds ?? []).filter((id) => participants.has(id)),
+          createdBy: t.addedBy ?? 'admin',
+        })),
+      }
+    }),
+  }
+}
+
+/** v14 → v15: per Oasi la data di scadenza è obbligatoria in ogni documento */
+function migrateFrom14(db: OasiDatabase): OasiDatabase {
+  return migrateFrom15({
+    ...db,
+    version: 15,
     association: { ...db.association, settings: { ...db.association.settings, documentExpiryRequired: db.association.settings.documentExpiryRequired ?? true } },
     // Documenti dimostrativi caricati senza scadenza: un anno dal caricamento
     documents: db.documents.map((d) => (d.expiresOn ? d : { ...d, expiresOn: addMonths(d.uploadedAt.slice(0, 10), 12) })),
-  }
+  })
 }
 
 /** v13 → v14: scadenza obbligatoria per il certificato medico agonistico */
@@ -143,7 +171,7 @@ function migrateFrom10(db: OasiDatabase): OasiDatabase {
     // La "polizza insegnante" non era richiesta dal prompt: sostituita dai due documenti mensili
     documentTypes: [...db.documentTypes.filter((t) => t.id !== 'dt-insegnante-assicurazione'), ...monthly.filter((t) => !db.documentTypes.some((x) => x.id === t.id))],
     documents: [...db.documents, ...seed.documents.filter((d) => monthly.some((t) => t.id === d.typeId) && !db.documents.some((x) => x.id === d.id))],
-    events: db.events.map((e) => (e.id === 'evt-natale' && !e.tracks ? { ...e, featured: e.featured ?? true, tracks: seed.events.find((x) => x.id === e.id)?.tracks } : e)),
+    events: db.events.map((e) => (e.id === 'evt-natale' ? { ...e, featured: e.featured ?? true } : e)),
   })
 }
 
@@ -208,6 +236,7 @@ function loadFromStorage(): OasiDatabase | null {
     if (parsed.version === 12) return migrateFrom12(parsed)
     if (parsed.version === 13) return migrateFrom13(parsed)
     if (parsed.version === 14) return migrateFrom14(parsed)
+    if (parsed.version === 15) return migrateFrom15(parsed)
     if (parsed.version !== DATABASE_VERSION) return null
     return parsed
   } catch {
@@ -698,9 +727,40 @@ export class LocalRepository implements OasiRepository {
         return {
           ...e,
           participantIds: joined ? e.participantIds.filter((id) => id !== studentId) : [...e.participantIds, studentId],
+          // Chi non partecipa più esce anche dai gruppi
+          groups: joined ? e.groups?.map((g) => ({ ...g, memberIds: g.memberIds.filter((id) => id !== studentId) })) : e.groups,
         }
       }),
     }))
+
+  saveEventGroup: OasiRepository['saveEventGroup'] = (eventId, group) =>
+    this.commit((db) => {
+      const event = db.events.find((e) => e.id === eventId)
+      if (!event) throw new Error('Evento non trovato')
+      if (event.type === 'sociale') throw new Error('Gli eventi sociali non hanno gruppi')
+      const name = group.name.trim()
+      if (!name) throw new Error('Dai un nome al gruppo')
+      const participants = new Set(eventParticipants(db, event).map((p) => p.id))
+      const memberIds = [...new Set(group.memberIds)]
+      if (memberIds.some((id) => !participants.has(id))) throw new Error('Nei gruppi si inseriscono solo i partecipanti dell’evento')
+      const before = event.groups?.find((g) => g.id === group.id)
+      const saved = { ...group, name, song: group.song.trim(), memberIds }
+      const groups = before ? (event.groups ?? []).map((g) => (g.id === group.id ? saved : g)) : [...(event.groups ?? []), saved]
+      const added = memberIds.filter((id) => !before?.memberIds.includes(id) && db.students.some((s) => s.id === id))
+      return withNotifications(
+        { ...db, events: db.events.map((e) => (e.id === eventId ? { ...e, groups } : e)) },
+        added.map((id) => ({
+          kind: 'evento' as const,
+          title: `Sei nel gruppo «${name}»`,
+          body: `${event.title} · ${formatDate(event.date, { weekday: true })}${saved.song ? ` · canzone: ${saved.song}` : ''}`,
+          to: [`student:${id}`],
+          link: { allieva: '/allieva/eventi' },
+        })),
+      )
+    })
+
+  deleteEventGroup: OasiRepository['deleteEventGroup'] = (eventId, groupId) =>
+    this.commit((db) => ({ ...db, events: db.events.map((e) => (e.id === eventId ? { ...e, groups: (e.groups ?? []).filter((g) => g.id !== groupId) } : e)) }))
 
   saveDiscipline: OasiRepository['saveDiscipline'] = (discipline) =>
     this.commit((db) => {

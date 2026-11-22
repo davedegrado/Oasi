@@ -164,24 +164,19 @@ export interface OasiEvent {
   featured?: boolean
   /** Classi collegate all'evento */
   classIds?: string[]
-  /** Brani delle performance: solo i nomi, nessun file audio */
-  tracks?: EventTrack[]
+  /** Gruppi di partecipanti organizzati dagli insegnanti, ciascuno con la sua canzone */
+  groups?: EventGroup[]
 }
 
-export interface EventTrack {
+/** Gruppo di un evento: un atleta può stare in più gruppi dello stesso evento */
+export interface EventGroup {
   id: string
-  title: string
-  artist: string
-  /** Gruppo o performance a cui è associato il brano */
-  group: string
-  classId?: string
-  /** Collegamento al brano (https) */
-  url?: string
-  /** File audio caricato dall'amministrazione (demo: salvato nel browser) */
-  audio?: string
-  audioName?: string
+  name: string
+  /** Titolo della canzone (nessun file audio) */
+  song: string
+  memberIds: string[]
   /** id dell'insegnante o 'admin' */
-  addedBy: string
+  createdBy: string
 }
 
 export type EventType = 'workshop' | 'stage' | 'gara' | 'saggio' | 'spettacolo' | 'sociale'

@@ -12,7 +12,7 @@ import { ProgressBar } from '@/components/ui/progress'
 import { EventCard } from '@/components/events/EventCard'
 import { useDatabase, useRepository } from '@/hooks/useDatabase'
 import { useDemo } from '@/hooks/useDemo'
-import { EventTracksButton } from '@/components/events/EventTracks'
+import { EventGroupsButton } from '@/components/events/EventGroups'
 import { useToast } from '@/hooks/useToast'
 import { eventPerson, pastEvents, upcomingEvents } from '@/services/selectors'
 import { EventSignupButton } from '@/components/events/EventSignupButton'
@@ -47,10 +47,9 @@ export function AdminEvents() {
   const { toast } = useToast()
   const [editing, setEditing] = useState<{ event: OasiEvent; isNew: boolean } | null>(null)
   const [participantsOf, setParticipantsOf] = useState<string | null>(null)
-  // Solo l'amministrazione crea, modifica e gestisce gli eventi (anche la musica); gli insegnanti li consultano
+  // Solo l'amministrazione crea e modifica gli eventi; i gruppi (con la canzone) li organizzano insegnanti e amministrazione
   const { persona } = useDemo()
   const isAdmin = persona?.role === 'admin'
-  const editor = isAdmin ? ('admin' as const) : undefined
   // Stessa vista per tutti: anche insegnanti e segreteria si segnano agli eventi ("I miei")
   const me = isAdmin ? 'admin' : (persona?.userId ?? '')
   const [filter, setFilter] = useState<Filter>('tutti')
@@ -64,7 +63,7 @@ export function AdminEvents() {
   const actions = (e: OasiEvent) => (
     <>
       <EventSignupButton event={e} studentId={me} />
-      <EventTracksButton event={e} editor={editor} />
+      <EventGroupsButton event={e} editorId={me} />
       {isAdmin && (
         <>
           <Button size="sm" variant="soft" onClick={() => setParticipantsOf(e.id)}>

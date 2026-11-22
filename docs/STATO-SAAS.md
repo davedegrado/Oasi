@@ -24,7 +24,8 @@ Legenda: **API** = regola applicata dal backend con persistenza, permessi e test
 | 4 | Lezioni singole **prenotabili a partire da 48 ore prima**, disdetta libera **fino a 6 ore prima** | Sì | Sì | Oasi: da 48 h a 0 h prima, disdetta 6 h; tutte modificabili dall'amministrazione |
 | 4 | Fuso orario del tenant, cambi d'ora | Sì | — | Europe/Rome |
 | 5 | Home con il prossimo saggio o evento principale | Sì | Sì | |
-| 5 | Performance: canzone/musica, luogo, partecipanti nel rispetto dei permessi | Sì | Sì | File audio (fino a 25 MB) o collegamento; ascolto e partecipanti riservati a chi partecipa e allo staff |
+| 5 | Performance: canzone/musica, luogo, partecipanti nel rispetto dei permessi | Sì | Sì | Gruppi organizzati da insegnanti e amministrazione, ciascuno con il titolo della sua canzone (nessun file audio); un'atleta può stare in più gruppi; gruppi e partecipanti visibili solo a chi partecipa e allo staff |
+| 5 | Promemoria in home dell'evento a cui l'atleta partecipa (gara, saggio, spettacolo, workshop, stage) | Sì | Sì | Sotto la prossima lezione, con i suoi gruppi e le canzoni (`GET /v1/events/reminders`) |
 | 5 | Eventi gestiti dall'amministrazione, consultati da insegnanti e atlete | Sì | Sì | Stessa vista per tutti; anche insegnanti e segreteria si segnano ("I miei") |
 | 5 | Eventi collegabili a classi, discipline, insegnanti e partecipanti; notifiche | Sì | Parziale | |
 | 6 | Presenze, note della lezione, **sostituzioni** | Sì | Sì | Chi sostituisce vede la lezione e compila le presenze |
@@ -59,7 +60,7 @@ Legenda: **API** = regola applicata dal backend con persistenza, permessi e test
 - **Pacchetti:** l'ingresso si scala alla presenza registrata, non alla prenotazione. La prenotazione impegna il posto nel saldo.
 - **Insegnanti:** al posto delle richieste libere, due documenti ricorrenti ogni mese entro l'ultimo giorno del mese. La tipologia inventata "Polizza assicurativa insegnante" è stata tolta dalla demo.
 - **Classi:** aree e limite di due discipline (prima nessun limite).
-- **Eventi:** musica e gestione riservate all'amministrazione; ora si può allegare il file audio o un collegamento, prima solo il titolo.
+- **Eventi:** gestione riservata all'amministrazione; i gruppi con la loro canzone (solo il titolo) li organizzano insegnanti e amministrazione. I "brani" con file audio e collegamenti sono stati tolti (migrazione `0016`: i titoli esistenti diventano gruppi).
 - **Pagamenti:** metodi configurabili; per Oasi solo bonifico e contanti.
 - **Documenti sostituiti:** nessuna eliminazione automatica dopo 7 giorni (non richiesta); resta disponibile come impostazione facoltativa.
 - **Valori predefiniti della piattaforma** resi neutri: i 48 h / 6 h, le aree e il limite di due discipline sono valori di Oasi.
@@ -76,7 +77,7 @@ Casi coperti per il prompt corretto:
 - **Documenti mensili:** due richieste al mese con termine a fine mese, notifica unica, caricamento, correzione richiesta, documento mancante segnalato all'amministrazione.
 - **Classi:** tre discipline rifiutate, area non prevista rifiutata, coerenza piano–classe.
 - **Sostituzioni:** chi può assegnarle, presenze compilate da chi sostituisce, annullamento.
-- **Eventi:** musica gestita solo dall'amministrazione, ascolto e partecipanti riservati a chi partecipa.
+- **Eventi:** gruppi gestiti da insegnanti e amministrazione, solo con partecipanti, atleta in più gruppi, uscita dai gruppi quando annulla l'adesione, promemoria, gruppi e partecipanti riservati a chi partecipa, nessun gruppo negli eventi sociali.
 - **Pagamenti:** metodo non accettato da Oasi rifiutato.
 
 ## 4. Punti che richiedono una decisione
@@ -108,7 +109,7 @@ Casi coperti per il prompt corretto:
 
 ## 6. Migrazioni
 
-`0008`–`0015` vanno applicate in ordine. La `0015` aggiunge l'impostazione della scadenza obbligatoria per tutti i documenti. La `0011` rende facoltativa la tipologia dei documenti (titolo libero) e aggiunge la finestra dei recuperi.
+`0008`–`0016` vanno applicate in ordine. La `0016` sostituisce i brani con i gruppi degli eventi: i file audio eventualmente già caricati restano nello storage e vanno rimossi a mano. La `0015` aggiunge l'impostazione della scadenza obbligatoria per tutti i documenti. La `0011` rende facoltativa la tipologia dei documenti (titolo libero) e aggiunge la finestra dei recuperi.
 
  La `0010`:
 - rinomina `fee_plans.booking_hours_before` in `booking_closes_hours_before`;

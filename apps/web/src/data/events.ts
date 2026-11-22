@@ -34,10 +34,11 @@ export const demoEventSeeds: EventSeed[] = [
     capacity: 30,
     participantIds: ['stu-giulia', 'stu-alice', 'stu-elisa', 'stu-camilla', 'stu-lucia', 'stu-martina', 'stu-sara'],
     featured: true,
-    // Musica della performance (dati dimostrativi, solo titoli)
-    tracks: [
-      { id: 'trk-natale-1', title: 'Clair de lune', artist: 'Claude Debussy', group: 'Gruppo cerchio', classId: 'cls-cerchio-int', addedBy: 'admin' },
-      { id: 'trk-natale-2', title: 'Il lago dei cigni · Scena', artist: 'Pëtr Il’ič Čajkovskij', group: 'Gruppo tessuti', classId: 'cls-tessuti-int', addedBy: 'admin' },
+    // Gruppi organizzati dalle insegnanti, ciascuno con la sua canzone (solo il titolo)
+    groups: [
+      { id: 'grp-natale-1', name: 'Gruppo cerchio', song: 'Clair de lune · Claude Debussy', memberIds: ['stu-giulia', 'stu-alice', 'stu-elisa'], createdBy: 'tch-chiara' },
+      { id: 'grp-natale-2', name: 'Gruppo tessuti', song: 'Il lago dei cigni · Čajkovskij', memberIds: ['stu-camilla', 'stu-lucia', 'stu-martina', 'stu-sara'], createdBy: 'tch-elena' },
+      { id: 'grp-natale-3', name: 'Finale tutti insieme', song: 'Somewhere Only We Know · Keane', memberIds: ['stu-giulia', 'stu-camilla', 'stu-sara'], createdBy: 'tch-chiara' },
     ],
   },
   {

@@ -9,7 +9,7 @@ public static class EventEndpoints
 {
     public static readonly string[] Types = ["workshop", "stage", "competition", "recital", "show", "exhibition", "special", "social"];
 
-    /// <summary>Tipi che prevedono un'esibizione: per questi si possono indicare i brani musicali.</summary>
+    /// <summary>Tipi che prevedono un'esibizione.</summary>
     public static readonly string[] PerformanceTypes = ["competition", "recital", "show", "exhibition"];
 
     public sealed class EventDto
@@ -30,6 +30,8 @@ public static class EventEndpoints
         public bool IsPublished { get; init; }
         public bool IsFeatured { get; init; }
         public bool IsPerformance => PerformanceTypes.Contains(Type);
+        /// <summary>Gruppi e promemoria valgono per tutti gli eventi tranne quelli sociali.</summary>
+        public bool HasGroups => Type != "social";
         public Guid[] ClassIds { get; init; } = [];
         public Guid[] DisciplineIds { get; init; } = [];
         public Guid[] TeacherIds { get; init; } = [];
@@ -39,10 +41,7 @@ public static class EventEndpoints
     public sealed record EventInput(string Type, string Title, string? Description, string Date, string StartTime, string EndTime, string? Location,
         string? ImagePath, int Capacity, DateTime? SignupDeadline, bool? IsPublished = null, bool? IsFeatured = null,
         Guid[]? ClassIds = null, Guid[]? DisciplineIds = null, Guid[]? TeacherIds = null, bool? Notify = null, Guid[]? MemberIds = null);
-    public sealed record TrackInput(string Title, string? Artist, string? GroupLabel, Guid? ClassId, int? Position, string? LinkUrl = null);
-
-    public static readonly string[] AudioTypes = ["audio/mpeg", "audio/mp4", "audio/x-m4a", "audio/aac", "audio/wav", "audio/x-wav", "audio/ogg", "audio/webm"];
-    public const long MaxAudioBytes = 25 * 1024 * 1024;
+    public sealed record GroupInput(string Name, string? SongTitle, Guid[]? MemberIds, int? Position = null);
 
     /// <summary>
     /// Partecipanti dell'evento: adesioni confermate, persone assegnate e atleti delle classi collegate.
@@ -137,100 +136,95 @@ public static class EventEndpoints
             return n == 0 ? Results.NotFound() : Results.NoContent();
         }).RequireMember(Roles.Admin);
 
-        // Performance: brano (nome, collegamento, file audio), luogo e partecipanti.
-        // Li gestisce l'amministrazione; insegnanti e atleti li consultano.
-        g.MapGet("/{id:guid}/tracks", async (HttpContext ctx, Db db, Guid id) =>
+        // Gruppi dell'evento: li organizzano gli insegnanti (e l'amministrazione) tra i partecipanti.
+        // Ogni gruppo ha il titolo della sua canzone, senza file audio. Un atleta può stare in più gruppi.
+        g.MapGet("/{id:guid}/groups", async (HttpContext ctx, Db db, Guid id) =>
         {
             var m = ctx.Member();
             return await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
             {
-                var canListen = await CanSeePerformance(c, tx, m, id);
-                var rows = await c.QueryAsync(@"
-                    select t.id, t.position, t.title, t.artist, t.group_label, t.class_id, cl.name as class_name, t.link_url,
-                           t.audio_path is not null as has_audio, t.audio_content_type
-                    from app.event_tracks t left join app.classes cl on cl.id = t.class_id
-                    join app.events e on e.id = t.event_id
-                    where t.event_id = @id and (e.is_published or @staff) order by t.position, t.created_at", new { id, staff = m.IsAdmin || m.IsTeacher }, tx);
-                // Collegamento e file audio solo a chi partecipa (o al suo genitore) e allo staff
-                return rows.Camel().Select(r => { if (!canListen) { r["linkUrl"] = null; r["hasAudio"] = false; } return r; });
+                if (!await CanSeePerformance(c, tx, m, id)) throw ApiException.Forbidden("I gruppi sono riservati a chi partecipa.");
+                var children = await Relations.ChildrenOf(c, tx, m);
+                var groups = (await c.QueryAsync<(Guid Id, string Name, string SongTitle, int Position)>(
+                    "select id, name, song_title, position from app.event_groups where event_id = @id order by position, created_at", new { id }, tx)).ToList();
+                var members = (await c.QueryAsync<(Guid GroupId, Guid MemberId, string Name)>(@"
+                    select gm.group_id, mb.id, mb.first_name || ' ' || mb.last_name from app.event_group_members gm
+                    join app.event_groups g on g.id = gm.group_id join app.members mb on mb.id = gm.member_id
+                    where g.event_id = @id order by mb.last_name, mb.first_name", new { id }, tx)).ToList();
+                return groups.Select(gr =>
+                {
+                    var people = members.Where(x => x.GroupId == gr.Id).ToList();
+                    return new
+                    {
+                        id = gr.Id, name = gr.Name, songTitle = gr.SongTitle, position = gr.Position,
+                        members = people.Select(x => new { memberId = x.MemberId, name = x.Name }),
+                        mine = people.Any(x => x.MemberId == m.MemberId || children.Contains(x.MemberId)),
+                    };
+                });
             });
         }).RequireMember();
 
-        g.MapPost("/{id:guid}/tracks", async (HttpContext ctx, Db db, Guid id, TrackInput input) =>
+        g.MapPost("/{id:guid}/groups", async (HttpContext ctx, Db db, Guid id, GroupInput input) =>
         {
-            ValidateTrack(input);
+            ValidateGroup(input);
             var m = ctx.Member();
-            var trackId = await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
+            var groupId = await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
             {
-                var type = await c.ExecuteScalarAsync<string?>("select type from app.events where id = @id", new { id }, tx) ?? throw ApiException.NotFound("Evento");
-                if (!PerformanceTypes.Contains(type)) throw ApiException.Conflict("not_a_performance", "La musica si indica solo per gare, saggi, spettacoli ed esibizioni.");
-                return await c.ExecuteScalarAsync<Guid>(@"
-                    insert into app.event_tracks (tenant_id, event_id, position, title, artist, group_label, class_id, link_url, added_by)
-                    values (app.current_tenant(), @id, coalesce(@Position, (select coalesce(max(position), 0) + 1 from app.event_tracks where event_id = @id)),
-                            @Title, coalesce(@Artist, ''), coalesce(@GroupLabel, ''), @ClassId, @LinkUrl, @user) returning id",
-                    new { id, input.Position, Title = input.Title.Trim(), input.Artist, input.GroupLabel, input.ClassId, input.LinkUrl, user = m.UserId }, tx);
+                await EnsureGroupsAllowed(c, tx, id);
+                var gid = await c.ExecuteScalarAsync<Guid>(@"
+                    insert into app.event_groups (tenant_id, event_id, position, name, song_title, created_by)
+                    values (app.current_tenant(), @id, coalesce(@Position, (select coalesce(max(position), 0) + 1 from app.event_groups where event_id = @id)),
+                            @name, @song, @user) returning id",
+                    new { id, input.Position, name = input.Name.Trim(), song = (input.SongTitle ?? "").Trim(), user = m.UserId }, tx);
+                await SaveGroupMembers(c, tx, id, gid, input.MemberIds);
+                return gid;
             });
-            return Results.Created($"/v1/events/{id}/tracks/{trackId}", new { id = trackId });
-        }).RequireMember(Roles.Admin);
+            return Results.Created($"/v1/events/{id}/groups/{groupId}", new { id = groupId });
+        }).RequireMember(Roles.Admin, Roles.Teacher);
 
-        g.MapPut("/{id:guid}/tracks/{trackId:guid}", async (HttpContext ctx, Db db, Guid id, Guid trackId, TrackInput input) =>
+        g.MapPut("/{id:guid}/groups/{groupId:guid}", async (HttpContext ctx, Db db, Guid id, Guid groupId, GroupInput input) =>
         {
-            ValidateTrack(input);
+            ValidateGroup(input);
             var m = ctx.Member();
-            var n = await db.InTenant(m.TenantId, m.UserId, (c, tx) => c.ExecuteAsync(@"
-                update app.event_tracks set title = @Title, artist = coalesce(@Artist, ''), group_label = coalesce(@GroupLabel, ''),
-                  class_id = @ClassId, link_url = @LinkUrl, position = coalesce(@Position, position) where id = @trackId and event_id = @id",
-                new { id, trackId, Title = input.Title.Trim(), input.Artist, input.GroupLabel, input.ClassId, input.LinkUrl, input.Position }, tx));
+            await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
+            {
+                var n = await c.ExecuteAsync(@"update app.event_groups set name = @name, song_title = @song, position = coalesce(@Position, position)
+                    where id = @groupId and event_id = @id", new { id, groupId, name = input.Name.Trim(), song = (input.SongTitle ?? "").Trim(), input.Position }, tx);
+                if (n == 0) throw ApiException.NotFound("Gruppo");
+                await SaveGroupMembers(c, tx, id, groupId, input.MemberIds);
+            });
+            return Results.NoContent();
+        }).RequireMember(Roles.Admin, Roles.Teacher);
+
+        g.MapDelete("/{id:guid}/groups/{groupId:guid}", async (HttpContext ctx, Db db, Guid id, Guid groupId) =>
+        {
+            var m = ctx.Member();
+            var n = await db.InTenant(m.TenantId, m.UserId, (c, tx) =>
+                c.ExecuteAsync("delete from app.event_groups where id = @groupId and event_id = @id", new { id, groupId }, tx));
             return n == 0 ? Results.NotFound() : Results.NoContent();
-        }).RequireMember(Roles.Admin);
+        }).RequireMember(Roles.Admin, Roles.Teacher);
 
-        g.MapDelete("/{id:guid}/tracks/{trackId:guid}", async (HttpContext ctx, Db db, IFileStorage storage, Guid id, Guid trackId) =>
+        // Promemoria in home: i prossimi eventi (non sociali) a cui l'atleta, o suo figlio, partecipa, con i suoi gruppi
+        g.MapGet("/reminders", async (HttpContext ctx, Db db) =>
         {
             var m = ctx.Member();
-            var path = await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
+            return await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
             {
-                var t = await c.QuerySingleOrDefaultAsync<(Guid Id, string? AudioPath)?>("delete from app.event_tracks where id = @trackId and event_id = @id returning id, audio_path", new { id, trackId }, tx)
-                    ?? throw ApiException.NotFound("Brano");
-                return t.AudioPath;
+                var children = await Relations.ChildrenOf(c, tx, m);
+                var people = children.Append(m.MemberId).Distinct().ToArray();
+                var events = (await c.QueryAsync<EventDto>(SelectEvents + @"
+                    where e.is_published and e.type <> 'social' and e.date >= app.tenant_today()
+                      and exists (select 1 from app.event_signups s where s.event_id = e.id and s.status = 'confirmed' and s.member_id = any(@people)
+                                  union select 1 from app.event_links k where k.event_id = e.id and k.kind = 'member' and k.target_id = any(@people)
+                                  union select 1 from app.event_links k join app.enrollments en on en.class_id = k.target_id and en.status = 'approved'
+                                        where k.event_id = e.id and k.kind = 'class' and en.member_id = any(@people))
+                    order by e.date, e.start_time limit 5", new { me = m.MemberId, people }, tx)).ToList();
+                var ids = events.Select(e => e.Id).ToArray();
+                var groups = (await c.QueryAsync<(Guid EventId, string Name, string SongTitle)>(@"
+                    select distinct g.event_id, g.name, g.song_title, g.position from app.event_groups g join app.event_group_members gm on gm.group_id = g.id
+                    where g.event_id = any(@ids) and gm.member_id = any(@people) order by g.position", new { ids, people }, tx)).ToList();
+                return events.Select(e => new { @event = e, groups = groups.Where(x => x.EventId == e.Id).Select(x => new { name = x.Name, songTitle = x.SongTitle }) });
             });
-            if (path is not null) await storage.DeleteAsync(path);
-            return Results.NoContent();
-        }).RequireMember(Roles.Admin);
-
-        // File audio del brano (caricato dall'amministrazione), mai con URL pubblici
-        g.MapPost("/{id:guid}/tracks/{trackId:guid}/audio", async (HttpContext ctx, Db db, IFileStorage storage, Guid id, Guid trackId) =>
-        {
-            var m = ctx.Member();
-            var form = await ctx.Request.ReadFormAsync();
-            var file = form.Files.GetFile("file") ?? throw ApiException.Invalid("Allega il file audio.");
-            if (file.Length == 0 || file.Length > MaxAudioBytes) throw ApiException.Invalid("Il file audio deve pesare al massimo 25 MB.");
-            if (!AudioTypes.Contains(file.ContentType)) throw ApiException.Invalid("Formato non ammesso: usa MP3, M4A, AAC, WAV, OGG o WEBM.");
-            var path = $"tenants/{m.TenantId}/events/{id}/{Guid.NewGuid():N}";
-            var old = await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
-            {
-                var previous = await c.QuerySingleOrDefaultAsync<(Guid Id, string? Path)?>(
-                    "select id, audio_path from app.event_tracks where id = @trackId and event_id = @id for update", new { id, trackId }, tx) ?? throw ApiException.NotFound("Brano");
-                await using (var stream = file.OpenReadStream()) await storage.PutAsync(path, stream, file.ContentType);
-                await c.ExecuteAsync("update app.event_tracks set audio_path = @path, audio_content_type = @ct, audio_bytes = @bytes where id = @trackId",
-                    new { trackId, path, ct = file.ContentType, bytes = file.Length }, tx);
-                return previous.Path;
-            });
-            if (old is not null) await storage.DeleteAsync(old);
-            return Results.NoContent();
-        }).RequireMember(Roles.Admin);
-
-        g.MapGet("/{id:guid}/tracks/{trackId:guid}/audio", async (HttpContext ctx, Db db, IFileStorage storage, Guid id, Guid trackId) =>
-        {
-            var m = ctx.Member();
-            var t = await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
-            {
-                if (!await CanSeePerformance(c, tx, m, id)) throw ApiException.Forbidden("La musica della performance è riservata a chi partecipa.");
-                return await c.QuerySingleOrDefaultAsync<(string? Path, string? Type)?>(
-                    "select audio_path, audio_content_type from app.event_tracks where id = @trackId and event_id = @id", new { id, trackId }, tx);
-            });
-            if (t?.Path is not { } path) throw ApiException.NotFound("File audio");
-            var stream = await storage.GetAsync(path) ?? throw ApiException.NotFound("File audio");
-            return Results.File(stream, t.Value.Type ?? "audio/mpeg", enableRangeProcessing: true);
         }).RequireMember();
 
         // Elenco dei partecipanti: staff, e chi partecipa (o il suo genitore). Solo i nomi.
@@ -285,6 +279,10 @@ public static class EventEndpoints
             {
                 await Relations.EnsureCanActFor(c, tx, m, subject, "enroll");
                 await c.ExecuteAsync("update app.event_signups set status = 'cancelled' where event_id = @id and member_id = @subject", new { id, subject }, tx);
+                // Chi non partecipa più (né per classe né per assegnazione) esce anche dai gruppi dell'evento
+                await c.ExecuteAsync(@"delete from app.event_group_members gm using app.event_groups g
+                    where g.id = gm.group_id and g.event_id = @id and gm.member_id = @subject
+                      and not exists (select 1 from (" + ParticipantsSql + ") p where p.member_id = @subject)", new { id, subject }, tx);
             });
             return Results.NoContent();
         }).RequireMember();
@@ -301,11 +299,27 @@ public static class EventEndpoints
             new { id, me = m.MemberId, children }, tx);
     }
 
-    private static void ValidateTrack(TrackInput i)
+    private static void ValidateGroup(GroupInput i)
     {
-        if (string.IsNullOrWhiteSpace(i.Title)) throw ApiException.Invalid("Inserisci il titolo del brano.");
-        if (i.LinkUrl is { Length: > 0 } url && (!Uri.TryCreate(url, UriKind.Absolute, out var u) || u.Scheme != "https"))
-            throw ApiException.Invalid("Il collegamento al brano deve essere un indirizzo https.");
+        if (string.IsNullOrWhiteSpace(i.Name) || i.Name.Trim().Length > 80) throw ApiException.Invalid("Dai un nome al gruppo (al massimo 80 caratteri).");
+        if ((i.SongTitle ?? "").Trim().Length > 160) throw ApiException.Invalid("Il titolo della canzone può avere al massimo 160 caratteri.");
+    }
+
+    private static async Task EnsureGroupsAllowed(System.Data.IDbConnection c, System.Data.IDbTransaction tx, Guid id)
+    {
+        var type = await c.ExecuteScalarAsync<string?>("select type from app.events where id = @id", new { id }, tx) ?? throw ApiException.NotFound("Evento");
+        if (type == "social") throw ApiException.Conflict("no_groups", "Gli eventi sociali non hanno gruppi.");
+    }
+
+    /// <summary>Membri del gruppo: solo partecipanti dell'evento. null = invariati.</summary>
+    private static async Task SaveGroupMembers(System.Data.IDbConnection c, System.Data.IDbTransaction tx, Guid eventId, Guid groupId, Guid[]? memberIds)
+    {
+        if (memberIds is null) return;
+        var ids = memberIds.Distinct().ToArray();
+        var ok = await c.ExecuteScalarAsync<int>("select count(*) from (" + ParticipantsSql + ") p where p.member_id = any(@ids)", new { id = eventId, ids }, tx);
+        if (ok != ids.Length) throw ApiException.Invalid("Nei gruppi si inseriscono solo i partecipanti dell'evento.");
+        await c.ExecuteAsync("delete from app.event_group_members where group_id = @groupId", new { groupId }, tx);
+        await c.ExecuteAsync("insert into app.event_group_members (tenant_id, group_id, member_id) select app.current_tenant(), @groupId, unnest(@ids)", new { groupId, ids }, tx);
     }
 
     private static async Task SaveLinks(System.Data.IDbConnection c, System.Data.IDbTransaction tx, Guid eventId, EventInput input)

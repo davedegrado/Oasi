@@ -362,3 +362,13 @@ export function eventParticipants(db: OasiDatabase, event: { participantIds: str
   const fromClasses = db.classes.filter((c) => event.classIds?.includes(c.id)).flatMap((c) => c.studentIds)
   return [...new Set([...event.participantIds, ...fromClasses])].map((id) => eventPerson(db, id)).filter((p): p is NonNullable<typeof p> => !!p)
 }
+
+/** Gruppi e promemoria valgono per tutti gli eventi tranne quelli sociali */
+export const hasGroups = (e: { type: string }) => e.type !== 'sociale'
+
+/** Prossimi eventi (non sociali) a cui la persona partecipa, con i suoi gruppi: promemoria in home */
+export function myUpcomingEvents(db: OasiDatabase, personId: string) {
+  return upcomingEvents(db)
+    .filter((e) => hasGroups(e) && eventParticipants(db, e).some((p) => p.id === personId))
+    .map((event) => ({ event, groups: (event.groups ?? []).filter((g) => g.memberIds.includes(personId)) }))
+}

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight, BellRing, FileWarning, CalendarClock, ChevronRight, Clock, Megaphone, RefreshCcw, Sparkles } from 'lucide-react'
+import { ArrowRight, BellRing, MapPin, Music2, PartyPopper, FileWarning, CalendarClock, ChevronRight, Clock, Megaphone, RefreshCcw, Sparkles } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { HoopArc } from '@/components/common/Decor'
 import { SectionTitle } from '@/components/common/PageHeader'
@@ -12,9 +12,10 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { useDatabase } from '@/hooks/useDatabase'
 import { useCurrentStudent } from '@/hooks/useDemo'
 import { NextEventBanner } from '@/components/events/NextEventBanner'
-import { findClass, findTeacher, lessonsForStudent, nextLesson, progressSummary, recentProgress, upcomingEvents } from '@/services/selectors'
+import { findClass, findTeacher, lessonsForStudent, myUpcomingEvents, nextLesson, progressSummary, recentProgress, upcomingEvents } from '@/services/selectors'
+import { EVENT_TYPE_LABEL } from '@/lib/labels'
 import { documentSummary, memberDocuments } from '@/services/documents'
-import { formatDate, greeting, relativeDayLabel, todayISO } from '@/lib/dates'
+import { formatDate, formatDateShort, greeting, relativeDayLabel, todayISO } from '@/lib/dates'
 import { cn, fullName } from '@/lib/utils'
 
 export function StudentHome() {
@@ -38,6 +39,8 @@ export function StudentHome() {
     .filter((x): x is NonNullable<typeof x> => !!x)
   const docs = documentSummary(memberDocuments(db, student.id))
   const docsToDo = docs.missing.length + docs.toFix.length + docs.expiring.length
+  const myEvents = myUpcomingEvents(db, student.id)
+  const reminder = myEvents[0]
   const working = db.figures.filter((f) => db.progress[student.id]?.[f.id]?.status === 'in_progetto')
 
   return (
@@ -108,6 +111,40 @@ export function StudentHome() {
               </Link>
             </CardContent>
           </Card>
+        )}
+        {/* Promemoria: il prossimo evento a cui partecipa (gara, saggio, spettacolo, workshop, stage) */}
+        {reminder && (
+          <Link
+            to="/allieva/eventi"
+            className="flex animate-fade-up items-center gap-4 rounded-3xl bg-white p-4 shadow-float ring-1 ring-line/70 transition hover:ring-rosa-intenso/40 sm:p-5 [animation-delay:40ms]"
+          >
+            <div className="shrink-0 rounded-2xl bg-[var(--color-accent)] px-3 py-2 text-center text-white">
+              <p className="font-display text-2xl leading-none font-extrabold">{formatDateShort(reminder.event.date).split(' ')[0]}</p>
+              <p className="mt-1 text-[11px] text-white/90 uppercase">{formatDateShort(reminder.event.date).split(' ')[1]}</p>
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="flex items-center gap-1 text-[11px] font-semibold tracking-wide text-ink-muted uppercase">
+                <PartyPopper className="size-3.5" /> {EVENT_TYPE_LABEL[reminder.event.type]} · {relativeDayLabel(reminder.event.date)}, {reminder.event.startTime}
+              </p>
+              <p className="line-clamp-2 font-display text-lg leading-tight font-bold text-ink">{reminder.event.title}</p>
+              <p className="truncate text-xs text-ink-soft">
+                <MapPin className="inline size-3.5 align-[-2px]" /> {reminder.event.location}
+              </p>
+              {reminder.groups.map((g) => (
+                <p key={g.id} className="mt-1 truncate text-xs text-ink">
+                  <strong>{g.name}</strong>
+                  {g.song && (
+                    <span className="text-ink-soft">
+                      {' '}
+                      · <Music2 className="inline size-3 align-[-1px]" /> {g.song}
+                    </span>
+                  )}
+                </p>
+              ))}
+              {myEvents.length > 1 && <p className="mt-1 text-xs font-semibold text-rosa-scuro">+ {myEvents.length === 2 ? 'un altro evento' : `altri ${myEvents.length - 1} eventi`} in programma</p>}
+            </div>
+            <ChevronRight className="size-5 shrink-0 text-ink-muted" />
+          </Link>
         )}
         </div>
 

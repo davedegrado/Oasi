@@ -17,6 +17,7 @@ import type {
   OasiDatabase,
   OasiEvent,
   Student,
+  EventGroup,
 } from '@/types'
 
 /**
@@ -82,6 +83,9 @@ export interface OasiRepository {
   saveEvent(event: OasiEvent): Promise<void>
   deleteEvent(eventId: string): Promise<void>
   toggleEventParticipation(eventId: string, studentId: string): Promise<void>
+  /** Crea o modifica un gruppo dell'evento (insegnanti e amministrazione): solo partecipanti, anche in più gruppi */
+  saveEventGroup(eventId: string, group: EventGroup): Promise<void>
+  deleteEventGroup(eventId: string, groupId: string): Promise<void>
 
   // Discipline (dati della palestra): la disattivazione conserva classi, atlete e storico
   saveDiscipline(discipline: DisciplineInfo): Promise<void>
