@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { ImageIcon, Pencil, Plus, Trash2, Users, X } from 'lucide-react'
-import type { OasiEvent } from '@/types'
+import type { EventType, OasiEvent } from '@/types'
+
+type Filter = 'tutti' | 'miei' | EventType
 import { PageHeader, SectionTitle } from '@/components/common/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
@@ -12,7 +14,10 @@ import { useDatabase, useRepository } from '@/hooks/useDatabase'
 import { useDemo } from '@/hooks/useDemo'
 import { EventTracksButton } from '@/components/events/EventTracks'
 import { useToast } from '@/hooks/useToast'
-import { findStudent, pastEvents, upcomingEvents } from '@/services/selectors'
+import { eventPerson, pastEvents, upcomingEvents } from '@/services/selectors'
+import { EventSignupButton } from '@/components/events/EventSignupButton'
+import { Segmented } from '@/components/ui/segmented'
+import { EmptyState } from '@/components/common/EmptyState'
 import { getPhotoLibrary } from '@/services/media'
 import { addDays, todayISO } from '@/lib/dates'
 import { EVENT_TYPE_LABEL } from '@/lib/labels'
@@ -46,30 +51,39 @@ export function AdminEvents() {
   const { persona } = useDemo()
   const isAdmin = persona?.role === 'admin'
   const editor = isAdmin ? ('admin' as const) : undefined
+  // Stessa vista per tutti: anche insegnanti e segreteria si segnano agli eventi ("I miei")
+  const me = isAdmin ? 'admin' : (persona?.userId ?? '')
+  const [filter, setFilter] = useState<Filter>('tutti')
   const upcoming = upcomingEvents(db)
-  const past = pastEvents(db)
+  const shown = upcoming.filter((e) => (filter === 'tutti' ? true : filter === 'miei' ? e.participantIds.includes(me) : e.type === filter))
+  const types = (Object.keys(EVENT_TYPE_LABEL) as EventType[]).filter((t) => upcoming.some((e) => e.type === t))
+  // La segreteria vede tutti gli eventi passati (per le adesioni); le insegnanti quelli a cui hanno partecipato
+  const past = pastEvents(db).filter((e) => isAdmin || e.participantIds.includes(me))
   const viewing = db.events.find((e) => e.id === participantsOf)
 
   const actions = (e: OasiEvent) => (
     <>
-      <Button size="sm" variant="soft" onClick={() => setParticipantsOf(e.id)}>
-        <Users /> Adesioni ({e.participantIds.length})
-      </Button>
-      {isAdmin && (
-        <Button size="sm" variant="outline" onClick={() => setEditing({ event: structuredClone(e), isNew: false })}>
-          <Pencil /> Modifica
-        </Button>
-      )}
+      <EventSignupButton event={e} studentId={me} />
       <EventTracksButton event={e} editor={editor} />
+      {isAdmin && (
+        <>
+          <Button size="sm" variant="soft" onClick={() => setParticipantsOf(e.id)}>
+            <Users /> Adesioni ({e.participantIds.length})
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setEditing({ event: structuredClone(e), isNew: false })}>
+            <Pencil /> Modifica
+          </Button>
+        </>
+      )}
     </>
   )
 
   return (
-    <div className="animate-fade-up space-y-8">
+    <div className="animate-fade-up space-y-6">
       <PageHeader
         eyebrow="Eventi"
-        title="Spettacoli, stage e workshop"
-        description={isAdmin ? 'Crea eventi, modificali e controlla le adesioni delle atlete.' : 'Consulta gli eventi, le adesioni, la musica e i partecipanti delle performance.'}
+        title="Workshop, gare e saggi"
+        description={isAdmin ? 'Aderisci entro la scadenza, crea e modifica gli eventi, controlla le adesioni.' : 'Aderisci entro la scadenza: i posti sono limitati.'}
         actions={
           isAdmin ? (
             <Button onClick={() => setEditing({ event: emptyEvent(), isNew: true })}>
@@ -79,19 +93,28 @@ export function AdminEvents() {
         }
         className="mb-0"
       />
-      <section>
-        <SectionTitle title={`In programma (${upcoming.length})`} />
+      <Segmented<Filter>
+        value={filter}
+        onChange={setFilter}
+        size="sm"
+        options={[
+          { value: 'tutti', label: 'Tutti', count: upcoming.length },
+          { value: 'miei', label: 'I miei', count: upcoming.filter((e) => e.participantIds.includes(me)).length },
+          ...types.map((t) => ({ value: t as Filter, label: EVENT_TYPE_LABEL[t] })),
+        ]}
+      />
+      {shown.length === 0 ? (
+        <EmptyState title="Nessun evento" description="Non ci sono eventi per questo filtro." />
+      ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {upcoming.map((e) => (
-            <div key={e.id}>
-              <EventCard event={e} footer={actions(e)} />
-            </div>
+          {shown.map((e) => (
+            <EventCard key={e.id} event={e} footer={actions(e)} />
           ))}
         </div>
-      </section>
+      )}
       {past.length > 0 && (
         <section>
-          <SectionTitle title="Eventi passati" />
+          <SectionTitle title={isAdmin ? 'Eventi passati' : 'A cui hai partecipato'} />
           <div className="grid gap-3 md:grid-cols-2">
             {past.map((e) => (
               <EventCard
@@ -100,9 +123,11 @@ export function AdminEvents() {
                 variant="horizontal"
                 className="opacity-80"
                 footer={
-                  <Button size="sm" variant="ghost" onClick={() => setParticipantsOf(e.id)}>
-                    {e.participantIds.length} <Users />
-                  </Button>
+                  isAdmin ? (
+                    <Button size="sm" variant="ghost" onClick={() => setParticipantsOf(e.id)}>
+                      {e.participantIds.length} <Users />
+                    </Button>
+                  ) : undefined
                 }
               />
             ))}
@@ -118,12 +143,15 @@ export function AdminEvents() {
             <ProgressBar value={percent(viewing.participantIds.length, viewing.capacity)} className="mb-4" />
             <ul className="divide-y divide-line/70">
               {viewing.participantIds
-                .map((id) => findStudent(db, id))
+                .map((id) => eventPerson(db, id))
                 .filter((s) => !!s)
                 .map((s) => (
                   <li key={s.id} className="flex items-center gap-3 py-2.5">
                     <Avatar person={s} size="sm" />
-                    <span className="flex-1 text-sm font-semibold">{fullName(s)}</span>
+                    <span className="flex-1 text-sm font-semibold">
+                      {fullName(s)}
+                      {s.role === 'insegnante' && <span className="ml-2 text-xs font-normal text-ink-muted">Insegnante</span>}
+                    </span>
                     {isAdmin && (
                     <Button
                       size="icon-sm"
@@ -141,7 +169,7 @@ export function AdminEvents() {
                 ))}
             </ul>
             {viewing.participantIds.length === 0 && <p className="text-sm text-ink-muted">Nessuna adesione per ora.</p>}
-            <p className="mt-4 text-xs text-ink-muted">Le atlete aderiscono dalla loro Home con il pulsante “Partecipo”.</p>
+            <p className="mt-4 text-xs text-ink-muted">Atlete, insegnanti e segreteria aderiscono con il pulsante “Partecipo”.</p>
           </>
         )}
       </Dialog>

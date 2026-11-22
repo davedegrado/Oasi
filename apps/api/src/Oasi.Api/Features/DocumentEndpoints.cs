@@ -393,8 +393,10 @@ public static class DocumentEndpoints
             return n == 0 ? Results.NotFound() : Results.NoContent();
         }).RequireMember(Roles.Admin);
 
-        // Download di gruppo: tutti i documenti di una persona o un gruppo filtrato per tipologia, stato o scadenza
-        docs.MapGet("/documents/export", async (HttpContext ctx, Db db, IFileStorage storage, Guid? memberId, Guid? typeId, string? category, string? status, string? expiresBefore) =>
+        // Download di gruppo: documenti scelti uno per uno (ids, selezione multipla), tutti quelli di una persona
+        // o un gruppo filtrato per tipologia, stato o scadenza. Un'unica richiesta e un unico file ZIP.
+        docs.MapGet("/documents/export", async (HttpContext ctx, Db db, IFileStorage storage, Guid? memberId, Guid? typeId, string? category, string? status, string? expiresBefore,
+            [Microsoft.AspNetCore.Mvc.FromQuery] Guid[]? ids) =>
         {
             var m = ctx.Member();
             var rows = (await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
@@ -402,12 +404,13 @@ public static class DocumentEndpoints
                 var list = (await c.QueryAsync<(Guid Id, string Path, string Name, string Member, string TypeName)>(@"
                     select d.id, d.file_path, d.file_name, mb.last_name || '_' || mb.first_name, coalesce(d.title, t.name)
                     from app.documents d join app.members mb on mb.id = d.member_id left join app.document_types t on t.id = d.type_id
-                    where d.is_current and d.file_path is not null
+                    where (d.is_current or @ids::uuid[] is not null) and d.file_path is not null
+                      and (@ids::uuid[] is null or d.id = any(@ids))
                       and (@memberId::uuid is null or d.member_id = @memberId) and (@typeId::uuid is null or d.type_id = @typeId)
                       and (@category::text is null or coalesce(t.category, 'other') = @category)
                       and (@status::text is null or d.status = @status or (@status = 'expired' and d.expires_on < app.tenant_today()))
                       and (@expiresBefore::date is null or d.expires_on <= @expiresBefore::date)
-                    order by mb.last_name, mb.first_name, t.name limit 300", new { memberId, typeId, category, status, expiresBefore }, tx)).ToList();
+                    order by mb.last_name, mb.first_name, t.name limit 300", new { memberId, typeId, category, status, expiresBefore, ids = ids is { Length: > 0 } ? ids : null }, tx)).ToList();
                 if (list.Count == 0) throw ApiException.NotFound("Nessun documento corrisponde ai filtri: archivio");
                 // Operazione rilevante: resta nello storico di ogni documento e nell'audit
                 await c.ExecuteAsync(@"insert into app.document_events (tenant_id, document_id, action, actor_user, note)
@@ -426,7 +429,8 @@ public static class DocumentEndpoints
                     if (file is null) continue;
                     var name = $"{SafeFileName(r.Member)}/{SafeFileName(r.TypeName)}-{r.Name}";
                     while (!used.Add(name)) name = $"{SafeFileName(r.Member)}/{Guid.NewGuid():N}-{r.Name}";
-                    await using var entry = archive.CreateEntry(name).Open();
+                    // PDF e immagini sono già compressi: si archiviano senza ricomprimerli (meno CPU, stesso peso)
+                    await using var entry = archive.CreateEntry(name, System.IO.Compression.CompressionLevel.NoCompression).Open();
                     await file.CopyToAsync(entry);
                 }
             }

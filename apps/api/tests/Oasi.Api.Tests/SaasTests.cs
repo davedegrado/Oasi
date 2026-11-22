@@ -547,7 +547,14 @@ public sealed class SaasTests(ApiFixture api)
         var sofia = Member("stu-sofia");
         var set = await Json(await Admin.PutAsJsonAsync($"/v1/members/{sofia}/competitive", new { isCompetitive = true }));
         Assert.Contains(set.GetProperty("missingCertificates").EnumerateArray(), n => n.GetString() == "Certificato medico agonistico");
-        Assert.Equal(HttpStatusCode.Forbidden, (await As("stu-sofia").PutAsJsonAsync($"/v1/members/{sofia}/competitive", new { isCompetitive = false })).StatusCode);
+        // L'atleta stessa può dichiararsi agonista (o no), non può cambiarlo per un'altra persona
+        Assert.Equal(HttpStatusCode.OK, (await As("stu-sofia").PutAsJsonAsync($"/v1/members/{sofia}/competitive", new { isCompetitive = false })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await As("stu-anna").PutAsJsonAsync($"/v1/members/{sofia}/competitive", new { isCompetitive = true })).StatusCode);
+        var self = await Json(await As("stu-sofia").PutAsJsonAsync($"/v1/members/{sofia}/competitive", new { isCompetitive = true }));
+        Assert.Contains(self.GetProperty("missingCertificates").EnumerateArray(), n => n.GetString() == "Certificato medico agonistico");
+        // Da agonista vede il certificato agonistico tra i documenti da caricare
+        var sofiaDocs = await As("stu-sofia").GetFromJsonAsync<JsonElement>($"/v1/members/{sofia}/documents");
+        Assert.Contains(sofiaDocs.GetProperty("missing").EnumerateArray(), t => t.GetProperty("name").GetString() == "Certificato medico agonistico");
         await Admin.PutAsJsonAsync($"/v1/members/{sofia}/competitive", new { isCompetitive = false });
     }
 

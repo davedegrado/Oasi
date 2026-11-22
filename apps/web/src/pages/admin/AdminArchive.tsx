@@ -1,6 +1,7 @@
+import type { MemberDocument } from '@/types'
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { FileText, FolderOpen, Lock, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react'
+import { FileText, FolderOpen, Lock, Pencil, Plus, Search, Trash2, Upload, Download } from 'lucide-react'
 import type { DocumentCategory, DocumentType, SharedDocument } from '@/types'
 import { PageHeader } from '@/components/common/PageHeader'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -13,7 +14,8 @@ import { Segmented } from '@/components/ui/segmented'
 import { MemberDocumentsPanel } from '@/components/documents/MemberDocumentsPanel'
 import { Avatar } from '@/components/ui/avatar'
 import { DocumentStateBadge } from '@/components/documents/DocumentBits'
-import { fmtDay, openDocumentFile, readFileAsDataUrl, STATE_META } from '@/components/documents/documentUtils'
+import { downloadDocumentFile, fmtDay, openDocumentFile, readFileAsDataUrl, STATE_META } from '@/components/documents/documentUtils'
+import { dataUrlToBytes, makeZip, saveBlob } from '@/lib/zip'
 import { DocumentDetailDialog } from '@/components/documents/DocumentDialogs'
 import { useDatabase, useRepository } from '@/hooks/useDatabase'
 import { useToast } from '@/hooks/useToast'
@@ -72,6 +74,9 @@ function DocumentsTab() {
   const [expiresBefore, setExpiresBefore] = useState('')
   const [history, setHistory] = useState(false)
   const [open, setOpen] = useState<{ memberId: string; docId: string } | null>(null)
+  // Selezione multipla per scaricare più documenti in un unico file ZIP
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const toggle = (id: string) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
 
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -140,16 +145,34 @@ function DocumentsTab() {
         </CardContent>
       </Card>
 
+      {rows.length > 0 && (
+        <div className="sticky top-2 z-10 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-white/95 p-2.5 shadow-soft backdrop-blur">
+          <label className="flex items-center gap-2 text-sm font-semibold text-ink-soft">
+            <input
+              type="checkbox"
+              className="size-4 accent-rosa-intenso"
+              checked={rows.length > 0 && rows.every((r) => selected.has(r.d.id))}
+              onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((r) => r.d.id)) : new Set())}
+            />
+            Seleziona tutti
+          </label>
+          <Button size="sm" disabled={selected.size === 0} onClick={() => downloadSelected(rows.filter((r) => selected.has(r.d.id)))}>
+            <Download /> {selected.size > 1 ? `Scarica ${selected.size} documenti (ZIP)` : selected.size === 1 ? 'Scarica il documento' : 'Scarica selezionati'}
+          </Button>
+        </div>
+      )}
+
       {rows.length === 0 ? (
         <EmptyState title="Nessun documento" description="Nessun documento corrisponde ai filtri scelti." />
       ) : (
         <ul className="space-y-2">
           {rows.map(({ d, student, type, state }) => (
-            <li key={d.id}>
+            <li key={d.id} className={cn('flex items-center gap-2 rounded-2xl bg-white p-3 shadow-soft transition hover:ring-2 hover:ring-rosa/40', !d.current && 'opacity-70')}>
+              <input type="checkbox" className="size-4 shrink-0 accent-rosa-intenso" checked={selected.has(d.id)} onChange={() => toggle(d.id)} aria-label={`Seleziona ${type!.name} di ${fullName(student!)}`} />
               <button
                 type="button"
                 onClick={() => setOpen({ memberId: d.memberId, docId: d.id })}
-                className={cn('flex w-full items-center gap-3 rounded-2xl bg-white p-3 text-left shadow-soft transition hover:ring-2 hover:ring-rosa/40', !d.current && 'opacity-70')}
+                className="flex min-w-0 flex-1 items-center gap-3 text-left"
               >
                 <Avatar person={student!} size="sm" />
                 <div className="min-w-0 flex-1">
@@ -164,6 +187,9 @@ function DocumentsTab() {
                 </div>
                 <DocumentStateBadge state={state} />
               </button>
+              <Button size="icon-sm" variant="ghost" aria-label={`Scarica ${d.fileName ?? 'documento'}`} disabled={!d.fileData} onClick={() => downloadDocumentFile(d.fileData, d.fileName)}>
+                <Download />
+              </Button>
             </li>
           ))}
         </ul>
@@ -443,4 +469,18 @@ function SharedDialog({ onClose }: { onClose: () => void }) {
       </div>
     </Dialog>
   )
+}
+
+/** Uno solo: scaricato com'è. Più di uno: un unico ZIP, cartella per persona. */
+function downloadSelected(rows: { d: MemberDocument; student?: { firstName: string; lastName: string }; type?: { name: string } }[]) {
+  const files = rows.filter((r) => r.d.fileData)
+  if (files.length === 1) return downloadDocumentFile(files[0].d.fileData, files[0].d.fileName)
+  const safe = (t: string) => t.replace(/[\\/:*?"<>|]+/g, '_').trim()
+  const zip = makeZip(
+    files.map(({ d, student, type }) => ({
+      name: `${safe(student ? `${student.lastName} ${student.firstName}` : 'Senza nome')}/${safe(type?.name ?? 'Documento')} - ${safe(d.fileName ?? 'file')}`,
+      data: dataUrlToBytes(d.fileData!),
+    })),
+  )
+  saveBlob(zip, `documenti-${new Date().toISOString().slice(0, 10)}.zip`)
 }

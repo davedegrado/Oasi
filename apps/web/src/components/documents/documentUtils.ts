@@ -2,6 +2,7 @@ import { AlertTriangle, CheckCircle2, Clock3, FileWarning, FileX2, Hourglass, Ci
 import type { MemberDocument, OasiDatabase } from '@/types'
 import type { DocumentState } from '@/services/documents'
 import { formatDate } from '@/lib/dates'
+import { dataUrlToBytes, saveBlob } from '@/lib/zip'
 
 export const STATE_META: Record<DocumentState, { label: string; tone: 'ok' | 'warn' | 'danger' | 'neutral' | 'rosa'; icon: typeof Clock3 }> = {
   mancante: { label: 'Mancante', tone: 'neutral', icon: CircleDashed },
@@ -22,6 +23,7 @@ export const ACTION_LABEL: Record<MemberDocument['history'][number]['action'], s
   rifiutato: 'Rifiutato',
   sostituzione_richiesta: 'Sostituzione richiesta',
   sostituito: 'Nuova versione',
+  scadenza: 'Scadenza aggiornata',
 }
 
 /** Apre il file (demo: data URL salvato nel browser; in produzione URL firmato e temporaneo dall'API) */
@@ -40,6 +42,17 @@ export function openDocumentFile(data: string | undefined, name = 'documento') {
       a.click()
     }
     setTimeout(() => URL.revokeObjectURL(url), 60_000)
+  } catch {
+    /* file non leggibile */
+  }
+}
+
+/** Scarica il file (non lo apre in una nuova scheda) */
+export function downloadDocumentFile(data: string | undefined, name = 'documento') {
+  if (!data) return
+  try {
+    const type = data.match(/data:(.*?);/)?.[1] ?? 'application/octet-stream'
+    saveBlob(new Blob([dataUrlToBytes(data) as BlobPart], { type }), name)
   } catch {
     /* file non leggibile */
   }

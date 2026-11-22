@@ -96,18 +96,20 @@ public static class MemberEndpoints
             });
         }).RequireMember();
 
-        // Impostazione agonista / non agonista (amministrazione)
+        // Impostazione agonista / non agonista: l'atleta (o il genitore) e l'amministrazione.
+        // Da agonista il certificato agonistico diventa obbligatorio e va caricato.
         g.MapPut("/{id:guid}/competitive", async (HttpContext ctx, Db db, Guid id, CompetitiveInput input) =>
         {
             var m = ctx.Member();
             var missing = await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
             {
+                if (!m.IsAdmin) await Relations.EnsureCanActFor(c, tx, m, id, "consents");
                 if (await c.ExecuteAsync("update app.members set is_competitive = @IsCompetitive where id = @id", new { id, input.IsCompetitive }, tx) == 0) throw ApiException.NotFound("Persona");
                 await Audit.Log(c, tx, m.UserId, m.TenantId, "member.competitive", id.ToString(), new { input.IsCompetitive });
                 return input.IsCompetitive ? (await Competitive.MissingCertificates(c, tx, id)).ToArray() : [];
             });
             return Results.Ok(new { id, isCompetitive = input.IsCompetitive, missingCertificates = missing });
-        }).RequireMember(Roles.Admin);
+        }).RequireMember();
 
         // Dati modificabili dall'interessato (o dal genitore per il figlio)
         g.MapPut("/{id:guid}/profile", async (HttpContext ctx, Db db, Guid id, ProfileInput input) =>

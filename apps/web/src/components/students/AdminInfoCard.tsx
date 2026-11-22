@@ -1,5 +1,9 @@
 import { CreditCard, FileHeart, IdCard, Mail, Phone, Wallet } from 'lucide-react'
+import { useState } from 'react'
+import { Upload } from 'lucide-react'
 import type { Student } from '@/types'
+import { Button } from '@/components/ui/button'
+import { UploadDocumentDialog } from '@/components/documents/DocumentDialogs'
 import { Card, CardContent } from '@/components/ui/card'
 import { MembershipBadge } from '@/components/common/badges'
 import { formatDate, todayISO, addDays } from '@/lib/dates'
@@ -10,13 +14,15 @@ import { isCompetitive, isCompetitiveClass } from '@/services/selectors'
 import { memberDocuments } from '@/services/documents'
 
 /** Informazioni amministrative dimostrative (tessera, certificato, quota) */
-export function AdminInfoCard({ student, editable = false }: { student: Student; editable?: boolean }) {
+/** `asAdmin`: vista della segreteria (altrimenti è l'atleta stessa a guardare il proprio profilo) */
+export function AdminInfoCard({ student, asAdmin = false }: { student: Student; asAdmin?: boolean }) {
   const db = useDatabase()
   const repo = useRepository()
   const { toast } = useToast()
   const byClass = db.classes.some((c) => isCompetitiveClass(c) && c.studentIds.includes(student.id))
   const competitive = isCompetitive(db, student.id)
   const certificate = memberDocuments(db, student.id).find((r) => r.type.requiredForCompetitive)
+  const [uploading, setUploading] = useState(false)
   const certificateOk = certificate?.state === 'approvato' || certificate?.state === 'in_scadenza'
   const m = student.membership
   const today = todayISO()
@@ -63,10 +69,10 @@ export function AdminInfoCard({ student, editable = false }: { student: Student;
               type="checkbox"
               className="size-4 accent-[var(--color-rosa-intenso)]"
               checked={competitive}
-              disabled={byClass || !editable}
+              disabled={byClass}
               onChange={async (e) => {
                 await repo.updateStudent(student.id, { competitive: e.target.checked })
-                toast(e.target.checked ? 'Impostata come agonista' : 'Impostata come non agonista')
+                toast(e.target.checked ? 'Agonista: ora carica il certificato medico agonistico' : 'Impostata come non agonista')
               }}
             />
             Agonista
@@ -79,9 +85,19 @@ export function AdminInfoCard({ student, editable = false }: { student: Student;
               ? 'Il certificato agonistico non è richiesto ai non agonisti.'
               : certificateOk
                 ? 'Certificato agonistico approvato e valido.'
-                : 'Certificato agonistico obbligatorio: mancante, scaduto o non ancora approvato.'}
+                : certificate?.state === 'in_verifica'
+                  ? 'Certificato agonistico caricato: in attesa di verifica della segreteria.'
+                  : 'Certificato agonistico obbligatorio: mancante, scaduto o non ancora approvato.'}
           </p>
+          {competitive && certificate && certificate.state !== 'approvato' && certificate.state !== 'in_verifica' && (
+            <Button size="sm" className="mt-2" onClick={() => setUploading(true)}>
+              <Upload /> Carica il certificato medico agonistico
+            </Button>
+          )}
         </div>
+        {uploading && certificate && (
+          <UploadDocumentDialog row={certificate} memberId={student.id} uploadedBy={asAdmin ? 'admin' : student.id} onClose={() => setUploading(false)} />
+        )}
         <p className="mt-4 text-xs text-ink-muted">Dati amministrativi dimostrativi: nessun pagamento reale è gestito dall’app.</p>
       </CardContent>
     </Card>

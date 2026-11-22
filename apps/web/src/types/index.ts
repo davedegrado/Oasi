@@ -439,7 +439,7 @@ export interface DocumentType {
 }
 
 export interface DocumentEvent {
-  action: 'caricato' | 'approvato' | 'rifiutato' | 'sostituzione_richiesta' | 'sostituito'
+  action: 'caricato' | 'approvato' | 'rifiutato' | 'sostituzione_richiesta' | 'sostituito' | 'scadenza'
   at: string
   by: string
   note?: string

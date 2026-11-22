@@ -705,6 +705,25 @@ export class LocalRepository implements OasiRepository {
       }])
     })
 
+  setDocumentExpiry: OasiRepository['setDocumentExpiry'] = (documentId, expiresOn, by) =>
+    this.commit((db) => {
+      const doc = db.documents.find((d) => d.id === documentId)
+      if (!doc || !doc.current) throw new Error('Si corregge solo la versione attuale del documento.')
+      const now = new Date().toISOString()
+      const back = by !== 'admin' && doc.status === 'approvato'
+      const next = {
+        ...db,
+        documents: db.documents.map((d) =>
+          d.id === documentId
+            ? { ...d, expiresOn: expiresOn || undefined, status: back ? ('in_verifica' as const) : d.status, history: [...d.history, { action: 'scadenza' as const, at: now, by, note: expiresOn ? `Scadenza: ${formatDate(expiresOn, { year: true })}` : 'Scadenza rimossa' }] }
+            : d,
+        ),
+      }
+      return by === 'admin'
+        ? next
+        : withNotifications(next, [{ kind: 'documento', title: 'Scadenza di un documento corretta', body: `${studentName(db, doc.memberId)} ha indicato una nuova scadenza: verificala.`, to: ['admin'], link: { admin: '/admin/archivio?stato=in_verifica' } }])
+    })
+
   reviewDocument: OasiRepository['reviewDocument'] = (documentId, decision, note) =>
     this.commit((db) => {
       const doc = db.documents.find((d) => d.id === documentId)

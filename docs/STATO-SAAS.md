@@ -14,7 +14,7 @@ Legenda: **API** = regola applicata dal backend con persistenza, permessi e test
 | 2 | Palette bianco, nero, verde salvia e oro | Sì (tema del tenant) | Sì | Configurazione di Oasi; gli altri tenant mantengono la propria |
 | 2 | Calendario con vista settimanale, giorni non ripetuti | — | Sì | |
 | 3 | Atlete minorenni gestite dal genitore, solo i propri figli | Sì | No | Manca il ruolo genitore nella demo |
-| 3 | Agonista/non agonista; certificato obbligatorio solo quando previsto, verificato dal server | Sì | Sì | Cerchio Avanzato è agonistica nella demo |
+| 3 | Agonista/non agonista; certificato obbligatorio solo quando previsto, verificato dal server | Sì | Sì | L'atleta può dichiararsi agonista e caricare subito il certificato |
 | 3 | Badge AGONISTA nel profilo e dove serve allo staff | Sì | Sì | Ora visibile anche all'atleta nel proprio profilo |
 | 3 | Foto profilo e certificato agonistico | Sì | Parziale | |
 | 4 | Recupero solo dopo un'assenza valida, contatore disponibili/utilizzati/residui con storico | Sì | Sì | |
@@ -25,7 +25,7 @@ Legenda: **API** = regola applicata dal backend con persistenza, permessi e test
 | 4 | Fuso orario del tenant, cambi d'ora | Sì | — | Europe/Rome |
 | 5 | Home con il prossimo saggio o evento principale | Sì | Sì | |
 | 5 | Performance: canzone/musica, luogo, partecipanti nel rispetto dei permessi | Sì | Sì | File audio (fino a 25 MB) o collegamento; ascolto e partecipanti riservati a chi partecipa e allo staff |
-| 5 | Eventi gestiti dall'amministrazione, consultati da insegnanti e atlete | Sì | Sì | Gli insegnanti non modificano più eventi né musica |
+| 5 | Eventi gestiti dall'amministrazione, consultati da insegnanti e atlete | Sì | Sì | Stessa vista per tutti; anche insegnanti e segreteria si segnano ("I miei") |
 | 5 | Eventi collegabili a classi, discipline, insegnanti e partecipanti; notifiche | Sì | Parziale | |
 | 6 | Presenze, note della lezione, **sostituzioni** | Sì | Sì | Chi sostituisce vede la lezione e compila le presenze |
 | 6 | **Due documenti ogni 30 giorni, entro la fine del mese** | Sì | Sì | Una tipologia che ne chiede due al mese; l'insegnante dà a ciascuno un titolo libero e la scadenza, se c'è |
@@ -36,7 +36,7 @@ Legenda: **API** = regola applicata dal backend con persistenza, permessi e test
 | 7 | **Fino a due discipline** per classe dall'archivio esistente | Sì | Sì | Limite configurabile |
 | 7 | Regolamento in Gestione → Associazione | Già presente | Sì | |
 | 7 | Scheda atleta: tessera, certificati approvati, quote e pagamenti | Sì | Sì | |
-| 7 | Riepilogo presenze compatto; download singolo, per atleta, per gruppi | Sì | Parziale | |
+| 7 | Riepilogo presenze compatto; download singolo, per atleta, per gruppi, a selezione multipla | Sì | Sì | Più documenti: un unico ZIP senza ricompressione (PDF e foto sono già compressi) |
 | 8 | Un documento, una sola copia; stati, revisore, note | Sì | Sì | |
 | 8 | Caricamento di un documento firmato ≠ firma elettronica | Sì | Sì | Nessuna firma elettronica dichiarata |
 | 8 | Consensi e informative (immagini, minorenni) | Tabella presente | Parziale | Nessun flusso completo |
@@ -65,7 +65,7 @@ Legenda: **API** = regola applicata dal backend con persistenza, permessi e test
 
 ## 3. Verifiche eseguite
 
-- `dotnet test`: **53 test superati**, di cui 7 in `DynamiteTests.cs`.
+- `dotnet test`: **54 test superati**, di cui 7 in `DynamiteTests.cs`.
 - `db/tests/isolation.sql`: **19 controlli superati**.
 - Web App: lint e build senza errori; pagine principali aperte in un browser con i tre ruoli, nessun errore in console. Nessun test automatico dell'interfaccia.
 

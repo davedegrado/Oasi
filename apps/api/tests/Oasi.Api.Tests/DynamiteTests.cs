@@ -219,7 +219,33 @@ public sealed class DynamiteTests(ApiFixture api)
         Assert.Equal(HttpStatusCode.OK, (await chiara.PutAsJsonAsync($"/v1/documents/{id}/expiry", new { expiresOn = InDays(300) })).StatusCode);
         // Un'altra insegnante non lo vede
         Assert.Equal(HttpStatusCode.Forbidden, (await api.For(Seed.OasiHost, Seed.Elena).GetAsync($"/v1/documents/{id}")).StatusCode);
+        // Selezione multipla: due documenti scelti, un unico ZIP (file non ricompressi)
+        var other = await CreatedId(await chiara.PostAsync("/v1/documents", Upload(null, "Attestato primo soccorso", "bls.pdf")));
+        var zip = await Admin.GetAsync($"/v1/documents/export?ids={id}&ids={other}");
+        Assert.Equal(HttpStatusCode.OK, zip.StatusCode);
+        using (var archive = new System.IO.Compression.ZipArchive(await zip.Content.ReadAsStreamAsync()))
+        {
+            Assert.Equal(2, archive.Entries.Count);
+            Assert.All(archive.Entries, e => Assert.Equal(e.Length, e.CompressedLength));
+        }
+        Assert.Equal(HttpStatusCode.Forbidden, (await chiara.GetAsync($"/v1/documents/export?ids={id}")).StatusCode);
         _ = chiaraId;
+    }
+
+    [Fact]
+    public async Task Insegnanti_e_amministrazione_si_segnano_agli_eventi_come_le_atlete()
+    {
+        var events = await Admin.GetFromJsonAsync<JsonElement[]>("/v1/events");
+        var open = events!.First(e => e.GetProperty("signupDeadline").ValueKind == JsonValueKind.Null || e.GetProperty("signupDeadline").GetDateTime() > DateTime.UtcNow);
+        var id = open.GetProperty("id").GetGuid();
+        var chiara = api.For(Seed.OasiHost, Seed.Chiara);
+        Assert.Equal(HttpStatusCode.NoContent, (await chiara.PostAsync($"/v1/events/{id}/signup", null)).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await Admin.PostAsync($"/v1/events/{id}/signup", null)).StatusCode);
+        Assert.True((await chiara.GetFromJsonAsync<JsonElement[]>("/v1/events"))!.Single(e => e.GetProperty("id").GetGuid() == id).GetProperty("joined").GetBoolean());
+        Assert.True((await Admin.GetFromJsonAsync<JsonElement[]>("/v1/events"))!.Single(e => e.GetProperty("id").GetGuid() == id).GetProperty("joined").GetBoolean());
+        Assert.Equal(HttpStatusCode.NoContent, (await chiara.DeleteAsync($"/v1/events/{id}/signup")).StatusCode);
+        Assert.False((await chiara.GetFromJsonAsync<JsonElement[]>("/v1/events"))!.Single(e => e.GetProperty("id").GetGuid() == id).GetProperty("joined").GetBoolean());
+        await Admin.DeleteAsync($"/v1/events/{id}/signup");
     }
 
     [Fact]

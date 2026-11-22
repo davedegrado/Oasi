@@ -89,6 +89,8 @@ export interface OasiRepository {
   /** Caricamento (o sostituzione) di un file: crea una nuova versione in verifica */
   uploadDocument(input: DocumentUpload): Promise<void>
   reviewDocument(documentId: string, decision: DocumentDecision, note: string): Promise<void>
+  /** Data di scadenza scritta o corretta: dalla segreteria resta com'è, dall'interessata torna in verifica */
+  setDocumentExpiry(documentId: string, expiresOn: string | null, by: string): Promise<void>
   saveSharedDocument(doc: SharedDocument): Promise<void>
   deleteSharedDocument(id: string): Promise<void>
 

@@ -10,7 +10,7 @@ import { ALLOWED_DOCUMENT_TYPES, MAX_DOCUMENT_BYTES } from '@/services/localRepo
 import type { DocumentDecision } from '@/services/repository'
 import { DOCUMENT_CATEGORY_LABEL } from '@/lib/labels'
 import { DocumentStateBadge } from './DocumentBits'
-import { ACTION_LABEL, actorName, fmtDay, openDocumentFile, readFileAsDataUrl } from './documentUtils'
+import { ACTION_LABEL, actorName, downloadDocumentFile, fmtDay, openDocumentFile, readFileAsDataUrl } from './documentUtils'
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : 'Operazione non riuscita')
 
@@ -113,6 +113,17 @@ export function DocumentDetailDialog({ row, mode, onClose, onReplace }: { row: M
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
   const { type, doc, state, previous } = row
+  const [editingExpiry, setEditingExpiry] = useState(false)
+  const [expiry, setExpiry] = useState('')
+  const saveExpiry = async () => {
+    try {
+      await repo.setDocumentExpiry(doc!.id, expiry || null, mode === 'admin' ? 'admin' : doc!.memberId)
+      toast(mode === 'admin' ? 'Scadenza salvata' : 'Scadenza salvata: la segreteria la verificherà')
+      setEditingExpiry(false)
+    } catch (e) {
+      setError(errorText(e))
+    }
+  }
 
   const decide = async (decision: DocumentDecision) => {
     try {
@@ -147,12 +158,24 @@ export function DocumentDetailDialog({ row, mode, onClose, onReplace }: { row: M
                 <dd>Modulo firmato a mano</dd>
               </>
             )}
-            {doc.expiresOn && (
-              <>
-                <dt className="text-ink-muted">Scadenza</dt>
-                <dd>{fmtDay(doc.expiresOn)}</dd>
-              </>
-            )}
+            <dt className="text-ink-muted">Scadenza</dt>
+            <dd>
+              {editingExpiry ? (
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <Input type="date" className="h-9 w-40" value={expiry} onChange={(e) => setExpiry(e.target.value)} aria-label="Data di scadenza" />
+                  <Button size="sm" onClick={saveExpiry}>Salva</Button>
+                </span>
+              ) : (
+                <span className="flex flex-wrap items-center gap-2">
+                  {doc.expiresOn ? fmtDay(doc.expiresOn) : 'nessuna'}
+                  {doc.current && (
+                    <button type="button" className="text-xs font-semibold text-rosa-scuro" onClick={() => { setExpiry(doc.expiresOn ?? ''); setEditingExpiry(true) }}>
+                      {doc.expiresOn ? 'modifica' : 'indica'}
+                    </button>
+                  )}
+                </span>
+              )}
+            </dd>
             {doc.reviewedAt && (
               <>
                 <dt className="text-ink-muted">Verificato il</dt>
@@ -169,9 +192,14 @@ export function DocumentDetailDialog({ row, mode, onClose, onReplace }: { row: M
         )}
 
         {doc?.fileData && (
-          <Button variant="outline" className="w-full" onClick={() => openDocumentFile(doc.fileData, doc.fileName)}>
-            <Download /> Apri {doc.fileName} {doc.fileSize ? `(${formatBytes(doc.fileSize)})` : ''}
-          </Button>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Button variant="outline" onClick={() => openDocumentFile(doc.fileData, doc.fileName)}>
+              <FileText /> Apri
+            </Button>
+            <Button onClick={() => downloadDocumentFile(doc.fileData, doc.fileName)}>
+              <Download /> Scarica {doc.fileSize ? `(${formatBytes(doc.fileSize)})` : ''}
+            </Button>
+          </div>
         )}
         {mode === 'admin' && doc?.current && doc.status !== 'rifiutato' && (
           <div className="space-y-3 rounded-2xl border border-line/70 p-3">

@@ -347,8 +347,17 @@ export const euro = (cents: number) => new Intl.NumberFormat('it-IT', { style: '
 /** Tipi di evento che prevedono un'esibizione: per questi si indicano i brani */
 export const isPerformance = (e: { type: string }) => e.type === 'gara' || e.type === 'saggio' || e.type === 'spettacolo'
 
-/** Partecipanti di un evento: adesioni e atlete delle classi collegate */
+/** Persona che può aderire a un evento: atleta, insegnante o segreteria ("admin") */
+export function eventPerson(db: OasiDatabase, id: string): { id: string; firstName: string; lastName: string; role: 'atleta' | 'insegnante' | 'segreteria' } | undefined {
+  if (id === 'admin') return { id, firstName: 'Segreteria', lastName: '', role: 'segreteria' }
+  const s = findStudent(db, id)
+  if (s) return { id, firstName: s.firstName, lastName: s.lastName, role: 'atleta' }
+  const t = findTeacher(db, id)
+  return t ? { id, firstName: t.firstName, lastName: t.lastName, role: 'insegnante' } : undefined
+}
+
+/** Partecipanti di un evento: adesioni (atlete, insegnanti, segreteria) e atlete delle classi collegate */
 export function eventParticipants(db: OasiDatabase, event: { participantIds: string[]; classIds?: string[] }) {
   const fromClasses = db.classes.filter((c) => event.classIds?.includes(c.id)).flatMap((c) => c.studentIds)
-  return [...new Set([...event.participantIds, ...fromClasses])].map((id) => findStudent(db, id)).filter((s): s is Student => !!s)
+  return [...new Set([...event.participantIds, ...fromClasses])].map((id) => eventPerson(db, id)).filter((p): p is NonNullable<typeof p> => !!p)
 }
