@@ -12,7 +12,7 @@ import { buttonVariants } from '@/components/ui/button-variants'
 import { useDatabase } from '@/hooks/useDatabase'
 import { useCurrentStudent } from '@/hooks/useDemo'
 import { NextEventBanner } from '@/components/events/NextEventBanner'
-import { findClass, findTeacher, lessonsForStudent, myUpcomingEvents, nextLesson, progressSummary, recentProgress, upcomingEvents } from '@/services/selectors'
+import { findClass, findTeacher, lessonAccess, lessonsForStudent, myUpcomingEvents, nextLesson, progressSummary, recentProgress, upcomingEvents } from '@/services/selectors'
 import { EVENT_TYPE_LABEL } from '@/lib/labels'
 import { documentSummary, memberDocuments } from '@/services/documents'
 import { formatDate, formatDateShort, greeting, relativeDayLabel, todayISO } from '@/lib/dates'
@@ -22,7 +22,10 @@ export function StudentHome() {
   const db = useDatabase()
   const student = useCurrentStudent()
   const lessons = lessonsForStudent(db, student.id)
-  const next = nextLesson(lessons)
+  // Solo le lezioni coperte dal piano (valido e con lezioni residue)
+  const available = lessons.filter((l) => lessonAccess(db, student.id, l).status === 'ok')
+  const next = nextLesson(available)
+  const blocked = !next && lessons.some((l) => l.date >= todayISO() && lessonAccess(db, student.id, l).status !== 'ok')
   const nextCls = findClass(db, next?.classId)
   const nextTeacher = findTeacher(db, nextCls?.teacherId)
   const changes = lessons.filter((l) => l.status !== 'regolare' && l.date >= todayISO()).slice(0, 2)
@@ -100,14 +103,16 @@ export function StudentHome() {
         ) : (
           <Card className="animate-fade-up">
             <CardContent className="space-y-3">
-              <p className="font-display text-xl font-bold">{student.classIds.length === 0 ? 'Benvenuta! Iniziamo?' : 'Nessuna lezione in programma'}</p>
+              <p className="font-display text-xl font-bold">{student.classIds.length === 0 ? 'Benvenuto! Iniziamo?' : blocked ? 'Il tuo piano è terminato' : 'Nessuna lezione in programma'}</p>
               <p className="text-sm text-ink-soft">
                 {student.classIds.length === 0
-                  ? 'Scegli il corso che fa per te e invia la richiesta di iscrizione: l’insegnante la confermerà e le lezioni compariranno qui.'
-                  : 'Nelle prossime settimane non hai lezioni: puoi chiedere un recupero dal calendario.'}
+                  ? 'Scegli il corso che fa per te e il piano, poi invia la richiesta di iscrizione: l’insegnante la confermerà e le lezioni compariranno qui.'
+                  : blocked
+                    ? 'Il piano è scaduto o hai usato tutte le sue lezioni: scegline uno nuovo per tornare a lezione.'
+                    : 'Nelle prossime settimane non hai lezioni: puoi chiedere un recupero dal calendario.'}
               </p>
-              <Link to={student.classIds.length === 0 ? '/allieva/classi' : '/allieva/calendario'} className={buttonVariants()}>
-                {student.classIds.length === 0 ? 'Scegli un corso' : 'Apri il calendario'}
+              <Link to={student.classIds.length === 0 || blocked ? '/allieva/classi' : '/allieva/calendario'} className={buttonVariants()}>
+                {student.classIds.length === 0 ? 'Scegli un corso' : blocked ? 'Scegli un piano' : 'Apri il calendario'}
               </Link>
             </CardContent>
           </Card>

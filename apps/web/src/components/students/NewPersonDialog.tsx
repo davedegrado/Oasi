@@ -40,7 +40,7 @@ export function NewPersonDialog({ kind, onClose }: { kind: 'allieva' | 'insegnan
         joinedAt: todayISO(), goals: [], invitePending: true,
         membership: {
           status: f.status, cardNumber: f.cardNumber.trim(), expiresAt: `${new Date().getFullYear() + (new Date().getMonth() >= 8 ? 1 : 0)}-08-31`,
-          medicalCertificateExpiresAt: f.certificate, feePlan: 'Da definire', feePaidUntil: todayISO(),
+          medicalCertificateExpiresAt: f.certificate,
         },
       }
       await repo.addStudent(student)

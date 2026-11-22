@@ -19,9 +19,9 @@ import { buildDemoDocuments, buildSharedDocuments, demoDocumentTypes } from './d
 import { demoAnnouncementSeeds, demoAssociation, demoEventSeeds } from './events'
 import { demoFigureSeeds, photo } from './figures'
 import { demoStudentSeeds, demoTeachers } from './people'
-import { buildDemoAccounts, demoPlans, demoSeason } from './plans'
+import { buildDemoAccounts, demoPlans } from './plans'
 
-export const DATABASE_VERSION = 16
+export const DATABASE_VERSION = 17
 
 /** Hash deterministico: la demo genera sempre gli stessi dati per lo stesso giorno */
 function hash(text: string): number {
@@ -43,7 +43,7 @@ function addMonths(iso: string, months: number): string {
 
 function buildStudents(today: string): Student[] {
   return demoStudentSeeds.map((seed, index) => {
-    const { joinedMonthsAgo, membershipStatus, feePlan, ...rest } = seed
+    const { joinedMonthsAgo, membershipStatus, ...rest } = seed
     const certificateOffset =
       membershipStatus === 'in_scadenza' ? 12 : membershipStatus === 'sospesa' ? -15 : 90 + (hash(seed.id) % 200)
     return {
@@ -54,9 +54,6 @@ function buildStudents(today: string): Student[] {
         cardNumber: `UISP-MO-${String(2604 + index * 37).padStart(5, '0')}`,
         expiresAt: membershipStatus === 'prova' ? addDays(today, 14) : '2027-08-31',
         medicalCertificateExpiresAt: addDays(today, certificateOffset),
-        feePlan,
-        feePaidUntil:
-          membershipStatus === 'in_scadenza' ? addDays(today, 10) : membershipStatus === 'sospesa' ? addDays(today, -40) : addDays(today, 60 + (index % 4) * 30),
       },
     }
   })
@@ -108,7 +105,7 @@ function buildLessons(classes: ClassGroup[], today: string): Lesson[] {
           attendance[sid] = hash(`${sid}-${date}`) % 100 < 84 ? 'presente' : 'assente'
         }
       }
-      // Alcune atlete hanno già annunciato presenza o assenza per le prossime lezioni
+      // Alcuni atleti hanno già annunciato presenza o assenza per le prossime lezioni
       const declarations: Record<string, AttendanceMark> = {}
       if (!ended && override?.status !== 'annullata' && week <= 1) {
         for (const sid of cls.studentIds) {
@@ -209,8 +206,8 @@ function buildRequests(classes: ClassGroup[], lessons: Lesson[], today: string):
   const missed = lessons.filter((l) => l.classId === 'cls-cerchio-base' && l.date < today && l.status === 'annullata')[0]
   return {
     enrollmentRequests: [
-      { id: 'enr-noemi-int', classId: 'cls-cerchio-int', studentId: 'stu-noemi', note: 'Chiara mi ha consigliato di provare il livello intermedio.', status: 'in_attesa', createdAt: addDays(today, -1) },
-      { id: 'enr-anna-tint', classId: 'cls-tessuti-int', studentId: 'stu-anna', note: 'Vorrei aggiungere una seconda lezione a settimana.', status: 'in_attesa', createdAt: addDays(today, -2) },
+      { id: 'enr-noemi-int', classId: 'cls-cerchio-int', studentId: 'stu-noemi', planId: 'plan-adulti-2-a', note: 'Chiara mi ha consigliato di provare il livello intermedio.', status: 'in_attesa', createdAt: addDays(today, -1) },
+      { id: 'enr-anna-tint', classId: 'cls-tessuti-int', studentId: 'stu-anna', planId: 'plan-pack5', note: 'Vorrei aggiungere una seconda lezione a settimana.', status: 'in_attesa', createdAt: addDays(today, -2) },
     ],
     makeupRequests: sofiaTarget && classes.length
       ? [{ id: 'mku-sofia', studentId: 'stu-sofia', targetLessonId: sofiaTarget.id, missedLessonId: missed?.id, note: 'Recupero della lezione persa per la chiusura della sede.', status: 'in_attesa', createdAt: addDays(today, -1) }]
@@ -285,7 +282,6 @@ export function createSeedDatabase(today: string = todayISO()): OasiDatabase {
     documentTypes: structuredClone(demoDocumentTypes),
     documents: buildDemoDocuments(today),
     sharedDocuments: buildSharedDocuments(today),
-    season: structuredClone(demoSeason),
     plans: structuredClone(demoPlans),
     ...buildDemoAccounts(students, today),
   }

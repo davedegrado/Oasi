@@ -76,13 +76,44 @@
 }
 
 @layer base {
+  /* Comportamento da app nativa: niente rimbalzo né spostamenti laterali della pagina,
+     niente zoom con il doppio tocco; lo scorrimento resta solo verticale */
+  html,
+  body {
+    overscroll-behavior: none;
+    overflow-x: clip;
+    max-width: 100%;
+  }
   html {
     -webkit-tap-highlight-color: transparent;
     text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+    touch-action: manipulation;
   }
   body {
     @apply bg-page font-sans text-ink antialiased;
-    overflow-x: hidden;
+  }
+  /* iOS ingrandisce la pagina se un campo ha il testo sotto i 16px: in quel caso tutto "scappa" di lato */
+  @media (pointer: coarse) {
+    input,
+    select,
+    textarea {
+      font-size: max(16px, 1em) !important;
+    }
+  }
+  /* Web app installata: nessuna selezione accidentale del testo dell'interfaccia né menu del tocco prolungato */
+  @media (display-mode: standalone) {
+    body {
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+    input,
+    textarea,
+    [contenteditable='true'] {
+      -webkit-user-select: text;
+      user-select: text;
+    }
   }
   h1,
   h2,

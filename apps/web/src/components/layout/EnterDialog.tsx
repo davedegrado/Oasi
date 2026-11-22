@@ -41,7 +41,7 @@ export function EnterDialog({ role, onClose }: { role: Role; onClose: () => void
     const student: Student = {
       id: uid('stu'), firstName: form.firstName.trim(), lastName: form.lastName.trim(), avatar: '', birthDate: '2000-01-01',
       email: form.email.trim().toLowerCase(), phone: '', level: 'base', mainDiscipline: form.discipline, classIds: [], joinedAt: todayISO(), goals: [],
-      membership: { status: 'prova', cardNumber: '', expiresAt: todayISO(), medicalCertificateExpiresAt: '', feePlan: 'Lezione di prova', feePaidUntil: todayISO() },
+      membership: { status: 'prova', cardNumber: '', expiresAt: todayISO(), medicalCertificateExpiresAt: '' },
     }
     await repo.addStudent(student)
     // Il numero di tessera lo assegna la segreteria

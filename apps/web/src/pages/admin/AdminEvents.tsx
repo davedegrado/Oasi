@@ -168,7 +168,7 @@ export function AdminEvents() {
                 ))}
             </ul>
             {viewing.participantIds.length === 0 && <p className="text-sm text-ink-muted">Nessuna adesione per ora.</p>}
-            <p className="mt-4 text-xs text-ink-muted">Atlete, insegnanti e segreteria aderiscono con il pulsante “Partecipo”.</p>
+            <p className="mt-4 text-xs text-ink-muted">Atleti, insegnanti e segreteria aderiscono con il pulsante “Partecipo”.</p>
           </>
         )}
       </Dialog>
@@ -190,7 +190,7 @@ function EventDialog({ initial, isNew, onClose }: { initial: OasiEvent; isNew: b
     if (!event.date) return setError('Inserisci una data')
     if (event.signupDeadline && event.signupDeadline > event.date) return setError('La scadenza delle adesioni deve precedere l’evento')
     await repo.saveEvent({ ...event, title: event.title.trim() })
-    toast(isNew ? 'Evento creato: visibile alle atlete' : 'Evento aggiornato')
+    toast(isNew ? 'Evento creato: visibile agli atleti' : 'Evento aggiornato')
     onClose()
   }
 

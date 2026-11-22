@@ -43,7 +43,7 @@ export function AdminArchive() {
 
   return (
     <div className="animate-fade-up space-y-5">
-      <PageHeader eyebrow="Amministrazione" title="Archivio documenti" description="Moduli, liberatorie, consensi e certificati di tutte le atlete, con verifiche, scadenze e storico." />
+      <PageHeader eyebrow="Amministrazione" title="Archivio documenti" description="Moduli, liberatorie, consensi e certificati di tutti gli atleti, con verifiche, scadenze e storico." />
       <Segmented<Tab>
         value={tab}
         onChange={setTab}
@@ -84,7 +84,7 @@ function DocumentsTab() {
     return db.documents
       .filter((d) => history || d.current)
       .map((d) => {
-        // Documenti delle atlete e degli insegnanti: una sola riga per documento, letta dal profilo e dall'archivio
+        // Documenti degli atleti e degli insegnanti: una sola riga per documento, letta dal profilo e dall'archivio
         const student = db.students.find((s) => s.id === d.memberId) ?? db.teachers.find((t) => t.id === d.memberId)
         const known = d.typeId === '' ? FREE_TYPE : db.documentTypes.find((t) => t.id === d.typeId)
         // Documenti liberi o con più documenti per tipologia: si mostra il titolo dato da chi carica
@@ -385,9 +385,9 @@ function TypeDialog({ type, onClose }: { type: DocumentType; onClose: () => void
         </Field>
         <Field label="Richiesto a" htmlFor="dt-aud">
           <Select id="dt-aud" value={form.audience ?? 'allieve'} onChange={(e) => set('audience', e.target.value as 'allieve' | 'insegnanti' | 'tutti')}>
-            <option value="allieve">Atlete</option>
+            <option value="allieve">Atleti</option>
             <option value="insegnanti">Insegnanti</option>
-            <option value="tutti">Atlete e insegnanti</option>
+            <option value="tutti">Atleti e insegnanti</option>
           </Select>
         </Field>
         <Field label="Firma a mano" htmlFor="dt-sign">
@@ -395,14 +395,14 @@ function TypeDialog({ type, onClose }: { type: DocumentType; onClose: () => void
             {(Object.keys(SIGNATURE_LABEL) as DocumentType['signatureMode'][]).map((s) => <option key={s} value={s}>{SIGNATURE_LABEL[s]}</option>)}
           </Select>
         </Field>
-        <Field label="Descrizione per le atlete" htmlFor="dt-desc" className="sm:col-span-2">
+        <Field label="Descrizione per gli atleti" htmlFor="dt-desc" className="sm:col-span-2">
           <Textarea id="dt-desc" rows={2} value={form.description} onChange={(e) => set('description', e.target.value)} />
         </Field>
         <Field label="Validità (mesi, vuoto = nessuna scadenza)" htmlFor="dt-val">
           <Input id="dt-val" type="number" min={1} value={form.validityMonths ?? ''} onChange={(e) => set('validityMonths', e.target.value ? Number(e.target.value) : undefined)} />
         </Field>
         <div className="space-y-2 text-sm text-ink-soft">
-          {([['required', 'Obbligatorio per tutti i destinatari'], ['requiredForCompetitive', 'Obbligatorio solo per agoniste e classi agonistiche'], ['expiryRequired', 'Data di scadenza obbligatoria'], ['sensitive', 'Dato riservato (es. sanitario)'], ['active', 'Attiva (richiesta alle atlete)']] as const).map(([k, label]) => (
+          {([['required', 'Obbligatorio per tutti i destinatari'], ['requiredForCompetitive', 'Obbligatorio solo per agoniste e classi agonistiche'], ['expiryRequired', 'Data di scadenza obbligatoria'], ['sensitive', 'Dato riservato (es. sanitario)'], ['active', 'Attiva (richiesta agli atleti)']] as const).map(([k, label]) => (
             <label key={k} className="flex items-center gap-2">
               <input type="checkbox" className="size-4 accent-rosa-intenso" checked={!!form[k]} onChange={(e) => set(k, e.target.checked)} /> {label}
             </label>
@@ -422,7 +422,7 @@ function SharedTab() {
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-ink-muted">Regolamenti e moduli scaricabili dalle atlete o dalle insegnanti.</p>
+        <p className="text-sm text-ink-muted">Regolamenti e moduli scaricabili dagli atleti o dalle insegnanti.</p>
         <Button onClick={() => setAdding(true)}>
           <Upload /> Pubblica documento
         </Button>
@@ -491,7 +491,7 @@ function SharedDialog({ onClose }: { onClose: () => void }) {
         <Field label="Visibile a" htmlFor="sh-aud">
           <Select id="sh-aud" value={audience} onChange={(e) => setAudience(e.target.value as SharedDocument['audience'])}>
             <option value="tutti">Tutti</option>
-            <option value="allieve">Solo atlete</option>
+            <option value="allieve">Solo atleti</option>
             <option value="insegnanti">Solo insegnanti</option>
           </Select>
         </Field>

@@ -56,9 +56,9 @@ export interface MemberDocumentRow {
  * per le tipologie che chiedono più documenti, una riga per documento più una per ogni mancante;
  * in fondo i documenti liberi, senza tipologia.
  */
-/** La scadenza è obbligatoria se lo chiede la struttura per tutti i documenti o la singola tipologia */
-export function expiryRequired(db: OasiDatabase, type: DocumentType | undefined): boolean {
-  return db.association.settings.documentExpiryRequired === true || type?.expiryRequired === true
+/** Scadenza obbligatoria: la decide la tipologia (Archivio → Tipologie); i documenti liberi la chiedono sempre */
+export function expiryRequired(_db: OasiDatabase, type: DocumentType | undefined): boolean {
+  return !type || type.id === FREE_TYPE.id || type.expiryRequired === true
 }
 
 export function memberDocuments(db: OasiDatabase, memberId: string, today = todayISO()): MemberDocumentRow[] {
@@ -68,7 +68,7 @@ export function memberDocuments(db: OasiDatabase, memberId: string, today = toda
   const sameSlot = (a: MemberDocument, b: MemberDocument) => a.typeId === b.typeId && (a.title ?? '').toLowerCase() === (b.title ?? '').toLowerCase()
   const history = (doc: MemberDocument) => mine.filter((d) => !d.current && sameSlot(d, doc)).sort((a, b) => b.version - a.version)
   const typed = (db.documentTypes ?? [])
-    // Solo le tipologie destinate a questo profilo (atlete o insegnanti)
+    // Solo le tipologie destinate a questo profilo (atleti o insegnanti)
     .filter((t) => (t.audience ?? 'allieve') === 'tutti' || (t.audience ?? 'allieve') === who || mine.some((d) => d.typeId === t.id))
     // Le tipologie per soli agonisti non compaiono ai non agonisti (a meno che abbiano già caricato qualcosa)
     .filter((t) => (t.active && (!t.requiredForCompetitive || t.required || competitive)) || mine.some((d) => d.typeId === t.id))

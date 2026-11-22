@@ -29,7 +29,7 @@ import { AdminUsers } from '@/pages/admin/AdminUsers'
 import { AdminClasses } from '@/pages/admin/AdminClasses'
 import { AdminEvents } from '@/pages/admin/AdminEvents'
 import { AdminSettings } from '@/pages/admin/AdminSettings'
-import { AdminFees } from '@/pages/admin/AdminFees'
+import { AdminPlans } from '@/pages/admin/AdminPlans'
 import { AdminArchive } from '@/pages/admin/AdminArchive'
 import { FigureEditorPage } from '@/pages/shared/FigureEditorPage'
 import { ManageFiguresPage } from '@/pages/shared/ManageFiguresPage'
@@ -108,7 +108,8 @@ export default function App() {
               <Route path="figure/:id" element={<ManageFigureDetailPage basePath="/admin/figure" studentBase="/admin/utenti" />} />
               <Route path="figure/:id/modifica" element={<FigureEditorPage basePath="/admin/figure" />} />
               <Route path="eventi" element={<AdminEvents />} />
-              <Route path="quote" element={<AdminFees />} />
+              <Route path="piani" element={<AdminPlans />} />
+              <Route path="quote" element={<Navigate to="/admin/piani" replace />} />
               <Route path="gestione" element={<AdminSettings />} />
               <Route path="notifiche" element={<NotificationsPage />} />
             </Route>

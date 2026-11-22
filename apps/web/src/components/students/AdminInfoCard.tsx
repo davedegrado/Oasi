@@ -1,4 +1,4 @@
-import { CreditCard, FileHeart, IdCard, Mail, Phone, Wallet } from 'lucide-react'
+import { CreditCard, FileHeart, IdCard, Mail, Phone } from 'lucide-react'
 import { useState } from 'react'
 import { Upload } from 'lucide-react'
 import type { Student } from '@/types'
@@ -43,7 +43,6 @@ export function AdminInfoCard({ student, asAdmin = false }: { student: Student; 
   const certMissing = !m.medicalCertificateExpiresAt
   const certExpired = !certMissing && m.medicalCertificateExpiresAt < today
   const certSoon = !certExpired && m.medicalCertificateExpiresAt < addDays(today, 30)
-  const feeExpired = m.feePaidUntil < today
 
   const rows = [
     { icon: IdCard, label: 'Tessera associativa', value: m.cardNumber || 'da assegnare (lo fa la segreteria)', tone: m.cardNumber ? undefined : 'text-danger' },
@@ -54,7 +53,6 @@ export function AdminInfoCard({ student, asAdmin = false }: { student: Student; 
       value: certMissing ? 'da consegnare' : `${certExpired ? 'scaduto il' : 'valido fino al'} ${formatDate(m.medicalCertificateExpiresAt, { year: true })}`,
       tone: certMissing || certExpired ? 'text-danger' : certSoon ? 'text-warn' : undefined,
     },
-    { icon: Wallet, label: 'Quota', value: `${m.feePlan} · ${feeExpired ? 'da rinnovare' : `saldata fino al ${formatDate(m.feePaidUntil)}`}`, tone: feeExpired ? 'text-danger' : undefined },
     { icon: Mail, label: 'Email', value: student.email },
     { icon: Phone, label: 'Telefono', value: student.phone },
   ]

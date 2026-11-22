@@ -21,7 +21,7 @@ const slugify = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]
 
 /**
  * Discipline come dati della palestra: si creano, modificano, attivano e disattivano.
- * Disattivare non elimina classi, atlete o storico: impedisce solo nuove classi e iscrizioni.
+ * Disattivare non elimina classi, atleti o storico: impedisce solo nuove classi e iscrizioni.
  */
 export function DisciplinesManager() {
   const db = useDatabase()
@@ -62,7 +62,7 @@ export function DisciplinesManager() {
                       {d.name} {!d.isActive && <Badge tone="warn">Disattivata</Badge>}
                     </p>
                     <p className="text-xs text-ink-soft">
-                      {classes.length} classi · {students} atlete · {figures} figure
+                      {classes.length} classi · {students} atleti · {figures} figure
                     </p>
                   </div>
                   <Button size="icon" variant="ghost" aria-label={`Modifica ${d.name}`} onClick={() => setEditing(d)}>

@@ -7,9 +7,7 @@ import type {
   Teacher,
   AssociationInfo,
   AttendanceMark,
-  Charge,
   FeePlan,
-  PaymentRecord,
   ClassGroup,
   Figure,
   FigureProgress,
@@ -34,7 +32,7 @@ export interface OasiRepository {
   /** Notifica i cambiamenti dello snapshot */
   subscribe(listener: () => void): () => void
 
-  // Progressi atlete
+  // Progressi atleti
   updateProgress(studentId: string, figureId: string, patch: Partial<Omit<FigureProgress, 'updatedAt'>>): Promise<void>
 
   // Lezioni e presenze
@@ -46,7 +44,10 @@ export interface OasiRepository {
   setDeclaration(lessonId: string, studentId: string, mark: AttendanceMark | null): Promise<void>
 
   // Richieste di iscrizione e di recupero
-  requestEnrollment(classId: string, studentId: string, note: string): Promise<void>
+  /** L'atleta chiede l'iscrizione scegliendo il piano; il piano parte quando l'iscrizione viene accettata */
+  requestEnrollment(classId: string, studentId: string, note: string, planId: string): Promise<void>
+  /** L'atleta già iscritta sceglie un nuovo piano per la classe (rinnovo): vale da subito */
+  choosePlan(studentId: string, classId: string, planId: string): Promise<void>
   requestMakeup(studentId: string, targetLessonId: string, missedLessonId: string | undefined, note: string): Promise<void>
   /** Approva o rifiuta; decidedBy = id insegnante o 'admin'. Rifiuta se la classe è piena. */
   decideEnrollment(requestId: string, approve: boolean, decidedBy: string): Promise<void>
@@ -76,7 +77,7 @@ export interface OasiRepository {
   saveClass(cls: ClassGroup): Promise<void>
   deleteClass(classId: string): Promise<void>
 
-  // Atlete
+  // Atleti
   updateStudent(studentId: string, patch: Partial<Student>): Promise<void>
 
   // Eventi
@@ -87,7 +88,7 @@ export interface OasiRepository {
   saveEventGroup(eventId: string, group: EventGroup): Promise<void>
   deleteEventGroup(eventId: string, groupId: string): Promise<void>
 
-  // Discipline (dati della palestra): la disattivazione conserva classi, atlete e storico
+  // Discipline (dati della palestra): la disattivazione conserva classi, atleti e storico
   saveDiscipline(discipline: DisciplineInfo): Promise<void>
 
   // Archivio documentale: un documento appartiene a un profilo, l'archivio lo legge senza copiarlo
@@ -110,21 +111,10 @@ export interface OasiRepository {
   // Associazione
   updateAssociation(patch: Partial<AssociationInfo>): Promise<void>
 
-  // Piani, quote e pagamenti (incassati fuori dall'app: qui si registrano soltanto)
+  // Piani (listino): li scrive l'amministrazione, li sceglie l'atleta. Nessun pagamento gestito nell'app.
   savePlan(plan: FeePlan): Promise<void>
-  /** Assegna un piano: calcola la validità e genera le quote (unica soluzione o rate) */
-  assignPlan(input: { studentId: string; planId: string; paymentMode: 'unica' | 'rate'; periodId?: string; validFrom?: string }): Promise<void>
-  addCharge(charge: Omit<Charge, 'id' | 'payments'>): Promise<void>
-  /** Registra un pagamento ricevuto (anche parziale). Rifiuta importi oltre il residuo. */
-  recordPayment(chargeId: string, payment: Omit<PaymentRecord, 'id'>): Promise<void>
-  deletePayment(chargeId: string, paymentId: string): Promise<void>
-  /** La segreteria restituisce a mano un ingresso scalato (es. assenza senza disdetta) */
+  /** La segreteria restituisce a mano una lezione scalata (es. assenza senza disdetta) */
   refundEntry(memberPlanId: string, note: string): Promise<void>
-
-  // Lezioni singole: prenotabili a partire da N ore prima (impostazione della palestra), disdetta libera fino a M ore prima
-  bookSingleLesson(studentId: string, lessonId: string): Promise<void>
-  /** Restituisce true se la disdetta è tardiva (la quota resta dovuta) */
-  cancelSingleLesson(studentId: string, lessonId: string): Promise<boolean>
 
   // Sostituzioni: l'insegnante della classe (o l'amministrazione) indica chi la sostituisce
   setSubstitute(lessonId: string, teacherId: string | null, note: string): Promise<void>

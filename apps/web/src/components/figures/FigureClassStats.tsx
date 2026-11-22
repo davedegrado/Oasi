@@ -9,8 +9,8 @@ import { studentsByFigureStatus } from '@/services/selectors'
 import { STATUS_LABEL, STATUS_ORDER } from '@/lib/labels'
 import { cn } from '@/lib/utils'
 
-/** Panoramica di come le atlete stanno lavorando sulla figura (dati condivisi con l'area atleta) */
-export function FigureClassStats({ figureId, students, studentLinkBase, title = 'Le atlete su questa figura' }: { figureId: string; students: Student[]; studentLinkBase: string; title?: string }) {
+/** Panoramica di come gli atleti stanno lavorando sulla figura (dati condivisi con l'area atleta) */
+export function FigureClassStats({ figureId, students, studentLinkBase, title = 'Gli atleti su questa figura' }: { figureId: string; students: Student[]; studentLinkBase: string; title?: string }) {
   const db = useDatabase()
   const rows = studentsByFigureStatus(db, figureId, students)
   const segments = STATUS_ORDER.map((s) => ({ label: STATUS_LABEL[s], value: rows.filter((r) => r.status === s).length, color: STATUS_COLOR[s] }))

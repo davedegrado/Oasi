@@ -53,7 +53,7 @@ export function AdminDashboard() {
       </section>
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <StatCard label="Atlete" value={db.students.length} hint={`${activeStudents.length} attive`} icon={<Users />} />
+        <StatCard label="Atleti" value={db.students.length} hint={`${activeStudents.length} attive`} icon={<Users />} />
         <StatCard label="Insegnanti" value={db.teachers.length} hint="danza aerea" icon={<Sparkles />} tone="tessuti" />
         <StatCard label="Corsi attivi" value={db.classes.length} hint={`${db.classes.reduce((s, c) => s + classOccupancy(c).free, 0)} posti liberi`} icon={<GraduationCap />} tone="ok" />
         <StatCard label="Presenze recenti" value={`${percent(recentPresent, recentTotal)}%`} hint="ultime 8 lezioni" icon={<Percent />} tone="warn" />
@@ -91,7 +91,7 @@ export function AdminDashboard() {
         <Card>
           <CardContent>
             <h2 className="text-base font-bold">Presenze ultime lezioni</h2>
-            <p className="text-sm text-ink-muted">Percentuale di atlete presenti su quelle attese, lezione per lezione</p>
+            <p className="text-sm text-ink-muted">Percentuale di atleti presenti su quelle attese, lezione per lezione</p>
             <AttendanceChart
               className="mt-4"
               points={recentChart.map((r) => ({ key: r.lesson.id, label: formatDateShort(r.lesson.date), detail: r.cls?.name ?? '', present: r.present, total: r.total }))}
@@ -101,7 +101,7 @@ export function AdminDashboard() {
         <Card>
           <CardContent>
             <h2 className="text-base font-bold">Panoramica progressi</h2>
-            <p className="text-sm text-ink-muted">Stato delle figure di tutte le atlete attive</p>
+            <p className="text-sm text-ink-muted">Stato delle figure di tutti gli atleti attivi</p>
             <div className="mt-4 flex flex-col items-center gap-5 sm:flex-row">
               <Donut segments={statusTotals} size={150} thickness={16}>
                 <div>
@@ -118,7 +118,7 @@ export function AdminDashboard() {
                       <Link to={`/admin/figure/${figure.id}`} className="truncate font-semibold hover:text-rosa-intenso">
                         {figure.name}
                       </Link>
-                      <span className="text-ink-muted">{working} atlete</span>
+                      <span className="text-ink-muted">{working} atleti</span>
                     </li>
                   ))}
                 </ul>

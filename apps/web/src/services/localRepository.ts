@@ -3,7 +3,8 @@ import { applyClosure, createSeedDatabase, DATABASE_VERSION } from '@/data/seed'
 import { addDays, addMonths, formatDate, startOfWeek, todayISO } from '@/lib/dates'
 import { uid } from '@/lib/utils'
 import type { OasiRepository } from './repository'
-import { eventParticipants, isCompetitiveClass, isLessonPast, lessonRoster, makeupCredits, makeupLevelAllowed, makeupWindow, singleLessonWindow } from './selectors'
+import { eventParticipants, isCompetitiveClass, isLessonPast, lessonAccess, lessonRoster, makeupCredits, makeupLevelAllowed, makeupWindow, planUsage, plansForClass, singleLessonWindow } from './selectors'
+import { buildDemoAccounts, planValidity } from '@/data/plans'
 import { documentState, expiryRequired, FREE_TYPE } from './documents'
 
 const STORAGE_KEY = 'oasi-demo-db'
@@ -69,15 +70,43 @@ function migrateFrom6(db: OasiDatabase): OasiDatabase {
 /** v8 → v9: agonismo, classi con più discipline, brani degli eventi, soglie configurabili, piani e quote */
 const days = (n: number | undefined) => `${n ?? 0} ${n === 1 ? 'giorno' : 'giorni'}`
 
+/**
+ * v16 → v17: piani scelti dall'atleta, niente quote né pagamenti. Il vecchio listino (con rate e stagione)
+ * non si converte: si riparte dal listino di Oasi e da un piano per ogni classe frequentata.
+ * Scadenza dei documenti decisa dalla tipologia (tutte quelle di Oasi la chiedono).
+ */
+function migrateFrom16(db: OasiDatabase): OasiDatabase {
+  const seed = createSeedDatabase()
+  const legacy = db as OasiDatabase & { season?: unknown; charges?: unknown }
+  const { season: _season, charges: _charges, ...rest } = legacy
+  const settings = { ...db.association.settings } as Record<string, unknown>
+  delete settings.paymentMethods
+  delete settings.documentExpiryRequired
+  return {
+    ...rest,
+    version: DATABASE_VERSION,
+    association: { ...db.association, settings: settings as OasiDatabase['association']['settings'] },
+    students: db.students.map((s) => {
+      const { feePlan: _p, feePaidUntil: _u, ...membership } = s.membership as typeof s.membership & { feePlan?: string; feePaidUntil?: string }
+      return { ...s, membership }
+    }),
+    plans: seed.plans,
+    memberPlans: buildDemoAccounts(db.students, todayISO()).memberPlans,
+    documentTypes: db.documentTypes.map((t) => ({ ...t, expiryRequired: true })),
+    lessons: db.lessons.map((l) => (l.bookings?.length ? { ...l, bookings: undefined } : l)),
+    enrollmentRequests: db.enrollmentRequests.map((r) => (r.planId || r.status !== 'in_attesa' ? r : { ...r, planId: 'plan-adulti-1-a' })),
+  }
+}
+
 /** Brano della versione ≤ 15 (sostituito dai gruppi) */
 type LegacyTrack = { id: string; title: string; artist?: string; group?: string; classId?: string; addedBy?: string }
 
 /** v15 → v16: i brani diventano gruppi con la loro canzone (solo il titolo, niente file audio) */
 function migrateFrom15(db: OasiDatabase): OasiDatabase {
   const seed = createSeedDatabase()
-  return {
+  return migrateFrom16({
     ...db,
-    version: DATABASE_VERSION,
+    version: 16,
     events: db.events.map((e) => {
       const { tracks, ...rest } = e as typeof e & { tracks?: LegacyTrack[] }
       if (e.groups) return rest
@@ -94,7 +123,7 @@ function migrateFrom15(db: OasiDatabase): OasiDatabase {
         })),
       }
     }),
-  }
+  })
 }
 
 /** v14 → v15: per Oasi la data di scadenza è obbligatoria in ogni documento */
@@ -102,7 +131,6 @@ function migrateFrom14(db: OasiDatabase): OasiDatabase {
   return migrateFrom15({
     ...db,
     version: 15,
-    association: { ...db.association, settings: { ...db.association.settings, documentExpiryRequired: db.association.settings.documentExpiryRequired ?? true } },
     // Documenti dimostrativi caricati senza scadenza: un anno dal caricamento
     documents: db.documents.map((d) => (d.expiresOn ? d : { ...d, expiresOn: addMonths(d.uploadedAt.slice(0, 10), 12) })),
   })
@@ -160,7 +188,6 @@ function migrateFrom10(db: OasiDatabase): OasiDatabase {
         bookingOpensHours: seed.association.settings.bookingOpensHours,
         classCategories: settings.classCategories ?? seed.association.settings.classCategories,
         maxDisciplines: settings.maxDisciplines ?? seed.association.settings.maxDisciplines,
-        paymentMethods: settings.paymentMethods ?? seed.association.settings.paymentMethods,
       },
     },
     classes: [
@@ -195,10 +222,8 @@ function migrateFrom8(db: OasiDatabase): OasiDatabase {
     version: 9,
     association: { ...db.association, settings: { ...seed.association.settings, ...db.association.settings, absenceNoticeHours: seed.association.settings.absenceNoticeHours } },
     documentTypes: [...db.documentTypes, ...seed.documentTypes.filter((t) => t.requiredForCompetitive && !db.documentTypes.some((x) => x.id === t.id))],
-    season: db.season ?? seed.season,
     plans: db.plans ?? seed.plans,
     memberPlans: db.memberPlans ?? seed.memberPlans,
-    charges: db.charges ?? seed.charges,
   })
 }
 
@@ -237,6 +262,7 @@ function loadFromStorage(): OasiDatabase | null {
     if (parsed.version === 13) return migrateFrom13(parsed)
     if (parsed.version === 14) return migrateFrom14(parsed)
     if (parsed.version === 15) return migrateFrom15(parsed)
+    if (parsed.version === 16) return migrateFrom16(parsed)
     if (parsed.version !== DATABASE_VERSION) return null
     return parsed
   } catch {
@@ -290,6 +316,13 @@ const documentRecipient = (db: OasiDatabase, memberId: string) =>
 export const MAX_DOCUMENT_BYTES = 4 * 1024 * 1024
 export const ALLOWED_DOCUMENT_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic']
 
+/** Piano sottoscritto oggi per una classe: validità in mesi dalla sottoscrizione o periodo del piano */
+function newMemberPlan(db: OasiDatabase, studentId: string, classId: string, planId: string) {
+  const plan = db.plans.find((p) => p.id === planId)!
+  const today = todayISO()
+  return { id: uid('mp'), studentId, planId, classId, ...planValidity(plan, today), lessons: plan.lessons, createdAt: today }
+}
+
 /** Nuova versione di un documento: la precedente resta nello storico, non è più "corrente" */
 function newVersion(
   db: OasiDatabase,
@@ -323,7 +356,7 @@ function restoreLesson(db: OasiDatabase, l: OasiDatabase['lessons'][number]) {
   return { ...l, status: 'regolare' as const, closureId: undefined, note: undefined, startTime: cls?.startTime ?? l.startTime, endTime: cls?.endTime ?? l.endTime }
 }
 
-/** Avvisa le atlete della classe (e i recuperi) quando una lezione viene annullata o variata */
+/** Avvisa gli atleti della classe (e i recuperi) quando una lezione viene annullata o variata */
 function notifyLessonChange(prev: OasiDatabase, lessonId: string, status: string | undefined, note: string | undefined, next: OasiDatabase): OasiDatabase {
   if (status !== 'annullata' && status !== 'variata') return next
   const lesson = next.lessons.find((l) => l.id === lessonId)
@@ -415,13 +448,33 @@ export class LocalRepository implements OasiRepository {
       const lesson = db.lessons.find((l) => l.id === lessonId)
       const cls = db.classes.find((c) => c.id === lesson?.classId)
       if (!lesson || !cls) return db
-      const makeups = db.makeupRequests.filter((r) => r.targetLessonId === lessonId && r.status === 'approvata').map((r) => r.studentId)
-      const attendance = Object.fromEntries([...cls.studentIds, ...makeups].map((id) => [id, mark]))
+      // Solo chi è atteso a quella lezione (piano valido, "ci sarò" dove serve, recuperi)
+      const attendance = Object.fromEntries(lessonRoster(db, lesson).map((r) => [r.student.id, mark]))
       return { ...db, lessons: db.lessons.map((l) => (l.id === lessonId ? { ...l, attendance } : l)) }
     })
 
   setDeclaration: OasiRepository['setDeclaration'] = (lessonId, studentId, mark) =>
-    this.commit((db) => ({
+    this.commit((db) => {
+      const lesson = db.lessons.find((l) => l.id === lessonId)
+      if (!lesson) throw new Error('Lezione non trovata.')
+      const access = lessonAccess(db, studentId, lesson)
+      const previous = lesson.declarations?.[studentId]
+      if (!isLessonPast(lesson) && previous !== 'presente') {
+        if (access.status === 'scaduto' || access.status === 'nessun_piano') throw new Error('Il tuo piano non copre questa lezione: scegline uno nuovo dalla pagina Corsi.')
+        if (access.status === 'esaurito' && mark === 'presente') throw new Error('Hai usato tutte le lezioni del tuo piano: scegline uno nuovo dalla pagina Corsi.')
+      }
+      const w = singleLessonWindow(db, lesson)
+      if (mark === 'presente') {
+        if (!access.needsConfirm) throw new Error('Con il tuo piano sei già attesa a ogni lezione.')
+        if (w.tooEarly) throw new Error(`Puoi dire “ci sarò” a partire da ${db.association.settings.bookingOpensHours} ore prima della lezione.`)
+        if (w.tooLate) throw new Error('Non è più possibile aggiungersi a questa lezione.')
+        const cls = db.classes.find((c) => c.id === lesson.classId)
+        if (cls && lessonRoster(db, lesson).length >= cls.capacity) throw new Error('La lezione non ha più posti disponibili.')
+      }
+      // Ritirare un "ci sarò" a ridosso della lezione: la lezione resta scalata, come una disdetta tardiva
+      if (previous === 'presente' && mark === null && w.hours < db.association.settings.absenceNoticeHours)
+        throw new Error(`La disdetta libera è possibile fino a ${db.association.settings.absenceNoticeHours} ore prima della lezione.`)
+      return {
       ...db,
       lessons: db.lessons.map((l) => {
         if (l.id !== lessonId) return l
@@ -430,20 +483,39 @@ export class LocalRepository implements OasiRepository {
         else delete declarations[studentId]
         return { ...l, declarations }
       }),
-    }))
+      }
+    })
 
-  requestEnrollment: OasiRepository['requestEnrollment'] = (classId, studentId, note) =>
+  choosePlan: OasiRepository['choosePlan'] = (studentId, classId, planId) =>
+    this.commit((db) => {
+      const cls = db.classes.find((c) => c.id === classId)
+      if (!cls?.studentIds.includes(studentId)) throw new Error('Non sei iscritta a questa classe.')
+      const plan = plansForClass(db, cls).find((p) => p.id === planId)
+      if (!plan) throw new Error('Scegli uno dei piani disponibili per questa classe.')
+      const mp = newMemberPlan(db, studentId, classId, planId)
+      return withNotifications({ ...db, memberPlans: [mp, ...db.memberPlans] }, [{
+        kind: 'comunicazione',
+        title: 'Nuovo piano scelto',
+        body: `${studentName(db, studentId)} ha scelto «${plan.name}» per ${cls.name} (${formatDate(mp.validFrom)} – ${formatDate(mp.validUntil)}).`,
+        to: ['admin'],
+        link: { admin: '/admin/piani' },
+      }])
+    })
+
+  requestEnrollment: OasiRepository['requestEnrollment'] = (classId, studentId, note, planId) =>
     this.commit((db) => {
       const open = db.enrollmentRequests.some((r) => r.classId === classId && r.studentId === studentId && r.status === 'in_attesa')
       const enrolled = db.classes.find((c) => c.id === classId)?.studentIds.includes(studentId)
       if (open || enrolled) return db
       const cls = db.classes.find((c) => c.id === classId)
+      const plan = plansForClass(db, cls).find((p) => p.id === planId)
+      if (!plan) throw new Error('Scegli uno dei piani disponibili per questa classe.')
       return withNotifications(
         {
           ...db,
-          enrollmentRequests: [{ id: uid('enr'), classId, studentId, note, status: 'in_attesa', createdAt: todayISO() }, ...db.enrollmentRequests],
+          enrollmentRequests: [{ id: uid('enr'), classId, studentId, planId, note, status: 'in_attesa', createdAt: todayISO() }, ...db.enrollmentRequests],
         },
-        [{ kind: 'iscrizione', title: 'Nuova richiesta di iscrizione', body: `${studentName(db, studentId)} chiede di entrare in ${cls?.name ?? 'una classe'}.`, to: [`teacher:${cls?.teacherId}`, 'admin'], link: { insegnante: '/insegnante/lezioni?tab=richieste', admin: '/admin/classi' } }],
+        [{ kind: 'iscrizione', title: 'Nuova richiesta di iscrizione', body: `${studentName(db, studentId)} chiede di entrare in ${cls?.name ?? 'una classe'} con il piano «${plan.name}».`, to: [`teacher:${cls?.teacherId}`, 'admin'], link: { insegnante: '/insegnante/lezioni?tab=richieste', admin: '/admin/classi' } }],
       )
     })
 
@@ -492,6 +564,8 @@ export class LocalRepository implements OasiRepository {
         r.id === requestId ? { ...r, status: approve ? 'approvata' : 'rifiutata', decidedAt: todayISO(), decidedBy } : r,
       ),
       classes: approve ? db.classes.map((c) => (c.id === cls.id ? { ...c, studentIds: [...c.studentIds, req.studentId] } : c)) : db.classes,
+      // Il piano scelto parte dal giorno in cui l'iscrizione viene accettata
+      memberPlans: approve && req.planId ? [newMemberPlan(db, req.studentId, cls.id, req.planId), ...db.memberPlans] : db.memberPlans,
       students: approve
         ? db.students.map((s) => (s.id === req.studentId ? { ...s, classIds: [...new Set([...s.classIds, cls.id])] } : s))
         : db.students,
@@ -902,97 +976,26 @@ export class LocalRepository implements OasiRepository {
     this.commit((db) => ({ ...db, association: { ...db.association, ...patch } }))
 
   savePlan: OasiRepository['savePlan'] = (plan) =>
-    this.commit((db) => ({ ...db, plans: db.plans.some((p) => p.id === plan.id) ? db.plans.map((p) => (p.id === plan.id ? plan : p)) : [...db.plans, plan] }))
-
-  assignPlan: OasiRepository['assignPlan'] = ({ studentId, planId, paymentMode, periodId, validFrom }) =>
     this.commit((db) => {
-      const plan = db.plans.find((p) => p.id === planId)
-      if (!plan || !plan.active) throw new Error('Piano non disponibile.')
-      if (paymentMode === 'rate' && !plan.installments?.length) throw new Error('Questo piano non prevede il pagamento a rate.')
-      // Validità: periodo scelto → settimane dalla data d'inizio → date del piano → stagione
-      const period = db.season.periods.find((p) => p.id === periodId)
-      let from = validFrom ?? plan.validFrom ?? db.season.startDate
-      let until = plan.validUntil ?? db.season.endDate
-      let label = `Stagione ${db.season.name}`
-      if (plan.billing === 'periodico') {
-        if (!period) throw new Error('Scegli il periodo: il piano è periodico.')
-        from = period.startDate
-        until = period.endDate
-        label = period.name
-      } else if (plan.validityWeeks) {
-        from = validFrom ?? todayISO()
-        until = addDays(from, plan.validityWeeks * 7 - 1)
-        label = `${formatDate(from)} – ${formatDate(until)}`
-      }
-      const mp = { id: uid('mp'), studentId, planId, paymentMode, validFrom: from, validUntil: until, entriesTotal: plan.entries, entriesUsed: plan.entries ? 0 : undefined, createdAt: todayISO() }
-      const base = { studentId, memberPlanId: mp.id, kind: plan.kind === 'tessera' ? ('tessera' as const) : ('piano' as const), payments: [] }
-      const charges =
-        paymentMode === 'rate'
-          ? plan.installments!.map((i, n) => ({ ...base, id: uid('chg'), description: `${plan.name} · rata ${n + 1} di ${plan.installments!.length}`, installmentNo: n + 1, periodLabel: `${formatDate(i.coversFrom)} – ${formatDate(i.coversUntil)}`, amountCents: i.amountCents, dueOn: i.dueOn }))
-          : [{ ...base, id: uid('chg'), description: plan.name, periodLabel: label, amountCents: plan.amountCents, dueOn: from }]
-      return { ...db, memberPlans: [mp, ...db.memberPlans], charges: [...charges, ...db.charges] }
+      if (!plan.name.trim()) throw new Error('Dai un nome al piano.')
+      if (plan.priceCents < 0) throw new Error('Prezzo non valido.')
+      if (plan.lessons !== undefined && plan.lessons < 1) throw new Error('Il numero di lezioni deve essere almeno 1.')
+      if (plan.weeklyFrequency !== undefined && (plan.weeklyFrequency < 1 || plan.weeklyFrequency > 7)) throw new Error('La frequenza va da 1 a 7 giorni a settimana.')
+      if (plan.validity === 'mesi' && !(plan.months && plan.months > 0)) throw new Error('Indica per quanti mesi vale il piano.')
+      if (plan.validity === 'periodo' && (!plan.validFrom || !plan.validUntil || plan.validUntil < plan.validFrom)) throw new Error('Indica un periodo valido.')
+      return { ...db, plans: db.plans.some((p) => p.id === plan.id) ? db.plans.map((p) => (p.id === plan.id ? plan : p)) : [...db.plans, plan] }
     })
 
   refundEntry: OasiRepository['refundEntry'] = (memberPlanId, note) =>
     this.commit((db) => {
       const mp = db.memberPlans.find((p) => p.id === memberPlanId)
-      if (!mp?.entriesTotal) throw new Error('Il piano non è un pacchetto a ingressi.')
-      if (!mp.entriesUsed) throw new Error('Nessun ingresso scalato da restituire.')
+      if (mp?.lessons === undefined) throw new Error('Il piano non ha un numero di lezioni.')
+      if (planUsage(db, mp).used === 0) throw new Error('Nessuna lezione scalata da restituire.')
       return withNotifications(
-        { ...db, memberPlans: db.memberPlans.map((p) => (p.id === memberPlanId ? { ...p, entriesUsed: (p.entriesUsed ?? 0) - 1 } : p)) },
-        [{ kind: 'comunicazione', title: 'Ingresso restituito', body: `La segreteria ti ha restituito un ingresso del pacchetto.${note.trim() ? ` ${note.trim()}` : ''}`, to: [`student:${mp.studentId}`], link: { allieva: '/allieva/profilo' } }],
+        { ...db, memberPlans: db.memberPlans.map((p) => (p.id === memberPlanId ? { ...p, refunded: (p.refunded ?? 0) + 1 } : p)) },
+        [{ kind: 'comunicazione', title: 'Lezione restituita', body: `La segreteria ti ha restituito una lezione del piano.${note.trim() ? ` ${note.trim()}` : ''}`, to: [`student:${mp.studentId}`], link: { allieva: '/allieva/profilo' } }],
       )
     })
-
-  addCharge: OasiRepository['addCharge'] = (charge) =>
-    this.commit((db) => ({ ...db, charges: [{ ...charge, id: uid('chg'), payments: [] }, ...db.charges] }))
-
-  recordPayment: OasiRepository['recordPayment'] = (chargeId, payment) =>
-    this.commit((db) => {
-      const charge = db.charges.find((c) => c.id === chargeId)
-      if (!charge || charge.cancelled) throw new Error('Quota non disponibile.')
-      const residual = charge.amountCents - charge.payments.reduce((s, p) => s + p.amountCents, 0)
-      if (payment.amountCents <= 0) throw new Error('Importo non valido.')
-      if (payment.amountCents > residual) throw new Error(`Residuo da pagare: ${(residual / 100).toFixed(2)} €.`)
-      return { ...db, charges: db.charges.map((c) => (c.id === chargeId ? { ...c, payments: [...c.payments, { ...payment, id: uid('pay') }] } : c)) }
-    })
-
-  deletePayment: OasiRepository['deletePayment'] = (chargeId, paymentId) =>
-    this.commit((db) => ({ ...db, charges: db.charges.map((c) => (c.id === chargeId ? { ...c, payments: c.payments.filter((p) => p.id !== paymentId) } : c)) }))
-
-  bookSingleLesson: OasiRepository['bookSingleLesson'] = (studentId, lessonId) =>
-    this.commit((db) => {
-      const lesson = db.lessons.find((l) => l.id === lessonId)
-      const cls = db.classes.find((c) => c.id === lesson?.classId)
-      if (!lesson || !cls || lesson.status === 'annullata') throw new Error('La lezione non è prenotabile.')
-      if (cls.studentIds.includes(studentId) || lesson.bookings?.includes(studentId)) throw new Error('Sei già in questa lezione.')
-      const w = singleLessonWindow(db, lesson)
-      if (w.hours <= 0) throw new Error('La lezione è già iniziata.')
-      if (w.tooEarly) throw new Error(`Le prenotazioni si aprono ${db.association.settings.bookingOpensHours} ore prima: dal ${formatDate(w.openAt!.toISOString().slice(0, 10))} alle ${w.openAt!.toTimeString().slice(0, 5)}.`)
-      if (w.tooLate) throw new Error(`La prenotazione va fatta almeno ${db.association.settings.bookingClosesHours ?? 0} ore prima della lezione.`)
-      if (lessonRoster(db, lesson).length >= cls.capacity) throw new Error('La lezione non ha più posti disponibili.')
-      const plan = db.plans.find((p) => p.kind === 'lezione_singola' && p.active)
-      if (!plan) throw new Error('La palestra non ha configurato la tariffa delle lezioni singole.')
-      const charge = { id: uid('chg'), studentId, description: `${plan.name} del ${formatDate(lesson.date)}`, kind: 'piano' as const, amountCents: plan.amountCents, dueOn: lesson.date, payments: [], lessonId }
-      return withNotifications(
-        { ...db, lessons: db.lessons.map((l) => (l.id === lessonId ? { ...l, bookings: [...(l.bookings ?? []), studentId] } : l)), charges: [charge, ...db.charges] },
-        [{ kind: 'recupero', title: 'Lezione singola prenotata', body: `${studentName(db, studentId)} ha prenotato ${cls.name}, ${formatDate(lesson.date, { weekday: true })} alle ${lesson.startTime}.`, to: [`teacher:${cls.teacherId}`, 'admin'], link: { insegnante: `/insegnante/lezioni/${lessonId}`, admin: '/admin/classi' } }],
-      )
-    })
-
-  cancelSingleLesson: OasiRepository['cancelSingleLesson'] = (studentId, lessonId) => {
-    const lesson = this.db.lessons.find((l) => l.id === lessonId)
-    if (!lesson?.bookings?.includes(studentId)) return Promise.reject(new Error('Prenotazione non trovata.'))
-    const w = singleLessonWindow(this.db, lesson)
-    if (w.hours <= 0) return Promise.reject(new Error('La lezione è già iniziata.'))
-    // Disdetta libera fino a N ore prima (Oasi: 6); dopo, la quota resta dovuta
-    const late = w.hours < this.db.association.settings.absenceNoticeHours
-    return this.commit((db) => ({
-      ...db,
-      lessons: db.lessons.map((l) => (l.id === lessonId ? { ...l, bookings: (l.bookings ?? []).filter((x) => x !== studentId) } : l)),
-      charges: late ? db.charges : db.charges.map((c) => (c.lessonId === lessonId && c.studentId === studentId ? { ...c, cancelled: true } : c)),
-    })).then(() => late)
-  }
 
   setSubstitute: OasiRepository['setSubstitute'] = (lessonId, teacherId, note) =>
     this.commit((db) => {

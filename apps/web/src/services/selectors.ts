@@ -1,7 +1,8 @@
 import type {
   DemoPersona,
   AttendanceMark,
-  Charge,
+  FeePlan,
+  MemberPlan,
   ClassGroup,
   Discipline,
   Figure,
@@ -77,7 +78,14 @@ export function lessonRoster(db: OasiDatabase, lesson: Lesson): RosterEntry[] {
     .filter((r) => r.targetLessonId === lesson.id && r.status === 'approvata')
     .map((r) => ({ id: r.studentId, isMakeup: true, isBooking: false }))
   const bookings = (lesson.bookings ?? []).map((id) => ({ id, isMakeup: false, isBooking: true }))
-  return [...regular, ...makeups, ...bookings]
+  // Atleti della classe: solo con un piano valido per la lezione; con piani senza partecipazione
+  // automatica solo chi ha detto "ci sarò" (oppure ha già una presenza registrata)
+  const expected = regular.filter(({ id }) => {
+    if (lesson.attendance[id]) return true
+    const access = lessonAccess(db, id, lesson)
+    return access.status === 'ok' && (!access.needsConfirm || lesson.declarations?.[id] === 'presente')
+  })
+  return [...expected, ...makeups, ...bookings]
     .map(({ id, isMakeup, isBooking }) => ({ student: findStudent(db, id), isMakeup, isBooking }))
     .filter((e): e is { student: Student; isMakeup: boolean; isBooking: boolean } => !!e.student)
     .map(({ student, isMakeup, isBooking }) => ({
@@ -193,7 +201,7 @@ export function studentsOfTeacher(db: OasiDatabase, teacherId: string): Student[
   return db.students.filter((s) => ids.has(s.id))
 }
 
-/** Atlete che stanno lavorando (stato "In progetto") su ciascuna figura */
+/** Atleti che stanno lavorando (stato "In progetto") su ciascuna figura */
 export function studentsWorkingOnFigures(db: OasiDatabase, students: Student[]) {
   return db.figures
     .map((figure) => ({
@@ -321,26 +329,70 @@ export function nextMainEvent(db: OasiDatabase) {
   return list.find((e) => e.featured) ?? list.find((e) => e.type === 'saggio' || e.type === 'spettacolo' || e.type === 'gara') ?? list[0]
 }
 
-// ── Quote e pagamenti ───────────────────────────────────────────────
-export type ChargeState = 'pagata' | 'parziale' | 'scaduta' | 'aperta' | 'annullata'
-
-export const chargePaid = (c: Charge) => c.payments.reduce((s, p) => s + p.amountCents, 0)
-
-export function chargeState(c: Charge, today: string): ChargeState {
-  if (c.cancelled) return 'annullata'
-  const paid = chargePaid(c)
-  if (paid >= c.amountCents) return 'pagata'
-  if (c.dueOn < today) return 'scaduta'
-  return paid > 0 ? 'parziale' : 'aperta'
+// ── Piani sottoscritti: validità, lezioni consumate, accesso alle lezioni ──
+/** Piano dell'atleta per la classe che copre la data della lezione (il più recente) */
+export function memberPlanFor(db: OasiDatabase, studentId: string, classId: string, date: string): MemberPlan | undefined {
+  return db.memberPlans
+    .filter((p) => p.studentId === studentId && (!p.classId || p.classId === classId) && p.validFrom <= date && date <= p.validUntil)
+    .sort((a, b) => b.validUntil.localeCompare(a.validUntil))[0]
 }
 
-/** Riepilogo economico di un'atleta (o di tutta la palestra se studentId è assente) */
-export function accountSummary(db: OasiDatabase, today: string, studentId?: string) {
-  const charges = db.charges.filter((c) => !c.cancelled && (!studentId || c.studentId === studentId))
-  const due = charges.reduce((s, c) => s + c.amountCents, 0)
-  const paid = charges.reduce((s, c) => s + chargePaid(c), 0)
-  const overdue = charges.filter((c) => chargeState(c, today) === 'scaduta')
-  return { charges, due, paid, residual: due - paid, overdue, overdueCents: overdue.reduce((s, c) => s + c.amountCents - chargePaid(c), 0) }
+/** Piani dell'atleta per la classe, dal più recente */
+export function memberPlansForClass(db: OasiDatabase, studentId: string, classId: string): MemberPlan[] {
+  return db.memberPlans.filter((p) => p.studentId === studentId && (!p.classId || p.classId === classId)).sort((a, b) => b.validUntil.localeCompare(a.validUntil))
+}
+
+/** La lezione consuma una lezione del piano: presenza, oppure assenza senza disdetta */
+function consumes(lesson: Lesson, studentId: string, plan: FeePlan | undefined) {
+  const actual = lesson.attendance[studentId]
+  const declared = lesson.declarations?.[studentId]
+  if (actual === 'presente') return true
+  return actual === 'assente' && declared !== 'assente' && (plan?.autoAttendance !== false || declared === 'presente')
+}
+
+/** Lezioni di un piano: consumate, prenotate ("ci sarò" su lezioni future) e residue */
+export function planUsage(db: OasiDatabase, mp: MemberPlan) {
+  const plan = db.plans.find((p) => p.id === mp.planId)
+  const lessons = db.lessons.filter((l) => (!mp.classId || l.classId === mp.classId) && l.status !== 'annullata' && l.date >= mp.validFrom && l.date <= mp.validUntil)
+  const consumed = lessons.filter((l) => consumes(l, mp.studentId, plan)).length
+  const reserved = lessons.filter((l) => !isLessonPast(l) && l.declarations?.[mp.studentId] === 'presente' && !l.attendance[mp.studentId]).length
+  const used = Math.max(0, consumed + reserved - (mp.refunded ?? 0))
+  return { consumed, reserved, used, remaining: mp.lessons !== undefined ? Math.max(0, mp.lessons - used) : undefined }
+}
+
+export type LessonAccessStatus = 'ok' | 'scaduto' | 'esaurito' | 'nessun_piano'
+
+/**
+ * Accesso di un'atleta a una lezione della propria classe, secondo il piano scelto:
+ * - nessun piano valido in quella data → la lezione non è disponibile ("scaduto" o "nessun_piano");
+ * - lezioni del piano finite → "esaurito" (se non è già prenotata o svolta);
+ * - piano senza partecipazione automatica → serve "ci sarò" (`needsConfirm`).
+ * I recuperi approvati non dipendono dal piano.
+ */
+export function lessonAccess(db: OasiDatabase, studentId: string, lesson: Lesson): { status: LessonAccessStatus; needsConfirm: boolean; memberPlan?: MemberPlan; plan?: FeePlan } {
+  if (isMakeupFor(db, lesson.id, studentId) || lesson.bookings?.includes(studentId)) return { status: 'ok', needsConfirm: false }
+  const mp = memberPlanFor(db, studentId, lesson.classId, lesson.date)
+  if (!mp) return { status: memberPlansForClass(db, studentId, lesson.classId).length ? 'scaduto' : 'nessun_piano', needsConfirm: false }
+  const plan = db.plans.find((p) => p.id === mp.planId)
+  const needsConfirm = plan?.autoAttendance === false
+  if (mp.lessons !== undefined) {
+    const counted = lesson.declarations?.[studentId] === 'presente' || !!lesson.attendance[studentId]
+    if (!counted && planUsage(db, mp).used >= mp.lessons) return { status: 'esaurito', needsConfirm, memberPlan: mp, plan }
+  }
+  return { status: 'ok', needsConfirm, memberPlan: mp, plan }
+}
+
+/** Piani che l'atleta può scegliere per una classe (attivi, dell'area della classe, non già terminati) */
+export function plansForClass(db: OasiDatabase, cls: ClassGroup | undefined, today = todayISO()): FeePlan[] {
+  return db.plans.filter(
+    (p) => p.active && (!p.areas?.length || !cls?.category || p.areas.includes(cls.category)) && !(p.validity === 'periodo' && p.validUntil && p.validUntil < today),
+  )
+}
+
+/** Descrizione breve della validità di un piano */
+export function planValidityLabel(p: FeePlan): string {
+  if (p.validity === 'mesi') return `${p.months ?? 1} ${p.months === 1 || !p.months ? 'mese' : 'mesi'} dalla sottoscrizione`
+  return `dal ${p.validFrom ? p.validFrom.split('-').reverse().join('/') : '—'} al ${p.validUntil ? p.validUntil.split('-').reverse().join('/') : '—'}`
 }
 
 export const euro = (cents: number) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(cents / 100)
@@ -357,7 +409,7 @@ export function eventPerson(db: OasiDatabase, id: string): { id: string; firstNa
   return t ? { id, firstName: t.firstName, lastName: t.lastName, role: 'insegnante' } : undefined
 }
 
-/** Partecipanti di un evento: adesioni (atlete, insegnanti, segreteria) e atlete delle classi collegate */
+/** Partecipanti di un evento: adesioni (atleti, insegnanti, segreteria) e atleti delle classi collegate */
 export function eventParticipants(db: OasiDatabase, event: { participantIds: string[]; classIds?: string[] }) {
   const fromClasses = db.classes.filter((c) => event.classIds?.includes(c.id)).flatMap((c) => c.studentIds)
   return [...new Set([...event.participantIds, ...fromClasses])].map((id) => eventPerson(db, id)).filter((p): p is NonNullable<typeof p> => !!p)

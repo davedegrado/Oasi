@@ -49,8 +49,6 @@ export interface Membership {
   cardNumber: string
   expiresAt: string
   medicalCertificateExpiresAt: string
-  feePlan: string
-  feePaidUntil: string
 }
 
 export interface Student {
@@ -109,7 +107,7 @@ export interface Lesson {
   declarations?: Record<string, AttendanceMark>
   /** Lezione annullata da una chiusura della sede */
   closureId?: string
-  /** Lezioni singole prenotate da atlete non iscritte alla classe */
+  /** Lezioni singole prenotate da atleti non iscritti alla classe */
   bookings?: string[]
   /** Insegnante che sostituisce quella della classe in questa lezione */
   substituteTeacherId?: string
@@ -188,6 +186,8 @@ export interface EnrollmentRequest {
   id: string
   classId: string
   studentId: string
+  /** Piano scelto dall'atleta per questa classe */
+  planId?: string
   note: string
   status: RequestStatus
   createdAt: string
@@ -230,7 +230,7 @@ export interface AssociationInfo {
   settings: {
     maxStudentsPerClass: number
     absenceNoticeHours: number
-    /** Lezioni singole: si prenotano a partire da N ore prima (massimo; Oasi: 48) */
+    /** Piani senza partecipazione automatica: "ci sarò" a partire da N ore prima (massimo; Oasi: 48) */
     bookingOpensHours?: number
     /** ...e fino a N ore prima (minimo; 0 = fino all'inizio) */
     bookingClosesHours?: number
@@ -238,14 +238,10 @@ export interface AssociationInfo {
     makeupOpensDays?: number
     /** ...e fino a N giorni prima (0 = fino all'inizio). Un giorno = 24 ore */
     makeupClosesDays?: number
-    /** Data di scadenza obbligatoria per ogni documento, di qualunque tipologia (Oasi: sì) */
-    documentExpiryRequired?: boolean
     /** Aree in cui sono organizzate le classi (Oasi: Bambini/Ragazzi, Adulti/Ragazzi) */
     classCategories?: string[]
     /** Numero massimo di discipline per classe (Oasi: 2) */
     maxDisciplines?: number
-    /** Metodi di pagamento accettati (Oasi: bonifico e contanti) */
-    paymentMethods?: PaymentMethod[]
     /** Un recupero in una classe di livello inferiore è consentito */
     makeupLowerLevelAllowed?: boolean
     remindersEnabled: boolean
@@ -273,102 +269,50 @@ export interface OasiDatabase {
   documentTypes: DocumentType[]
   documents: MemberDocument[]
   sharedDocuments: SharedDocument[]
-  season: Season
   plans: FeePlan[]
   memberPlans: MemberPlan[]
-  charges: Charge[]
 }
 
-// ── Stagione, piani, quote e pagamenti registrati ──────────────────
-export interface SeasonPeriod {
-  id: string
-  name: string
-  startDate: string
-  endDate: string
-}
-
-/** Stagione della palestra: date, periodi; le precedenti restano nello storico */
-export interface Season {
-  id: string
-  name: string
-  startDate: string
-  endDate: string
-  periods: SeasonPeriod[]
-}
-
-export type PlanKind = 'abbonamento' | 'pacchetto' | 'lezione_singola' | 'semiprivata' | 'tessera'
-export type PlanBilling = 'annuale' | 'periodico' | 'mensile' | 'una_tantum'
-
-export interface PlanInstallment {
-  amountCents: number
-  dueOn: string
-  coversFrom: string
-  coversUntil: string
-}
-
-/** Piano configurato dalla palestra: nessuna formula commerciale è scritta nel codice */
+// ── Piani (listino) e piani sottoscritti dagli atleti ─────────────
+/**
+ * Piano scritto dall'amministrazione e scelto dall'atleta quando si iscrive a una classe.
+ * Il prezzo è informativo (listino): l'app non calcola né registra pagamenti.
+ */
 export interface FeePlan {
   id: string
   name: string
-  category: string
-  kind: PlanKind
-  billing: PlanBilling
-  /** Prezzo in unica soluzione, in centesimi */
-  amountCents: number
-  /** Rate: un modo di pagare lo stesso piano, non un piano separato */
-  installments?: PlanInstallment[]
+  /** Prezzo di listino, in centesimi */
+  priceCents: number
+  /** Lezioni incluse (pacchetti, lezione singola). Vuoto = senza limite nel periodo di validità */
+  lessons?: number
+  /** Frequenza: giorni a settimana */
   weeklyFrequency?: number
-  /** Pacchetti: numero di ingressi */
-  entries?: number
-  /** Mensile: settimane consecutive di validità */
-  validityWeeks?: number
+  /** Validità: N mesi dalla sottoscrizione, oppure un periodo preciso */
+  validity: 'mesi' | 'periodo'
+  months?: number
   validFrom?: string
   validUntil?: string
-  /** Ore minime di anticipo per prenotare (se diverso dal valore della palestra) */
-  bookingHoursBefore?: number
+  /** Partecipazione automatica: l'atleta è attesa a ogni lezione senza dire "ci sarò" */
+  autoAttendance: boolean
+  /** Aree delle classi per cui si può scegliere (vuoto = tutte) */
+  areas?: string[]
   note?: string
   active: boolean
 }
 
+/** Piano sottoscritto da un atleta per una classe (nasce quando l'iscrizione viene accettata) */
 export interface MemberPlan {
   id: string
   studentId: string
   planId: string
-  paymentMode: 'unica' | 'rate'
+  classId?: string
   validFrom: string
   validUntil: string
-  entriesTotal?: number
-  entriesUsed?: number
+  /** Lezioni incluse (copiate dal piano al momento della sottoscrizione) */
+  lessons?: number
+  /** Lezioni restituite a mano dalla segreteria */
+  refunded?: number
   createdAt: string
-}
-
-export type PaymentMethod = 'contanti' | 'bonifico' | 'pos' | 'altro'
-
-/** Pagamento ricevuto fuori dall'app e registrato dall'amministrazione */
-export interface PaymentRecord {
-  id: string
-  amountCents: number
-  paidOn: string
-  method: PaymentMethod
-  note: string
-}
-
-/** Quota dovuta: retta, rata, tessera, quota gara */
-export interface Charge {
-  id: string
-  studentId: string
-  memberPlanId?: string
-  /** Causale */
-  description: string
-  kind: 'piano' | 'tessera' | 'gara' | 'altro'
-  installmentNo?: number
-  periodLabel?: string
-  amountCents: number
-  dueOn: string
-  cancelled?: boolean
-  payments: PaymentRecord[]
-  /** Lezione singola a cui si riferisce la quota */
-  lessonId?: string
 }
 
 export type ClosureKind = 'festivita' | 'sciopero' | 'chiusura'
@@ -388,7 +332,7 @@ export type NotificationKind = 'iscrizione' | 'recupero' | 'variazione' | 'chius
 
 /**
  * Notifica nel centro notifiche. Destinatari: "student:<id>", "teacher:<id>",
- * "admin", "students" (tutte le atlete), "teachers".
+ * "admin", "students" (tutti gli atleti), "teachers".
  */
 export interface AppNotification {
   id: string
@@ -429,7 +373,7 @@ export interface DocumentType {
   requiredForCompetitive?: boolean
   /** La data di scadenza va sempre indicata da chi carica (es. certificato medico agonistico) */
   expiryRequired?: boolean
-  /** A chi è richiesto (predefinito: atlete). Per gli insegnanti l'amministrazione decide quali e quanti documenti. */
+  /** A chi è richiesto (predefinito: atleti). Per gli insegnanti l'amministrazione decide quali e quanti documenti. */
   audience?: 'allieve' | 'insegnanti' | 'tutti'
   /** Documento da caricare a ogni periodo (es. ogni mese, entro l'ultimo giorno del mese) */
   recurrence?: 'mensile'

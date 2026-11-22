@@ -26,7 +26,7 @@ function GroupForm({ event, group, editorId, onDone }: { event: OasiEvent; group
   const save = async () => {
     try {
       await repo.saveEventGroup(event.id, { id: group?.id ?? uid('grp'), name, song, memberIds: members, createdBy: group?.createdBy ?? editorId })
-      toast(group ? 'Gruppo aggiornato' : 'Gruppo creato: le atlete sono avvisate')
+      toast(group ? 'Gruppo aggiornato' : 'Gruppo creato: gli atleti sono avvisati')
       onDone()
     } catch (e) {
       setError(errorText(e))
@@ -45,10 +45,10 @@ function GroupForm({ event, group, editorId, onDone }: { event: OasiEvent; group
       </div>
       <fieldset>
         <legend className="mb-1.5 text-sm font-semibold text-ink">
-          Atlete del gruppo <span className="font-normal text-ink-muted">· {members.length} scelte</span>
+          Atleti del gruppo <span className="font-normal text-ink-muted">· {members.length} scelti</span>
         </legend>
         {athletes.length === 0 ? (
-          <p className="text-sm text-ink-muted">Nessuna atleta partecipa ancora all’evento.</p>
+          <p className="text-sm text-ink-muted">Nessun atleta partecipa ancora all’evento.</p>
         ) : (
           <ul className="grid max-h-64 gap-1 overflow-y-auto rounded-2xl bg-white p-2 sm:grid-cols-2">
             {athletes.map((p) => {
@@ -88,7 +88,7 @@ function GroupForm({ event, group, editorId, onDone }: { event: OasiEvent; group
 
 /**
  * Gruppi di un evento: li organizzano insegnanti e amministrazione (`editorId`),
- * le atlete partecipanti li consultano (`viewerId`) e vedono evidenziati i propri.
+ * gli atleti partecipanti li consultano (`viewerId`) e vedono evidenziati i propri.
  */
 export function EventGroupsDialog({ event, editorId, viewerId, onClose }: { event: OasiEvent; editorId?: string; viewerId?: string; onClose: () => void }) {
   const db = useDatabase()
@@ -102,7 +102,7 @@ export function EventGroupsDialog({ event, editorId, viewerId, onClose }: { even
       open
       onOpenChange={(o) => !o && onClose()}
       title={`Gruppi · ${event.title}`}
-      description={editorId ? 'Organizza le atlete partecipanti in gruppi e indica la canzone di ciascuno. Un’atleta può stare in più gruppi.' : 'I gruppi dell’evento e la canzone di ciascuno.'}
+      description={editorId ? 'Organizza gli atleti partecipanti in gruppi e indica la canzone di ciascuno. Un’atleta può stare in più gruppi.' : 'I gruppi dell’evento e la canzone di ciascuno.'}
     >
       {groups.length === 0 && !form && <p className="rounded-2xl bg-cipria-50 p-4 text-sm text-ink-muted">Nessun gruppo per ora.</p>}
       <ul className="space-y-3">
@@ -127,7 +127,7 @@ export function EventGroupsDialog({ event, editorId, viewerId, onClose }: { even
                   </p>
                   <p className="mt-1.5 text-xs text-ink-muted">
                     {g.memberIds.length === 0
-                      ? 'Nessuna atleta'
+                      ? 'Nessun atleta'
                       : g.memberIds
                           .map((id) => eventPerson(db, id))
                           .filter((p): p is NonNullable<typeof p> => !!p)

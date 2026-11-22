@@ -1,77 +1,77 @@
-import { Undo2, Wallet } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Ticket, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { useToast } from '@/hooks/useToast'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+import { useToast } from '@/hooks/useToast'
 import { useDatabase, useRepository } from '@/hooks/useDatabase'
-import { accountSummary, chargePaid, chargeState, euro } from '@/services/selectors'
+import { findClass, planUsage } from '@/services/selectors'
 import { formatDate, todayISO } from '@/lib/dates'
 
-const LABEL = { pagata: ['Pagata', 'ok'], parziale: ['Acconto', 'warn'], scaduta: ['Scaduta', 'danger'], aperta: ['Da pagare', 'rosa'], annullata: ['Annullata', 'neutral'] } as const
-
-/** Quote e pagamenti registrati di un'atleta. I pagamenti avvengono fuori dall'app. */
-/** `asAdmin`: la segreteria può restituire a mano un ingresso di un pacchetto */
+/**
+ * Piani dell'atleta: quale piano ha scelto per ogni classe, fino a quando vale e
+ * quante lezioni restano. `asAdmin`: la segreteria può restituire a mano una lezione scalata.
+ */
 export function AccountCard({ studentId, asAdmin = false }: { studentId: string; asAdmin?: boolean }) {
   const db = useDatabase()
   const repo = useRepository()
   const { toast } = useToast()
   const today = todayISO()
-  const summary = accountSummary(db, today, studentId)
-  const plans = db.memberPlans.filter((p) => p.studentId === studentId)
-  if (summary.charges.length === 0 && plans.length === 0) return null
+  const plans = db.memberPlans.filter((p) => p.studentId === studentId).sort((a, b) => b.validUntil.localeCompare(a.validUntil))
   return (
     <Card>
       <CardContent>
         <h2 className="mb-1 flex items-center gap-2 text-base font-bold">
-          <Wallet className="size-4 text-rosa-intenso" /> Quote e pagamenti
+          <Ticket className="size-4 text-rosa-intenso" /> {asAdmin ? 'Piani' : 'I tuoi piani'}
         </h2>
         <p className="mb-3 text-sm text-ink-muted">
-          Registrati {euro(summary.paid)} su {euro(summary.due)}
-          {summary.overdueCents > 0 ? ` · ${euro(summary.overdueCents)} scaduti` : ''}. I pagamenti si effettuano in segreteria o con bonifico.
+          {asAdmin ? 'Scelti dall’atleta all’iscrizione alle classi.' : 'Le lezioni sono disponibili finché il piano è valido e, nei pacchetti, finché restano lezioni.'}
         </p>
-        {plans.map((p) => {
-          const plan = db.plans.find((x) => x.id === p.planId)
-          return (
-            <p key={p.id} className="mb-2 rounded-2xl bg-cipria-50 p-3 text-sm">
-              <b>{plan?.name}</b> · valido fino al {formatDate(p.validUntil, { year: true })}
-              {p.entriesTotal ? ` · ingressi residui ${p.entriesTotal - (p.entriesUsed ?? 0)} su ${p.entriesTotal}` : ''}
-              {asAdmin && !!p.entriesTotal && (p.entriesUsed ?? 0) > 0 && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="ml-1"
-                  onClick={async () => {
-                    const note = window.prompt('Motivo della restituzione (facoltativo, es. assenza per malattia):') ?? null
-                    if (note === null) return
-                    await repo.refundEntry(p.id, note)
-                    toast('Ingresso restituito: l’atleta è avvisata')
-                  }}
-                >
-                  <Undo2 /> Restituisci un ingresso
-                </Button>
-              )}
-            </p>
-          )
-        })}
-        <ul className="divide-y divide-line/70">
-          {summary.charges
-            .sort((a, b) => a.dueOn.localeCompare(b.dueOn))
-            .map((c) => {
-              const [label, tone] = LABEL[chargeState(c, today)]
-              return (
-                <li key={c.id} className="flex items-center gap-3 py-2.5">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-ink">{c.description}</p>
+        {plans.length === 0 && <p className="rounded-2xl bg-cipria-50 p-3 text-sm text-ink-muted">Nessun piano scelto.</p>}
+        <ul className="space-y-2">
+          {plans.map((mp) => {
+            const plan = db.plans.find((x) => x.id === mp.planId)
+            const usage = planUsage(db, mp)
+            const expired = mp.validUntil < today
+            const finished = usage.remaining === 0
+            return (
+              <li key={mp.id} className="rounded-2xl bg-cipria-50 p-3 text-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-ink">{plan?.name ?? 'Piano'}</p>
                     <p className="text-xs text-ink-muted">
-                      {euro(c.amountCents)} · scadenza {formatDate(c.dueOn, { year: true })}
-                      {chargePaid(c) > 0 && chargePaid(c) < c.amountCents ? ` · ricevuti ${euro(chargePaid(c))}` : ''}
+                      {mp.classId ? `${findClass(db, mp.classId)?.name ?? ''} · ` : ''}
+                      {formatDate(mp.validFrom)} – {formatDate(mp.validUntil, { year: true })}
+                      {mp.lessons !== undefined ? ` · ${usage.remaining} di ${mp.lessons} lezioni residue` : ''}
+                      {plan && !plan.autoAttendance ? ' · con “ci sarò”' : ''}
                     </p>
                   </div>
-                  <Badge tone={tone}>{label}</Badge>
-                </li>
-              )
-            })}
+                  {expired ? <Badge tone="danger">Scaduto</Badge> : finished ? <Badge tone="warn">Lezioni finite</Badge> : <Badge tone="ok">Valido</Badge>}
+                </div>
+                {asAdmin && mp.lessons !== undefined && usage.used > 0 && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="mt-1 -ml-2"
+                    onClick={async () => {
+                      const note = window.prompt('Motivo della restituzione (facoltativo, es. assenza per malattia):') ?? null
+                      if (note === null) return
+                      await repo.refundEntry(mp.id, note)
+                      toast('Lezione restituita: l’atleta è avvisato')
+                    }}
+                  >
+                    <Undo2 /> Restituisci una lezione
+                  </Button>
+                )}
+              </li>
+            )
+          })}
         </ul>
+        {!asAdmin && (
+          <Link to="/allieva/classi" className="mt-3 inline-block text-sm font-semibold text-rosa-scuro">
+            Scegli o rinnova un piano →
+          </Link>
+        )}
       </CardContent>
     </Card>
   )

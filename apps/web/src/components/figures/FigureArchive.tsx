@@ -18,7 +18,7 @@ interface FigureArchiveProps {
   basePath: string
   /** Se presente mostra e filtra per stato di apprendimento personale */
   studentId?: string
-  /** Atlete di riferimento per mostrare quante lavorano sulla figura (area insegnante) */
+  /** Atleti di riferimento per mostrare quante lavorano sulla figura (area insegnante) */
   studentIdsForStats?: string[]
   emptyAction?: ReactNode
 }

@@ -17,7 +17,7 @@ import { cn, fullName } from '@/lib/utils'
 
 const ROLE_META: Record<Role, { icon: typeof UserRound; description: string }> = {
   allieva: { icon: UserRound, description: 'Calendario, archivio figure e progressi personali' },
-  insegnante: { icon: GraduationCap, description: 'Lezioni, presenze, atlete e gestione figure' },
+  insegnante: { icon: GraduationCap, description: 'Lezioni, presenze, atleti e gestione figure' },
   admin: { icon: Shield, description: 'Utenti, classi, eventi e configurazione' },
 }
 

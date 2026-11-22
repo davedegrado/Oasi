@@ -6,11 +6,11 @@ export const DEMO_PDF = 'data:application/pdf;base64,JVBERi0xLjQKMSAwIG9iajw8L1R
 
 export const demoDocumentTypes: DocumentType[] = [
   {
-    id: 'dt-iscrizione', name: 'Modulo di iscrizione 2026/27', category: 'iscrizione', required: true, signatureMode: 'caricamento_firmato', sensitive: false, active: true,
+    id: 'dt-iscrizione', name: 'Modulo di iscrizione 2026/27', category: 'iscrizione', required: true, expiryRequired: true, signatureMode: 'caricamento_firmato', sensitive: false, active: true,
     description: 'Modulo firmato con i dati anagrafici e la scelta dei corsi. Scaricalo dai documenti della palestra, firmalo e caricalo.',
   },
   {
-    id: 'dt-certificato', name: 'Certificato medico sportivo', category: 'certificato_medico', required: true, signatureMode: 'nessuna', validityMonths: 12, sensitive: true, active: true,
+    id: 'dt-certificato', name: 'Certificato medico sportivo', category: 'certificato_medico', required: true, expiryRequired: true, signatureMode: 'nessuna', validityMonths: 12, sensitive: true, active: true,
     description: 'Certificato di idoneità all’attività sportiva non agonistica, valido 12 mesi. Visibile solo a te e alla segreteria.',
   },
   {
@@ -20,19 +20,19 @@ export const demoDocumentTypes: DocumentType[] = [
   // Insegnanti: due documenti ogni mese, entro la fine del mese (regola di Oasi). Quali siano non è
   // definito: l'insegnante dà a ciascuno il titolo che vuole e, se serve, la scadenza.
   {
-    id: 'dt-mensili', name: 'Documenti mensili insegnanti', category: 'altro', required: true, audience: 'insegnanti', recurrence: 'mensile', requiredCount: 2, signatureMode: 'nessuna', sensitive: false, active: true,
+    id: 'dt-mensili', name: 'Documenti mensili insegnanti', category: 'altro', required: true, audience: 'insegnanti', recurrence: 'mensile', requiredCount: 2, expiryRequired: true, signatureMode: 'nessuna', sensitive: false, active: true,
     description: 'Due documenti da caricare ogni mese, entro la fine del mese, per pagamenti e adempimenti. Indica tu il titolo di ciascuno.',
   },
   {
-    id: 'dt-liberatoria', name: 'Liberatoria attività aeree', category: 'liberatoria', required: true, signatureMode: 'caricamento_firmato', sensitive: false, active: true,
+    id: 'dt-liberatoria', name: 'Liberatoria attività aeree', category: 'liberatoria', required: true, expiryRequired: true, signatureMode: 'caricamento_firmato', sensitive: false, active: true,
     description: 'Presa visione dei rischi e del regolamento: scaricala dai documenti della palestra, firmala a mano e caricala.',
   },
   {
-    id: 'dt-immagini', name: 'Consenso foto e video', category: 'consenso', required: false, signatureMode: 'caricamento_firmato', sensitive: false, active: true,
+    id: 'dt-immagini', name: 'Consenso foto e video', category: 'consenso', required: false, expiryRequired: true, signatureMode: 'caricamento_firmato', sensitive: false, active: true,
     description: 'Autorizzazione facoltativa all’uso di foto e video, da firmare a mano e caricare.',
   },
   {
-    id: 'dt-identita', name: 'Documento d’identità', category: 'personale', required: false, signatureMode: 'nessuna', sensitive: false, active: true,
+    id: 'dt-identita', name: 'Documento d’identità', category: 'personale', required: false, expiryRequired: true, signatureMode: 'nessuna', sensitive: false, active: true,
     description: 'Carta d’identità o passaporto, richiesto per il tesseramento.',
   },
 ]

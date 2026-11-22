@@ -81,8 +81,8 @@ export function AdminUsers() {
     <div className="animate-fade-up">
       <PageHeader
         eyebrow="Utenti"
-        title="Atlete e insegnanti"
-        description={`${db.students.length} atlete · ${db.teachers.length} insegnanti`}
+        title="Atleti e insegnanti"
+        description={`${db.students.length} atleti · ${db.teachers.length} insegnanti`}
         actions={
           <>
             <Button size="sm" onClick={() => setCreating('allieva')}>
@@ -107,7 +107,7 @@ export function AdminUsers() {
             onChange={setRole}
             options={[
               { value: 'tutti', label: 'Tutti' },
-              { value: 'allieva', label: 'Atlete' },
+              { value: 'allieva', label: 'Atleti' },
               { value: 'insegnante', label: 'Insegnanti' },
             ]}
           />

@@ -45,11 +45,11 @@ export function TeacherDashboard() {
         <h1 className="mt-1 text-[30px] leading-tight font-extrabold sm:text-4xl">
           {greeting()}, <span className="text-rosa-intenso">{teacher.firstName}</span>
         </h1>
-        <p className="mt-1 text-ink-soft">Ecco le tue classi e il lavoro delle tue atlete.</p>
+        <p className="mt-1 text-ink-soft">Ecco le tue classi e il lavoro dei tuoi atleti.</p>
       </section>
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <StatCard label="Atlete" value={students.length} hint={`in ${db.classes.filter((c) => c.teacherId === teacher.id).length} classi`} icon={<Users />} />
+        <StatCard label="Atleti" value={students.length} hint={`in ${db.classes.filter((c) => c.teacherId === teacher.id).length} classi`} icon={<Users />} />
         <StatCard label="Lezioni settimana" value={thisWeek.length} hint="programmate" icon={<CalendarCheck />} tone="tessuti" />
         <StatCard label="Presenze previste" value={expectedNext ? expectedAttendance(db, expectedNext) : 0} hint={expectedNext ? `prossima: ${relativeDayLabel(expectedNext.date).toLowerCase()}` : '—'} icon={<ClipboardCheck />} tone="ok" />
         <StatCard label="Media presenze" value={`${avgRate}%`} hint="ultime 5 settimane" icon={<Percent />} tone="warn" />
@@ -99,7 +99,7 @@ export function TeacherDashboard() {
         </section>
 
         <section>
-          <SectionTitle title="Atlete al lavoro" />
+          <SectionTitle title="Atleti al lavoro" />
           <Card>
             <CardContent className="space-y-1 p-3 sm:p-4">
               {working.length === 0 && <p className="p-3 text-sm text-ink-muted">Nessuna figura in progetto.</p>}

@@ -27,7 +27,7 @@ function nextDate(month: number, day: number): string {
 
 const range = (c: Closure) => (c.startDate === c.endDate ? formatDate(c.startDate, { weekday: true }) : `dal ${formatDate(c.startDate)} al ${formatDate(c.endDate)}`)
 
-/** Festività, scioperi e chiusure: annullano le lezioni e avvisano le atlete */
+/** Festività, scioperi e chiusure: annullano le lezioni e avvisano gli atleti */
 export function ClosuresManager() {
   const db = useDatabase()
   const repo = useRepository()
@@ -88,7 +88,7 @@ export function ClosuresManager() {
                   variant={c.reminderSentAt ? 'outline' : 'soft'}
                   onClick={async () => {
                     await repo.sendClosureReminder(c.id)
-                    toast('Promemoria inviato ad atlete e insegnanti')
+                    toast('Promemoria inviato ad atleti e insegnanti')
                   }}
                 >
                   <BellRing /> {c.reminderSentAt ? 'Reinvia' : 'Invia promemoria'}
@@ -131,7 +131,7 @@ function ClosureDialog({ initial, onClose }: { initial: Closure; onClose: () => 
     if (c.endDate < c.startDate) return setError('La data di fine deve essere uguale o successiva all’inizio.')
     await repo.saveClosure({ ...c, title: c.title.trim(), note: c.note.trim() })
     if (sendNow) await repo.sendClosureReminder(c.id)
-    toast(sendNow ? 'Chiusura salvata e atlete avvisate' : 'Chiusura salvata: lezioni annullate')
+    toast(sendNow ? 'Chiusura salvata e atleti avvisati' : 'Chiusura salvata: lezioni annullate')
     onClose()
   }
 
@@ -170,12 +170,12 @@ function ClosureDialog({ initial, onClose }: { initial: Closure; onClose: () => 
             <Input id="cl-end" type="date" min={c.startDate} value={c.endDate} onChange={(e) => set('endDate', e.target.value)} />
           </Field>
         </div>
-        <Field label="Messaggio per le atlete" htmlFor="cl-note">
+        <Field label="Messaggio per gli atleti" htmlFor="cl-note">
           <Textarea id="cl-note" rows={3} value={c.note} onChange={(e) => set('note', e.target.value)} placeholder="Es. Le lezioni verranno recuperate sabato mattina." />
         </Field>
         <label className="flex items-center gap-2.5 text-sm">
           <input type="checkbox" className="size-4 accent-[var(--color-rosa-intenso)]" checked={sendNow} onChange={(e) => setSendNow(e.target.checked)} />
-          Invia subito il promemoria ad atlete e insegnanti
+          Invia subito il promemoria ad atleti e insegnanti
         </label>
       </div>
     </Dialog>

@@ -22,7 +22,7 @@ const ROLES: { role: Role; title: string; subtitle: string; icon: typeof UserRou
   {
     role: 'insegnante',
     title: 'Sono un’insegnante',
-    subtitle: 'Presenze, atlete e gestione delle figure',
+    subtitle: 'Presenze, atleti e gestione delle figure',
     icon: GraduationCap,
     accent: 'bg-cipria text-rosa-scuro',
   },

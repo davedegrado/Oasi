@@ -25,20 +25,13 @@ import { LEVEL_LABEL, LEVELS } from '@/lib/labels'
 import { cn, fullName } from '@/lib/utils'
 
 const SETTINGS_META: { key: keyof AssociationInfo['settings']; label: string; description: string; type: 'toggle' | 'number'; suffix?: string }[] = [
-  { key: 'remindersEnabled', label: 'Promemoria lezioni', description: 'Notifica alle atlete il giorno prima della lezione (simulato)', type: 'toggle' },
-  { key: 'progressVisibleToTeachers', label: 'Progressi visibili alle insegnanti', description: 'Le insegnanti vedono stati e note delle atlete', type: 'toggle' },
+  { key: 'remindersEnabled', label: 'Promemoria lezioni', description: 'Notifica agli atleti il giorno prima della lezione (simulato)', type: 'toggle' },
+  { key: 'progressVisibleToTeachers', label: 'Progressi visibili alle insegnanti', description: 'Le insegnanti vedono stati e note degli atleti', type: 'toggle' },
   { key: 'trialLessonEnabled', label: 'Lezione di prova', description: 'Consente iscrizioni in stato “Lezione di prova”', type: 'toggle' },
-  { key: 'maxStudentsPerClass', label: 'Capienza standard per classe', description: 'Valore predefinito per le nuove classi', type: 'number', suffix: 'atlete' },
+  { key: 'maxStudentsPerClass', label: 'Capienza standard per classe', description: 'Valore predefinito per le nuove classi', type: 'number', suffix: 'atleti' },
   { key: 'maxDisciplines', label: 'Discipline per classe', description: 'Numero massimo di discipline selezionabili per una classe', type: 'number', suffix: 'max' },
   { key: 'makeupLowerLevelAllowed', label: 'Recupero in livello inferiore', description: 'Consenti il recupero in classi di livello inferiore (mai superiore)', type: 'toggle' },
 ]
-
-const PAYMENT_METHODS = [
-  { value: 'bonifico', label: 'Bonifico' },
-  { value: 'contanti', label: 'Contanti' },
-  { value: 'pos', label: 'POS' },
-  { value: 'altro', label: 'Altro' },
-] as const
 
 type Section = 'calendario' | 'discipline' | 'didattica' | 'associazione'
 
@@ -135,11 +128,22 @@ export function AdminSettings() {
           </div>
         </>
       )}
-      {section === 'discipline' && <DisciplinesManager />}
-      {section === 'didattica' && <DidacticsCard />}
+      {section === 'discipline' && (
+        <>
+          <DisciplinesManager />
+          <RoomsAndAreasCard />
+        </>
+      )}
+      {section === 'didattica' && (
+        <>
+          <DidacticsCard />
+          <TeachersCard />
+          <BookingWindowsCard />
+        </>
+      )}
       {section === 'associazione' && (
       <>
-      {/* Regolamento e modulistica: consultabili da atlete e insegnanti, modificabili dall'amministrazione */}
+      {/* Regolamento e modulistica: consultabili da atleti e insegnanti, modificabili dall'amministrazione */}
       <SharedDocumentsCard
         audience="ogni"
         action={
@@ -148,13 +152,13 @@ export function AdminSettings() {
           </Link>
         }
       />
-      <Link to="/admin/quote" className="flex items-center gap-3 rounded-3xl border border-line/70 bg-white p-4 shadow-soft transition hover:shadow-float">
+      <Link to="/admin/piani" className="flex items-center gap-3 rounded-3xl border border-line/70 bg-white p-4 shadow-soft transition hover:shadow-float">
         <span className="grid size-11 place-items-center rounded-2xl bg-cipria text-rosa-intenso">
           <Wallet className="size-5" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block font-display font-bold text-ink">Piani, quote e pagamenti</span>
-          <span className="block text-sm text-ink-muted">Stagione {db.season.name}: listino, rate, pagamenti registrati e insoluti</span>
+          <span className="block font-display font-bold text-ink">Piani e listino</span>
+          <span className="block text-sm text-ink-muted">I piani che gli atleti scelgono all’iscrizione, con prezzi e validità</span>
         </span>
         <ArrowRight className="size-5 text-rosa-intenso" />
       </Link>
@@ -197,33 +201,6 @@ export function AdminSettings() {
           </p>
         </CardContent>
       </Card>
-
-      <div>
-        <Card>
-          <CardContent>
-            <h2 className="mb-4 text-base font-bold">Insegnanti</h2>
-            <ul className="space-y-3">
-              {db.teachers.map((t) => (
-                <li key={t.id} className="flex items-center gap-3 rounded-2xl bg-cipria-50 p-3">
-                  <Avatar person={t} size="md" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold">{fullName(t)}</p>
-                    <p className="text-xs text-ink-muted">
-                      {db.classes.filter((c) => c.teacherId === t.id).length} classi · {studentsOfTeacher(db, t.id).length} atlete · dal {t.since}
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    {t.disciplines.map((d) => (
-                      <DisciplineBadge key={d} discipline={d} />
-                    ))}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-
-      </div>
 
       <Card>
         <CardContent>
@@ -272,48 +249,6 @@ export function AdminSettings() {
         </CardContent>
       </Card>
 
-      <BookingWindowsCard />
-      <DocumentRulesCard />
-
-      <Card>
-        <CardContent className="space-y-5">
-          <RoomsManager />
-          <div>
-            <h2 className="mb-1 text-base font-bold">Aree delle classi</h2>
-            <p className="mb-3 text-sm text-ink-muted">Le classi sono organizzate in queste aree (es. bambini/ragazzi e adulti/ragazzi). Puoi rinominarle o aggiungerne.</p>
-            <ListEditor
-              id="class-categories"
-              items={a.settings.classCategories ?? []}
-              onChange={(items) => updateSetting('classCategories', items)}
-              placeholder="Nuova area, es. Senior"
-            />
-          </div>
-          <div>
-            <h2 className="mb-1 text-base font-bold">Metodi di pagamento</h2>
-            <p className="mb-3 text-sm text-ink-muted">I pagamenti si ricevono fuori dall’app e qui si registrano. Altri metodi si possono abilitare in futuro.</p>
-            <div className="flex flex-wrap gap-2">
-              {PAYMENT_METHODS.map((m) => {
-                const current = a.settings.paymentMethods ?? ['bonifico', 'contanti']
-                const on = current.includes(m.value)
-                return (
-                  <button
-                    key={m.value}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() => {
-                      const next = on ? current.filter((x) => x !== m.value) : [...current, m.value]
-                      if (next.length) updateSetting('paymentMethods', next)
-                    }}
-                    className={cn('rounded-full border px-3 py-1.5 text-sm font-semibold transition', on ? 'border-ink bg-ink text-white' : 'border-line bg-white text-ink-soft hover:bg-cipria-50')}
-                  >
-                    {m.label}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       <Card>
         <CardContent>
@@ -411,32 +346,6 @@ function InfoDialog({ info, onClose }: { info: AssociationInfo; onClose: () => v
  * Finestre "da … a …" prima della lezione: per prenotare una lezione singola e per chiedere un recupero.
  * Il massimo dice da quando si può (vuoto = senza limite), il minimo fino a quando.
  */
-function DocumentRulesCard() {
-  const db = useDatabase()
-  const repo = useRepository()
-  const { toast } = useToast()
-  const a = db.association
-  const on = a.settings.documentExpiryRequired === true
-  const toggle = async (value: boolean) => {
-    await repo.updateAssociation({ settings: { ...a.settings, documentExpiryRequired: value } })
-    toast(value ? 'Scadenza obbligatoria per tutti i documenti' : 'Scadenza obbligatoria solo dove lo chiede la tipologia')
-  }
-  return (
-    <Card>
-      <CardContent className="space-y-2">
-        <h2 className="text-base font-bold">Documenti</h2>
-        <label className="flex items-start gap-2.5 text-sm text-ink-soft">
-          <input type="checkbox" className="mt-0.5 size-4 accent-rosa-intenso" checked={on} onChange={(e) => toggle(e.target.checked)} />
-          <span>
-            Data di scadenza obbligatoria per ogni documento caricato, di atlete e insegnanti, anche senza tipologia.
-            <span className="block text-xs text-ink-muted">Se la togli resta obbligatoria solo per le tipologie che la chiedono (es. certificato agonistico).</span>
-          </span>
-        </label>
-      </CardContent>
-    </Card>
-  )
-}
-
 function BookingWindowsCard() {
   const db = useDatabase()
   const repo = useRepository()
@@ -460,7 +369,7 @@ function BookingWindowsCard() {
       makeupClosesDays: num(form.makeupClosesDays) ?? 0,
     }
     if (Object.values(v).some((x) => x !== undefined && Number.isNaN(x))) return setError('Inserisci numeri di ore validi.')
-    if (v.bookingOpensHours !== undefined && v.bookingOpensHours <= v.bookingClosesHours) return setError('Lezioni singole: il massimo deve essere maggiore del minimo.')
+    if (v.bookingOpensHours !== undefined && v.bookingOpensHours <= v.bookingClosesHours) return setError('“Ci sarò”: il massimo deve essere maggiore del minimo.')
     if (v.makeupOpensDays !== undefined && v.makeupOpensDays <= v.makeupClosesDays) return setError('Recuperi: il massimo deve essere maggiore del minimo.')
     setError('')
     await repo.updateAssociation({ settings: { ...a.settings, ...v } })
@@ -476,13 +385,13 @@ function BookingWindowsCard() {
       <CardContent className="space-y-5">
         <div>
           <h2 className="mb-1 text-base font-bold">Prenotazioni e recuperi</h2>
-          <p className="text-sm text-ink-muted">Lezioni singole in ore, recuperi in giorni (un giorno = 24 ore prima dell’inizio). Il massimo indica da quando si può, il minimo fino a quando. Lascia vuoto il massimo per non porre limiti.</p>
+          <p className="text-sm text-ink-muted">“Ci sarò” in ore, recuperi in giorni (un giorno = 24 ore prima dell’inizio). Il massimo indica da quando si può, il minimo fino a quando. Lascia vuoto il massimo per non porre limiti.</p>
         </div>
         <div>
-          <p className="mb-2 text-sm font-semibold text-ink">Lezioni singole (in ore)</p>
+          <p className="mb-2 text-sm font-semibold text-ink">“Ci sarò” per i piani senza partecipazione automatica (in ore)</p>
           <div className="grid gap-3 sm:grid-cols-3">
-            {field('bookingOpensHours', 'Prenotabile da (ore prima, massimo)', 'Senza limite')}
-            {field('bookingClosesHours', 'Prenotabile fino a (ore prima, minimo)')}
+            {field('bookingOpensHours', 'Da (ore prima, massimo)', 'Senza limite')}
+            {field('bookingClosesHours', 'Fino a (ore prima, minimo)')}
             {field('absenceNoticeHours', 'Disdetta libera fino a (ore prima)')}
           </div>
         </div>
@@ -499,5 +408,67 @@ function BookingWindowsCard() {
         </Button>
       </CardContent>
     </Card>
+  )
+}
+
+/** Insegnanti della palestra (sezione Didattica) */
+function TeachersCard() {
+  const db = useDatabase()
+  return (
+    <div>
+        <Card>
+          <CardContent>
+            <h2 className="mb-4 text-base font-bold">Insegnanti</h2>
+            <ul className="space-y-3">
+              {db.teachers.map((t) => (
+                <li key={t.id} className="flex items-center gap-3 rounded-2xl bg-cipria-50 p-3">
+                  <Avatar person={t} size="md" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold">{fullName(t)}</p>
+                    <p className="text-xs text-ink-muted">
+                      {db.classes.filter((c) => c.teacherId === t.id).length} classi · {studentsOfTeacher(db, t.id).length} atleti · dal {t.since}
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-end gap-1">
+                    {t.disciplines.map((d) => (
+                      <DisciplineBadge key={d} discipline={d} />
+                    ))}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+
+      </div>
+  )
+}
+
+/** Sale e aree delle classi (sezione Discipline) */
+function RoomsAndAreasCard() {
+  const db = useDatabase()
+  const repo = useRepository()
+  const { toast } = useToast()
+  const a = db.association
+  const updateSetting = async (value: string[]) => {
+    await repo.updateAssociation({ settings: { ...a.settings, classCategories: value } })
+    toast('Configurazione salvata')
+  }
+  return (
+      <Card>
+        <CardContent className="space-y-5">
+          <RoomsManager />
+          <div>
+            <h2 className="mb-1 text-base font-bold">Aree delle classi</h2>
+            <p className="mb-3 text-sm text-ink-muted">Le classi sono organizzate in queste aree (es. bambini/ragazzi e adulti/ragazzi). Puoi rinominarle o aggiungerne.</p>
+            <ListEditor
+              id="class-categories"
+              items={a.settings.classCategories ?? []}
+              onChange={updateSetting}
+              placeholder="Nuova area, es. Senior"
+            />
+          </div>
+        </CardContent>
+      </Card>
   )
 }

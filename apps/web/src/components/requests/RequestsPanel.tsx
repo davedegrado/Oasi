@@ -66,6 +66,7 @@ export function RequestsPanel({ teacherId, decidedBy, title = 'Richieste da appr
                       <p className="text-sm">
                         <b>{fullName(s)}</b> chiede di entrare in <b>{c.name}</b>
                       </p>
+                      {r.planId && <p className="text-xs text-ink-soft">Piano scelto: {db.plans.find((p) => p.id === r.planId)?.name ?? '—'}</p>}
                       <p className="text-xs text-ink-muted">
                         {c.studentIds.length}/{c.capacity} iscritte{full ? ' · classe completa' : ''}
                         {r.note ? ` · “${r.note}”` : ''}
