@@ -28,20 +28,31 @@ export function StudentJourneyPage({ backTo, backLabel, figureBase, showAdmin }:
           <MemberDocumentsPanel memberId={student.id} mode="admin" />
         </div>
       )}
-      <ProgressOverview studentId={student.id} />
-      <div className="grid gap-5 md:grid-cols-2">
-        <FiguresByStatus studentId={student.id} status="in_progetto" linkBase={figureBase} />
-        <FiguresByStatus studentId={student.id} status="da_imparare" linkBase={figureBase} />
-      </div>
-      <div className="grid gap-5 lg:grid-cols-2">
-        <div className="space-y-5">
-          <GoalsCard student={student} />
-          <FiguresByStatus studentId={student.id} status="riuscita" linkBase={figureBase} />
-          {showAdmin && <AdminInfoCard student={student} asAdmin />}
-          {showAdmin && <AccountCard studentId={student.id} asAdmin />}
+      {showAdmin ? (
+        // Amministrazione: dati amministrativi, conto e presenze; il percorso tecnico (figure, obiettivi) resta alle insegnanti
+        <div className="grid gap-5 lg:grid-cols-2">
+          <div className="space-y-5">
+            <AdminInfoCard student={student} asAdmin />
+            <AccountCard studentId={student.id} asAdmin />
+          </div>
+          <AttendanceHistory studentId={student.id} />
         </div>
-        <AttendanceHistory studentId={student.id} />
-      </div>
+      ) : (
+        <>
+          <ProgressOverview studentId={student.id} />
+          <div className="grid gap-5 md:grid-cols-2">
+            <FiguresByStatus studentId={student.id} status="in_progetto" linkBase={figureBase} />
+            <FiguresByStatus studentId={student.id} status="da_imparare" linkBase={figureBase} />
+          </div>
+          <div className="grid gap-5 lg:grid-cols-2">
+            <div className="space-y-5">
+              <GoalsCard student={student} />
+              <FiguresByStatus studentId={student.id} status="riuscita" linkBase={figureBase} />
+            </div>
+            <AttendanceHistory studentId={student.id} />
+          </div>
+        </>
+      )}
     </div>
   )
 }

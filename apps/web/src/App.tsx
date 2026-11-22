@@ -80,7 +80,7 @@ export default function App() {
               <Route path="lezioni" element={<TeacherLessons />} />
               <Route path="lezioni/:id" element={<TeacherLessonDetail />} />
               <Route path="allieve" element={<TeacherStudents />} />
-              <Route path="allieve/:id" element={<StudentJourneyPage backTo="/insegnante/allieve" backLabel="Atlete" figureBase="/insegnante/figure" />} />
+              <Route path="allieve/:id" element={<StudentJourneyPage backTo="/insegnante/allieve" backLabel="Utenti" figureBase="/insegnante/figure" />} />
               <Route path="figure" element={<ManageFiguresPage basePath="/insegnante/figure" />} />
               <Route path="figure/nuova" element={<FigureEditorPage basePath="/insegnante/figure" />} />
               <Route path="figure/:id" element={<ManageFigureDetailPage basePath="/insegnante/figure" studentBase="/insegnante/allieve" />} />
