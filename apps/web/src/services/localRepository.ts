@@ -796,6 +796,17 @@ export class LocalRepository implements OasiRepository {
       return { ...db, memberPlans: [mp, ...db.memberPlans], charges: [...charges, ...db.charges] }
     })
 
+  refundEntry: OasiRepository['refundEntry'] = (memberPlanId, note) =>
+    this.commit((db) => {
+      const mp = db.memberPlans.find((p) => p.id === memberPlanId)
+      if (!mp?.entriesTotal) throw new Error('Il piano non è un pacchetto a ingressi.')
+      if (!mp.entriesUsed) throw new Error('Nessun ingresso scalato da restituire.')
+      return withNotifications(
+        { ...db, memberPlans: db.memberPlans.map((p) => (p.id === memberPlanId ? { ...p, entriesUsed: (p.entriesUsed ?? 0) - 1 } : p)) },
+        [{ kind: 'comunicazione', title: 'Ingresso restituito', body: `La segreteria ti ha restituito un ingresso del pacchetto.${note.trim() ? ` ${note.trim()}` : ''}`, to: [`student:${mp.studentId}`], link: { allieva: '/allieva/profilo' } }],
+      )
+    })
+
   addCharge: OasiRepository['addCharge'] = (charge) =>
     this.commit((db) => ({ ...db, charges: [{ ...charge, id: uid('chg'), payments: [] }, ...db.charges] }))
 

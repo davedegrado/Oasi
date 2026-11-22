@@ -105,6 +105,8 @@ export interface OasiRepository {
   /** Registra un pagamento ricevuto (anche parziale). Rifiuta importi oltre il residuo. */
   recordPayment(chargeId: string, payment: Omit<PaymentRecord, 'id'>): Promise<void>
   deletePayment(chargeId: string, paymentId: string): Promise<void>
+  /** La segreteria restituisce a mano un ingresso scalato (es. assenza senza disdetta) */
+  refundEntry(memberPlanId: string, note: string): Promise<void>
 
   // Lezioni singole: prenotabili a partire da N ore prima (impostazione della palestra), disdetta libera fino a M ore prima
   bookSingleLesson(studentId: string, lessonId: string): Promise<void>

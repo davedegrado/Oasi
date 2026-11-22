@@ -41,7 +41,7 @@ Legenda: **API** = regola applicata dal backend con persistenza, permessi e test
 | 8 | Caricamento di un documento firmato ≠ firma elettronica | Sì | Sì | Nessuna firma elettronica dichiarata |
 | 8 | Consensi e informative (immagini, minorenni) | Tabella presente | Parziale | Nessun flusso completo |
 | 9 | Motore piani configurabile: annuale, periodico, mensile, rate, lezioni singole, pacchetti, semiprivate | Sì | Sì | |
-| 9 | Pacchetto: **un ingresso per ogni partecipazione effettiva**, saldo, scadenza | Sì | No | Ingresso consumato alla presenza; con assenza o disdetta tardiva secondo le regole di Oasi |
+| 9 | Pacchetto: **un ingresso per ogni partecipazione effettiva**, saldo, scadenza; restituzione manuale dalla segreteria | Sì | Parziale | Ingresso consumato alla presenza; con assenza o disdetta tardiva secondo le regole di Oasi |
 | 9 | Piano coerente con classe e frequenze settimanali | Sì | No | Categoria e classificazione agonistica del piano |
 | 9 | Pagamenti **bonifico e contanti**, altri metodi in futuro, nessun dato sensibile | Sì | Sì | Metodi abilitabili in Gestione |
 | 9 | Riepilogo per atleta e generale; promemoria annuale nuova stagione | Sì | Parziale | |
@@ -82,7 +82,7 @@ Casi coperti per il prompt corretto:
 
 1. **Finestra di Circo Baby:** applicata solo la regola "almeno 24 ore prima", senza l'apertura a 48 ore. Il pacchetto 5 lezioni invece segue l'apertura a 48 ore.
 2. ~~I due documenti mensili degli insegnanti~~: risolto, l'insegnante dà a ciascuno un titolo libero.
-3. **Pacchetto prenotato e atleta assente:** ora l'ingresso si consuma (`noShowConsumesEntry`). In alternativa si può restituire.
+3. ~~Pacchetto prenotato e atleta assente~~: deciso, l'ingresso si scala se non c'è disdetta; la segreteria può restituirlo a mano (`POST /v1/bookings/{id}/refund`, con motivo, notifica e audit).
 4. **Categorie dei piani:**
    - Baby/Teen, Circo Baby e Preagonismo → Bambini/Ragazzi;
    - Adulti/Teen → Adulti/Ragazzi;
@@ -107,7 +107,7 @@ Casi coperti per il prompt corretto:
 
 ## 6. Migrazioni
 
-`0008`, `0009`, `0010`, `0011` vanno applicate in ordine. La `0011` rende facoltativa la tipologia dei documenti (titolo libero) e aggiunge la finestra dei recuperi.
+`0008`, `0009`, `0010`, `0011`, `0012` vanno applicate in ordine. La `0011` rende facoltativa la tipologia dei documenti (titolo libero) e aggiunge la finestra dei recuperi.
 
  La `0010`:
 - rinomina `fee_plans.booking_hours_before` in `booking_closes_hours_before`;

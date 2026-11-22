@@ -17,6 +17,7 @@ namespace Oasi.Api.Features;
 /// </summary>
 public static class BookingEndpoints
 {
+    public sealed record RefundInput(string? Note);
     public sealed record BookingInput(Guid LessonId, Guid? MemberId, Guid? MemberPlanId, Guid? PlanId, bool? Override, string? Note);
     public sealed record BookingDto(Guid Id, Guid LessonId, Guid MemberId, string MemberName, string ClassName, string Date, string StartTime, string Status,
         bool EntryConsumed, Guid? MemberPlanId, DateTime BookedAt, DateTime? CancelledAt, string Note);
@@ -96,7 +97,7 @@ public static class BookingEndpoints
                     var mp = await c.QuerySingleOrDefaultAsync<PackRow>(@"
                         select mp.id, mp.member_id, mp.status, mp.valid_from::timestamp as valid_from, mp.valid_until::timestamp as valid_until,
                                mp.entries_total, mp.entries_used, p.booking_opens_hours_before, p.booking_closes_hours_before, p.lesson_minutes, p.age_min_months, p.age_max_months,
-                               (select count(*)::int from app.lesson_bookings b where b.member_plan_id = mp.id and b.status = 'booked' and not b.entry_consumed) as entries_reserved
+                               (select count(*)::int from app.lesson_bookings b where b.member_plan_id = mp.id and b.status = 'booked' and not b.entry_consumed and b.consumed_by is distinct from 'refunded') as entries_reserved
                         from app.member_plans mp join app.fee_plans p on p.id = mp.plan_id where mp.id = @mpId for update of mp", new { mpId }, tx)
                         ?? throw ApiException.NotFound("Pacchetto");
                     if (mp.MemberId != subject) throw ApiException.Forbidden("Il pacchetto appartiene a un'altra persona.");
@@ -190,6 +191,33 @@ public static class BookingEndpoints
             });
             return Results.Ok(result);
         }).RequireMember();
+
+        // Restituzione manuale di un ingresso: l'ingresso scalato (assenza senza disdetta, disdetta tardiva,
+        // presenza) torna nel saldo del pacchetto. Solo l'amministrazione, con motivo e traccia nell'audit.
+        g.MapPost("/{id:guid}/refund", async (HttpContext ctx, Db db, Guid id, RefundInput? input) =>
+        {
+            var m = ctx.Member();
+            var result = await db.InTenant(m.TenantId, m.UserId, async (c, tx) =>
+            {
+                var b = await c.QuerySingleOrDefaultAsync<(Guid MemberId, Guid? MemberPlanId, bool EntryConsumed, string? ConsumedBy, string Note)?>(
+                    "select member_id, member_plan_id, entry_consumed, consumed_by, note from app.lesson_bookings where id = @id for update", new { id }, tx)
+                    ?? throw ApiException.NotFound("Prenotazione");
+                if (b.MemberPlanId is null) throw ApiException.Conflict("not_a_package", "La prenotazione non usa un pacchetto a ingressi.");
+                if (!b.EntryConsumed) throw ApiException.Conflict("not_consumed", "L'ingresso non è stato scalato: non c'è nulla da restituire.");
+                await c.ExecuteAsync("update app.member_plans set entries_used = greatest(entries_used - 1, 0) where id = @plan", new { plan = b.MemberPlanId }, tx);
+                var reason = string.IsNullOrWhiteSpace(input?.Note) ? "" : $" {input!.Note!.Trim()}";
+                await c.ExecuteAsync("update app.lesson_bookings set entry_consumed = false, consumed_by = 'refunded', note = trim(note || @suffix) where id = @id",
+                    new { id, suffix = $" [Ingresso restituito dalla segreteria{(reason.Length > 0 ? ":" + reason : "")}]" }, tx);
+                await Audit.Log(c, tx, m.UserId, m.TenantId, "booking.refund_entry", id.ToString(), new { b.MemberPlanId, previous = b.ConsumedBy, input?.Note });
+                await Notifications.Notifier.ToUsers(c, tx, await Notifications.Notifier.UsersOfMember(c, tx, b.MemberId), "lessons", "Ingresso restituito",
+                    "La segreteria ti ha restituito un ingresso del pacchetto.", m.UserId, link: "/profilo/quote");
+                var left = await c.ExecuteScalarAsync<int>(@"select mp.entries_total - mp.entries_used
+                    - (select count(*)::int from app.lesson_bookings x where x.member_plan_id = mp.id and x.status = 'booked' and not x.entry_consumed and x.consumed_by is distinct from 'refunded')
+                    from app.member_plans mp where mp.id = @plan", new { plan = b.MemberPlanId }, tx);
+                return new { id, entriesLeft = left };
+            });
+            return Results.Ok(result);
+        }).RequireMember(Roles.Admin);
     }
 
     private sealed class PackRow
@@ -221,6 +249,7 @@ public static class BookingEndpoints
             select id, member_plan_id, entry_consumed, consumed_by from app.lesson_bookings
             where lesson_id = @lessonId and member_id = @memberId and status = 'booked' and member_plan_id is not null for update", new { lessonId, memberId }, tx);
         if (b is not { } k) return;
+        if (k.By == "refunded") return;   // restituito a mano dalla segreteria: la presenza registrata dopo non lo riscala
         var shouldConsume = actual == "present" || (actual == "absent" && s.Booking.NoShowConsumesEntry);
         if (shouldConsume && !k.Consumed)
         {

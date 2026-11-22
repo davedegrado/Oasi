@@ -89,6 +89,19 @@ public sealed class DynamiteTests(ApiFixture api)
         Assert.Equal("no_show", await api.Scalar<string>("select consumed_by from app.lesson_bookings where id = @second", new { second }));
         Assert.Equal("attendance", await api.Scalar<string>("select consumed_by from app.lesson_bookings where id = @first", new { first }));
 
+        // La segreteria restituisce a mano l'ingresso dell'assenza senza disdetta
+        Assert.Equal(HttpStatusCode.Forbidden, (await francesca.PostAsJsonAsync($"/v1/bookings/{second}/refund", new { note = "x" })).StatusCode);
+        var refund = await Json(await Admin.PostAsJsonAsync($"/v1/bookings/{second}/refund", new { note = "Assenza per malattia" }));
+        Assert.Equal(1, refund.GetProperty("entriesLeft").GetInt32());
+        Assert.Equal(1, (await Plan(francesca, packId)).GetProperty("entriesUsed").GetInt32());
+        Assert.Equal("refunded", await api.Scalar<string>("select consumed_by from app.lesson_bookings where id = @second", new { second }));
+        // Non si restituisce due volte, e una presenza registrata dopo non lo riscala
+        Assert.Equal("not_consumed", await ErrorType(await Admin.PostAsJsonAsync($"/v1/bookings/{second}/refund", new { })));
+        await chiara.PutAsJsonAsync($"/v1/lessons/{lessons[1]}/attendance/{francescaId}", new { actual = "present" });
+        Assert.Equal(1, (await Plan(francesca, packId)).GetProperty("entriesUsed").GetInt32());
+        Assert.Contains((await francesca.GetFromJsonAsync<JsonElement[]>("/v1/notifications"))!, n => n.GetProperty("title").GetString() == "Ingresso restituito");
+        Assert.Equal(1L, await api.Scalar<long>("select count(*) from platform.audit_log where action = 'booking.refund_entry' and target = @t", new { t = second.ToString() }));
+
         // Pacchetto scaduto
         await api.Sql("update app.member_plans set entries_total = 3, valid_until = current_date + 1 where id = @packId", new { packId });
         Assert.Equal("package_expired", await ErrorType(await francesca.PostAsJsonAsync("/v1/bookings", new { lessonId = lessons[^1], memberPlanId = packId })));

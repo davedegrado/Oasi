@@ -38,7 +38,7 @@ export function StudentJourneyPage({ backTo, backLabel, figureBase, showAdmin }:
           <GoalsCard student={student} />
           <FiguresByStatus studentId={student.id} status="riuscita" linkBase={figureBase} />
           {showAdmin && <AdminInfoCard student={student} asAdmin />}
-          {showAdmin && <AccountCard studentId={student.id} />}
+          {showAdmin && <AccountCard studentId={student.id} asAdmin />}
         </div>
         <AttendanceHistory studentId={student.id} />
       </div>

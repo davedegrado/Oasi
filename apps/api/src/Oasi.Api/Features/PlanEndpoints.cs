@@ -163,8 +163,8 @@ public static class PlanEndpoints
                     select mp.id, mp.member_id, mb.first_name || ' ' || mb.last_name as member_name, mp.plan_id, p.name as plan_name, p.kind, p.category,
                            mp.payment_mode, mp.status, to_char(mp.valid_from, 'YYYY-MM-DD') as valid_from, to_char(mp.valid_until, 'YYYY-MM-DD') as valid_until,
                            mp.weekly_frequency, mp.entries_total, mp.entries_used,
-                           (select count(*)::int from app.lesson_bookings b where b.member_plan_id = mp.id and b.status = 'booked' and not b.entry_consumed) as entries_reserved,
-                           mp.entries_total - mp.entries_used - (select count(*)::int from app.lesson_bookings b where b.member_plan_id = mp.id and b.status = 'booked' and not b.entry_consumed) as entries_left, mp.note,
+                           (select count(*)::int from app.lesson_bookings b where b.member_plan_id = mp.id and b.status = 'booked' and not b.entry_consumed and b.consumed_by is distinct from 'refunded') as entries_reserved,
+                           mp.entries_total - mp.entries_used - (select count(*)::int from app.lesson_bookings b where b.member_plan_id = mp.id and b.status = 'booked' and not b.entry_consumed and b.consumed_by is distinct from 'refunded') as entries_left, mp.note,
                            coalesce((select array_agg(e.class_id) from app.enrollments e where e.member_plan_id = mp.id and e.status = 'approved'), '{}') as class_ids
                     from app.member_plans mp join app.fee_plans p on p.id = mp.plan_id join app.members mb on mb.id = mp.member_id
                     where (@subject::uuid is null or mp.member_id = @subject) order by mp.valid_until desc limit 500", new { subject }, tx)).Camel();

@@ -1,15 +1,20 @@
-import { Wallet } from 'lucide-react'
+import { Undo2, Wallet } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { useToast } from '@/hooks/useToast'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
-import { useDatabase } from '@/hooks/useDatabase'
+import { useDatabase, useRepository } from '@/hooks/useDatabase'
 import { accountSummary, chargePaid, chargeState, euro } from '@/services/selectors'
 import { formatDate, todayISO } from '@/lib/dates'
 
 const LABEL = { pagata: ['Pagata', 'ok'], parziale: ['Acconto', 'warn'], scaduta: ['Scaduta', 'danger'], aperta: ['Da pagare', 'rosa'], annullata: ['Annullata', 'neutral'] } as const
 
 /** Quote e pagamenti registrati di un'atleta. I pagamenti avvengono fuori dall'app. */
-export function AccountCard({ studentId }: { studentId: string }) {
+/** `asAdmin`: la segreteria può restituire a mano un ingresso di un pacchetto */
+export function AccountCard({ studentId, asAdmin = false }: { studentId: string; asAdmin?: boolean }) {
   const db = useDatabase()
+  const repo = useRepository()
+  const { toast } = useToast()
   const today = todayISO()
   const summary = accountSummary(db, today, studentId)
   const plans = db.memberPlans.filter((p) => p.studentId === studentId)
@@ -30,6 +35,21 @@ export function AccountCard({ studentId }: { studentId: string }) {
             <p key={p.id} className="mb-2 rounded-2xl bg-cipria-50 p-3 text-sm">
               <b>{plan?.name}</b> · valido fino al {formatDate(p.validUntil, { year: true })}
               {p.entriesTotal ? ` · ingressi residui ${p.entriesTotal - (p.entriesUsed ?? 0)} su ${p.entriesTotal}` : ''}
+              {asAdmin && !!p.entriesTotal && (p.entriesUsed ?? 0) > 0 && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="ml-1"
+                  onClick={async () => {
+                    const note = window.prompt('Motivo della restituzione (facoltativo, es. assenza per malattia):') ?? null
+                    if (note === null) return
+                    await repo.refundEntry(p.id, note)
+                    toast('Ingresso restituito: l’atleta è avvisata')
+                  }}
+                >
+                  <Undo2 /> Restituisci un ingresso
+                </Button>
+              )}
             </p>
           )
         })}
